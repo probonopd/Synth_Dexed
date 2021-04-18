@@ -21,6 +21,8 @@
 // It will continue to evolve a bit, as note-stealing logic, scaling,
 // and real-time control of parameters live here.
 
+#pragma once
+
 struct VoiceStatus {
   uint32_t amp[6];
   char ampStep[6];
@@ -70,5 +72,3 @@ class Dx7Note {
     int porta_gliss_;
     int32_t porta_curpitch_[6];
 };
-
-#endif  // SYNTH_DX7NOTE_H_

@@ -21,20 +21,7 @@
 
 */
 
-#ifdef _WIN32
-#if _MSC_VER < 1800
-FRAC_NUM log2(FRAC_NUM n)  {
-  //return log(n) / log(2.0);
-  return LOG_FUNC(n) / LOG_FUNC(2.0);
-}
-FRAC_NUM round(FRAC_NUM n) {
-  return n < 0.0 ? ceil(n - 0.5) : floor(n + 0.5);
-}
-#endif
-__declspec(align(16)) const int zeros[N] = {0};
-#else
 const int32_t __attribute__ ((aligned(16))) zeros[_N_] = {0};
-#endif
 
 static const uint16_t NEGATIVE_BIT = 0x8000;
 static const uint16_t ENV_BITDEPTH = 14;

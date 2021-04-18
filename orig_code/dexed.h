@@ -23,12 +23,6 @@
 
 */
 
-extern bool load_sysex(uint8_t bank, uint8_t voice_number);
-extern AudioControlSGTL5000 sgtl5000_1;
-extern float vol;
-extern float vol_right;
-extern float vol_left;
-
 struct ProcessorVoice {
   int16_t midi_note;
   uint8_t velocity;
