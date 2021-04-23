@@ -8,9 +8,9 @@
 * when computing db20() is accurate to 7.984884e-003 dB.
 ** ------------------------------------------------------------------- */
 
-float log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
+static float log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
 
-float log2f_approx(float X)
+static float log2f_approx(float X)
 {
   float *C = &log2f_approx_coeff[0];
   float Y;

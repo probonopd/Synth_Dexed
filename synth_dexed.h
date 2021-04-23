@@ -1,5 +1,9 @@
 #include <Arduino.h>
+#include <Audio.h>
 #include "config.h"
+/*****************************************************
+ * CODE; orig_code/synth.h
+ *****************************************************/
 /*
    Copyright 2012 Google Inc.
 
@@ -69,6 +73,11 @@ inline static T max(const T& a, const T& b) {
 #define SQRT_FUNC sqrtf
 // #define ARM_SQRT_FUNC arm_sqrt_f32 // fast but not as accurate
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/aligned_buf.h
+ *****************************************************/
 /*
    Copyright 2013 Google Inc.
 
@@ -99,6 +108,11 @@ class AlignedBuf {
     unsigned char storage_[size * sizeof(T) + alignment];
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/sin.h
+ *****************************************************/
 /*
    Copyright 2012 Google Inc.
 
@@ -161,6 +175,11 @@ int32_t Sin::lookup(int32_t phase) {
 #endif
 }
 #endif
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/exp2.h
+ *****************************************************/
 /*
    Copyright 2012 Google Inc.
 
@@ -241,6 +260,11 @@ int32_t Tanh::lookup(int32_t x) {
     return y ^ signum;
   }
 }
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/fast_log.h
+ *****************************************************/
 /* ----------------------------------------------------------------------
 * https://community.arm.com/tools/f/discussions/4292/cmsis-dsp-new-functionality-proposal/22621#22621
 * Fast approximation to the log2() function.  It uses a two step
@@ -251,9 +275,9 @@ int32_t Tanh::lookup(int32_t x) {
 * when computing db20() is accurate to 7.984884e-003 dB.
 ** ------------------------------------------------------------------- */
 
-float log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
+static float log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
 
-float log2f_approx(float X)
+static float log2f_approx(float X)
 {
   float *C = &log2f_approx_coeff[0];
   float Y;
@@ -290,7 +314,13 @@ inline float unitToDb(float unit) {
 
 inline float dbToUnit(float db) {
 	return expf_approx(db * 2.302585092994046f * 0.05f);
-}/*
+}
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/freqlut.h
+ *****************************************************/
+/*
    Copyright 2012 Google Inc.
 
    Licensed under the Apache License, Version 2.0 (the "License");
@@ -311,6 +341,11 @@ class Freqlut {
     static void init(FRAC_NUM sample_rate);
     static int32_t lookup(int32_t logfreq);
 };
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/lfo.h
+ *****************************************************/
 /*
    Copyright 2013 Google Inc.
 
@@ -354,6 +389,11 @@ class Lfo {
     uint32_t delayinc_;
     uint32_t delayinc2_;
 };
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/env.h
+ *****************************************************/
 /*
    Copyright 2017 Pascal Gauthier.
    Copyright 2012 Google Inc.
@@ -429,6 +469,11 @@ class Env {
     void advance(int newix);
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/pitchenv.h
+ *****************************************************/
 /*
    Copyright 2013 Google Inc.
 
@@ -477,6 +522,11 @@ class PitchEnv {
 extern const uint8_t pitchenv_rate[];
 extern const int8_t pitchenv_tab[];
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/controllers.h
+ *****************************************************/
 /*
    Copyright 2013 Google Inc.
 
@@ -611,6 +661,11 @@ class Controllers {
     FmCore *core;
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/PluginFx.h
+ *****************************************************/
 /**
 
    Copyright (c) 2013 Pascal Gauthier.
@@ -680,6 +735,11 @@ class PluginFx {
     float getGain(void);
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/fm_op_kernel.h
+ *****************************************************/
 /*
    Copyright 2012 Google Inc.
 
@@ -723,6 +783,11 @@ class FmOpKernel {
                            int32_t *fb_buf, int fb_gain, bool add);
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/fm_core.h
+ *****************************************************/
 /*
    Copyright 2012 Google Inc.
 
@@ -771,74 +836,11 @@ class FmCore {
     const static FmAlgorithm algorithms[32];
 };
 
-/*
-   Copyright 2014 Pascal Gauthier.
-   Copyright 2012 Google Inc.
 
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-class EngineMkI : public FmCore {
-  public:
-    EngineMkI();
-
-    void render(int32_t *output, FmOpParams *params, int algorithm, int32_t *fb_buf, int32_t feedback_shift);
-
-    void compute(int32_t *output, const int32_t *input, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2,
-                 bool add);
-
-    void compute_pure(int32_t *output, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2,
-                      bool add);
-
-    void compute_fb(int32_t *output, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2,
-                    int32_t *fb_buf, int fb_gain, bool add);
-
-    void compute_fb2(int32_t *output, FmOpParams *params, int32_t gain01, int32_t gain02, int32_t *fb_buf, int fb_shift);
-
-    void compute_fb3(int32_t *output, FmOpParams *params, int32_t gain01, int32_t gain02, int32_t *fb_buf, int fb_shift);
-};
-
-/**
-
-   Copyright (c) 2014 Pascal Gauthier.
-
-   This program is free software; you can redistribute it and/or modify
-   it under the terms of the GNU General Public License as published by
-   the Free Software Foundation; either version 3 of the License, or
-   (at your option) any later version.
-
-   This program is distributed in the hope that it will be useful,
-   but WITHOUT ANY WARRANTY; without even the implied warranty of
-   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-   GNU General Public License for more details.
-
-   You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software Foundation,
-   Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
-
-*/
-
-class EngineOpl : public FmCore {
-  public:
-    virtual void render(int32_t *output, FmOpParams *params, int algorithm,
-                        int32_t *fb_buf, int32_t feedback_shift);
-    void compute(int32_t *output, const int32_t *input, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2, bool add);
-    void compute_pure(int32_t *output, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2, bool add);
-    void compute_fb(int32_t *output, int32_t phase0, int32_t freq,
-                    int32_t gain1, int32_t gain2,
-                    int32_t *fb_buf, int fb_gain, bool add);
-};
-
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/dx7note.h
+ *****************************************************/
 /*
    Copyright 2016-2017 Pascal Gauthier.
    Copyright 2012 Google Inc.
@@ -913,6 +915,11 @@ class Dx7Note {
     int porta_gliss_;
     int32_t porta_curpitch_[6];
 };
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/dexed.h
+ *****************************************************/
 /*
    MicroDexed
 
@@ -947,12 +954,6 @@ struct ProcessorVoice {
   bool live;
   uint32_t key_pressed_timer;
   Dx7Note *dx7_note;
-};
-
-enum DexedEngineResolution {
-  DEXED_ENGINE_MODERN,	    // 0
-  DEXED_ENGINE_MARKI,	    // 1
-  DEXED_ENGINE_OPL	    // 2
 };
 
 enum DexedVoiceOPParameters {
@@ -1039,8 +1040,6 @@ class Dexed
     ~Dexed();
     void activate(void);
     void deactivate(void);
-    uint8_t getEngineType();
-    void setEngineType(uint8_t tp);
     bool isMonoMode(void);
     void setMonoMode(bool mode);
     void setRefreshMode(bool mode);
@@ -1103,10 +1102,13 @@ class Dexed
     VoiceStatus voiceStatus;
     Lfo lfo;
     FmCore* engineMsfa;
-    EngineMkI* engineMkI;
-    EngineOpl* engineOpl;
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/porta.h
+ *****************************************************/
 /*
    Copyright 2019 Jean Pierre Cimalando.
 
@@ -1129,6 +1131,11 @@ struct Porta {
     static int32_t rates[128];
 };
 
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/source_microdexed.h
+ *****************************************************/
 
 class AudioSourceMicroDexed : public AudioStream, public Dexed {
   public:
@@ -1176,3 +1183,65 @@ class AudioSourceMicroDexed : public AudioStream, public Dexed {
   private:
     volatile bool in_update = false;
 };
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/PluginFx.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/dexed.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/dx7note.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/env.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/exp2.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/fm_core.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/fm_op_kernel.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/freqlut.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/lfo.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/pitchenv.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/porta.cpp
+ *****************************************************/
+
+//=====================================================
+/*****************************************************
+ * CODE; orig_code/sin.cpp
+ *****************************************************/
+
+//=====================================================

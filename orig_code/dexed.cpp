@@ -40,8 +40,6 @@ Dexed::Dexed(int rate)
   Porta::init_sr(rate);
   fx.init(rate);
 
-  engineMkI = new EngineMkI;
-  engineOpl = new EngineOpl;
   engineMsfa = new FmCore;
 
   for (i = 0; i < MAX_ACTIVE_NOTES; i++)
@@ -61,14 +59,13 @@ Dexed::Dexed(int rate)
   //controllers.opSwitch=0x00;
   lastKeyDown = -1;
   vuSignal = 0.0;
+  controllers.core = engineMsfa;
 
   lfo.reset(data + 137);
 
   setMonoMode(false);
 
   sustain = false;
-
-  setEngineType(DEXED_ENGINE);
 }
 
 Dexed::~Dexed()
@@ -79,8 +76,6 @@ Dexed::~Dexed()
     delete voices[note].dx7_note;
 
   delete(engineMsfa);
-  delete(engineOpl);
-  delete(engineMkI);
 }
 
 void Dexed::activate(void)
@@ -332,31 +327,6 @@ void Dexed::doRefreshVoice(void)
 void Dexed::setOPs(uint8_t ops)
 {
   controllers.opSwitch = ops;
-}
-
-uint8_t Dexed::getEngineType() {
-  return engineType;
-}
-
-void Dexed::setEngineType(uint8_t tp) {
-  if (engineType == tp)
-    return;
-
-  switch (tp)  {
-    case DEXED_ENGINE_MARKI:
-      controllers.core = engineMkI;
-      break;
-    case DEXED_ENGINE_OPL:
-      controllers.core = engineOpl;
-      break;
-    default:
-      controllers.core = engineMsfa;
-      tp = DEXED_ENGINE_MODERN;
-      break;
-  }
-  engineType = tp;
-  panic();
-  controllers.refresh();
 }
 
 bool Dexed::isMonoMode(void) {

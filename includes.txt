@@ -11,8 +11,6 @@ orig_code/controllers.h
 orig_code/PluginFx.h
 orig_code/fm_op_kernel.h
 orig_code/fm_core.h
-orig_code/EngineMkI.h
-orig_code/EngineOpl.h
 orig_code/dx7note.h
 orig_code/dexed.h
 orig_code/porta.h

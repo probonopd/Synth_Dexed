@@ -34,12 +34,6 @@ struct ProcessorVoice {
   Dx7Note *dx7_note;
 };
 
-enum DexedEngineResolution {
-  DEXED_ENGINE_MODERN,	    // 0
-  DEXED_ENGINE_MARKI,	    // 1
-  DEXED_ENGINE_OPL	    // 2
-};
-
 enum DexedVoiceOPParameters {
   DEXED_OP_EG_R1,           // 0
   DEXED_OP_EG_R2,           // 1
@@ -124,8 +118,6 @@ class Dexed
     ~Dexed();
     void activate(void);
     void deactivate(void);
-    uint8_t getEngineType();
-    void setEngineType(uint8_t tp);
     bool isMonoMode(void);
     void setMonoMode(bool mode);
     void setRefreshMode(bool mode);
@@ -188,7 +180,5 @@ class Dexed
     VoiceStatus voiceStatus;
     Lfo lfo;
     FmCore* engineMsfa;
-    EngineMkI* engineMkI;
-    EngineOpl* engineOpl;
 };
 
