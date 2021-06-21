@@ -1,4 +1,5 @@
 #include "synth_dexed.h"
+
 /**
 
    Copyright (c) 2013-2014 Pascal Gauthier.
@@ -388,11 +389,74 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     else if (vuSignal > 0.001f)
       vuSignal *= decayFactor;
     else
-      vuSignal = 0;
+      vuSignal = 0.0;
   }
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
+}
+
+void Dexed::getSamples(uint16_t n_samples, float32_t* buffer)
+{
+  uint16_t i, j;
+  uint8_t note;
+  float s;
+  const double decayFactor = 0.99992;
+
+  if (refreshVoice)
+  {
+    for (i = 0; i < max_notes; i++)
+    {
+      if ( voices[i].live )
+        voices[i].dx7_note->update(data, voices[i].midi_note, voices[i].velocity, voices[i].porta, &controllers);
+    }
+    lfo.reset(data + 137);
+    refreshVoice = false;
+  }
+
+  for (i = 0; i < n_samples; i += _N_)
+  {
+    AlignedBuf<int32_t, _N_> audiobuf;
+
+    for (uint8_t j = 0; j < _N_; ++j)
+    {
+      audiobuf.get()[j] = 0;
+      buffer[i + j] = 0.0;
+    }
+
+    int32_t lfovalue = lfo.getsample();
+    int32_t lfodelay = lfo.getdelay();
+
+    for (note = 0; note < max_notes; note++)
+    {
+      if (voices[note].live)
+      {
+        voices[note].dx7_note->compute(audiobuf.get(), lfovalue, lfodelay, &controllers);
+
+        for (j = 0; j < _N_; ++j)
+        {
+          buffer[i + j] += static_cast<float>(audiobuf.get()[j]) / 32768;
+          audiobuf.get()[j] = 0;
+        }
+      }
+    }
+  }
+
+  fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
+
+  // mild compression
+  for (i = 0; i < n_samples; i++)
+  {
+    s = abs(buffer[i]);
+    if (s > vuSignal)
+      vuSignal = s;
+    else if (vuSignal > 0.001f)
+      vuSignal *= decayFactor;
+    else
+      vuSignal = 0;
+  }
+
+  arm_scale_f32(buffer, 0.00015, buffer, AUDIO_BLOCK_SAMPLES);
 }
 
 void Dexed::keydown(int16_t pitch, uint8_t velo) {
@@ -1591,20 +1655,20 @@ void Env::transfer(Env &src) {
   inc_ = src.inc_;
 }
 /*
- * Copyright 2013 Google Inc.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *      http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+   Copyright 2013 Google Inc.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
 
 #ifdef _MSC_VER
 #define exp2(arg) pow(2.0, arg)
@@ -2323,20 +2387,20 @@ void Porta::init_sr(double sampleRate)
 
 int32_t Porta::rates[128];
 /*
- * Copyright 2012 Google Inc.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *      http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+   Copyright 2012 Google Inc.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
 
 #define R (1 << 29)
 
@@ -2386,7 +2450,7 @@ int32_t Sin::lookup(int32_t phase) {
   int y0 = sintab[phase_int + 1];
 
   return y0 + (((int64_t)dy * (int64_t)lowbits) >> SHIFT);
-#else 
+#else
   int phase_int = (phase >> SHIFT) & (SIN_N_SAMPLES - 1);
   int y0 = sintab[phase_int];
   int y1 = sintab[phase_int + 1];
@@ -2413,9 +2477,9 @@ int32_t Sin::compute(int32_t phase) {
   int32_t x4 = ((int64_t)x2 * (int64_t)x2) >> 24;
   int32_t x6 = ((int64_t)x2 * (int64_t)x4) >> 24;
   int32_t y = C0 -
-    (((int64_t)C1 * (int64_t)x2) >> 24) +
-    (((int64_t)C2 * (int64_t)x4) >> 24) -
-    (((int64_t)C3 * (int64_t)x6) >> 24);
+              (((int64_t)C1 * (int64_t)x2) >> 24) +
+              (((int64_t)C2 * (int64_t)x4) >> 24) -
+              (((int64_t)C3 * (int64_t)x6) >> 24);
   y ^= -((phase >> 23) & 1);
   return y;
 }
@@ -2433,10 +2497,10 @@ int32_t Sin::compute(int32_t phase) {
   int32_t x = (phase & ((1 << 23) - 1)) - (1 << 22);
   int32_t x2 = ((int64_t)x * (int64_t)x) >> 16;
   int32_t y = (((((((((((((int64_t)C8_8
-    * (int64_t)x2) >> 32) + C8_6)
-    * (int64_t)x2) >> 32) + C8_4)
-    * (int64_t)x2) >> 32) + C8_2)
-    * (int64_t)x2) >> 32) + C8_0);
+                          * (int64_t)x2) >> 32) + C8_6)
+                       * (int64_t)x2) >> 32) + C8_4)
+                    * (int64_t)x2) >> 32) + C8_2)
+                 * (int64_t)x2) >> 32) + C8_0);
   y ^= -((phase >> 23) & 1);
   return y;
 }
@@ -2452,11 +2516,11 @@ int32_t Sin::compute10(int32_t phase) {
   int32_t x = (phase & ((1 << 29) - 1)) - (1 << 28);
   int32_t x2 = ((int64_t)x * (int64_t)x) >> 26;
   int32_t y = ((((((((((((((((int64_t)C10_10
-    * (int64_t)x2) >> 34) + C10_8)
-    * (int64_t)x2) >> 34) + C10_6)
-    * (int64_t)x2) >> 34) + C10_4)
-    * (int64_t)x2) >> 32) + C10_2)
-    * (int64_t)x2) >> 30) + C10_0);
+                             * (int64_t)x2) >> 34) + C10_8)
+                          * (int64_t)x2) >> 34) + C10_6)
+                       * (int64_t)x2) >> 34) + C10_4)
+                    * (int64_t)x2) >> 32) + C10_2)
+                 * (int64_t)x2) >> 30) + C10_0);
   y ^= -((phase >> 29) & 1);
   return y;
 }

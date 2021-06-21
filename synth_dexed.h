@@ -1,8 +1,12 @@
 #include <Arduino.h>
 #include <Audio.h>
 #include "config.h"
+#if defined(USE_OPEN_AUDIO_LIB)
+#include "OpenAudio_ArduinoLibrary.h"
+#endif
+
 /*****************************************************
- * CODE; orig_code/synth.h
+   CODE; orig_code/synth.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -76,7 +80,7 @@ inline static T max(const T& a, const T& b) {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/aligned_buf.h
+   CODE; orig_code/aligned_buf.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -111,7 +115,7 @@ class AlignedBuf {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/sin.h
+   CODE; orig_code/sin.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -178,7 +182,7 @@ int32_t Sin::lookup(int32_t phase) {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/exp2.h
+   CODE; orig_code/exp2.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -263,16 +267,16 @@ int32_t Tanh::lookup(int32_t x) {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/fast_log.h
+   CODE; orig_code/fast_log.h
  *****************************************************/
 /* ----------------------------------------------------------------------
-* https://community.arm.com/tools/f/discussions/4292/cmsis-dsp-new-functionality-proposal/22621#22621
-* Fast approximation to the log2() function.  It uses a two step
-* process.  First, it decomposes the floating-point number into
-* a fractional component F and an exponent E.  The fraction component
-* is used in a polynomial approximation and then the exponent added
-* to the result.  A 3rd order polynomial is used and the result
-* when computing db20() is accurate to 7.984884e-003 dB.
+  https://community.arm.com/tools/f/discussions/4292/cmsis-dsp-new-functionality-proposal/22621#22621
+  Fast approximation to the log2() function.  It uses a two step
+  process.  First, it decomposes the floating-point number into
+  a fractional component F and an exponent E.  The fraction component
+  is used in a polynomial approximation and then the exponent added
+  to the result.  A 3rd order polynomial is used and the result
+  when computing db20() is accurate to 7.984884e-003 dB.
 ** ------------------------------------------------------------------- */
 
 static float log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
@@ -296,7 +300,7 @@ static float log2f_approx(float X)
   Y *= F;
   Y += (*C++);
   Y += E;
-  return(Y);
+  return (Y);
 }
 
 // https://codingforspeed.com/using-faster-exponential-approximation/
@@ -309,16 +313,16 @@ inline float expf_approx(float x) {
 }
 
 inline float unitToDb(float unit) {
-	return 6.02f * log2f_approx(unit);
+  return 6.02f * log2f_approx(unit);
 }
 
 inline float dbToUnit(float db) {
-	return expf_approx(db * 2.302585092994046f * 0.05f);
+  return expf_approx(db * 2.302585092994046f * 0.05f);
 }
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/freqlut.h
+   CODE; orig_code/freqlut.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -344,7 +348,7 @@ class Freqlut {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/lfo.h
+   CODE; orig_code/lfo.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -392,7 +396,7 @@ class Lfo {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/env.h
+   CODE; orig_code/env.h
  *****************************************************/
 /*
    Copyright 2017 Pascal Gauthier.
@@ -472,7 +476,7 @@ class Env {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/pitchenv.h
+   CODE; orig_code/pitchenv.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -525,7 +529,7 @@ extern const int8_t pitchenv_tab[];
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/controllers.h
+   CODE; orig_code/controllers.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -664,7 +668,7 @@ class Controllers {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/PluginFx.h
+   CODE; orig_code/PluginFx.h
  *****************************************************/
 /**
 
@@ -738,7 +742,7 @@ class PluginFx {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/fm_op_kernel.h
+   CODE; orig_code/fm_op_kernel.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -786,7 +790,7 @@ class FmOpKernel {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/fm_core.h
+   CODE; orig_code/fm_core.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -839,7 +843,7 @@ class FmCore {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/dx7note.h
+   CODE; orig_code/dx7note.h
  *****************************************************/
 /*
    Copyright 2016-2017 Pascal Gauthier.
@@ -918,7 +922,7 @@ class Dx7Note {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/dexed.h
+   CODE; orig_code/dexed.h
  *****************************************************/
 /*
    MicroDexed
@@ -1043,7 +1047,7 @@ class Dexed
     bool isMonoMode(void);
     void setMonoMode(bool mode);
     void setRefreshMode(bool mode);
-    void getSamples(uint16_t n_samples, int16_t* buffer);
+    //void getSamples(uint16_t n_samples, int16_t* buffer);
     void panic(void);
     void notesOff(void);
     void resetControllers(void);
@@ -1102,12 +1106,14 @@ class Dexed
     VoiceStatus voiceStatus;
     Lfo lfo;
     FmCore* engineMsfa;
+    void getSamples(uint16_t n_samples, float32_t* buffer);
+    void getSamples(uint16_t n_samples, int16_t* buffer);
 };
 
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/porta.h
+   CODE; orig_code/porta.h
  *****************************************************/
 /*
    Copyright 2019 Jean Pierre Cimalando.
@@ -1134,16 +1140,16 @@ struct Porta {
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/source_microdexed.h
+   CODE; orig_code/source_microdexed.h
  *****************************************************/
 
-class AudioSourceMicroDexed : public AudioStream, public Dexed {
+class AudioSynthDexed : public AudioStream, public Dexed {
   public:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
     uint32_t xrun = 0;
     uint16_t render_time_max = 0;
 
-    AudioSourceMicroDexed(int sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
+    AudioSynthDexed(int sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
 
     void update(void)
     {
@@ -1184,64 +1190,111 @@ class AudioSourceMicroDexed : public AudioStream, public Dexed {
     volatile bool in_update = false;
 };
 
+class AudioSynthDexed_F32 : public AudioStream_F32, public Dexed {
+  public:
+    const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
+    uint32_t xrun = 0;
+    uint16_t render_time_max = 0;
+
+    AudioSynthDexed_F32(int sample_rate) : AudioStream_F32(0, NULL), Dexed(sample_rate) { };
+
+    void update(void)
+    {
+      if (in_update == true)
+      {
+        xrun++;
+        return;
+      }
+      else
+        in_update = true;
+
+      elapsedMicros render_time;
+      audio_block_f32_t *lblock;
+
+      lblock = allocate_f32();
+
+      if (!lblock)
+      {
+        in_update = false;
+        return;
+      }
+
+      getSamples(AUDIO_BLOCK_SAMPLES, lblock->data);
+
+      if (render_time > audio_block_time_us) // everything greater audio_block_time_us (2.9ms for buffer size of 128) is a buffer underrun!
+        xrun++;
+
+      if (render_time > render_time_max)
+        render_time_max = render_time;
+
+      AudioStream_F32::transmit(lblock, 0);
+      AudioStream_F32::release(lblock);
+
+      in_update = false;
+    };
+
+  private:
+    volatile bool in_update = false;
+};
+
 //=====================================================
 /*****************************************************
- * CODE; orig_code/PluginFx.cpp
+   CODE; orig_code/PluginFx.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/dexed.cpp
+   CODE; orig_code/dexed.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/dx7note.cpp
+   CODE; orig_code/dx7note.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/env.cpp
+   CODE; orig_code/env.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/exp2.cpp
+   CODE; orig_code/exp2.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/fm_core.cpp
+   CODE; orig_code/fm_core.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/fm_op_kernel.cpp
+   CODE; orig_code/fm_op_kernel.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/freqlut.cpp
+   CODE; orig_code/freqlut.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/lfo.cpp
+   CODE; orig_code/lfo.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/pitchenv.cpp
+   CODE; orig_code/pitchenv.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/porta.cpp
+   CODE; orig_code/porta.cpp
  *****************************************************/
 
 //=====================================================
 /*****************************************************
- * CODE; orig_code/sin.cpp
+   CODE; orig_code/sin.cpp
  *****************************************************/
 
 //=====================================================

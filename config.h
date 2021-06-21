@@ -58,7 +58,8 @@
 // sed -i.orig 's/^#define USB_MIDI_SYSEX_MAX 290/#define USB_MIDI_SYSEX_MAX 4104/' /usr/local/arduino-teensy/hardware/teensy/avr/cores/teensy4/usb_midi.h
 //#define USB_MIDI_SYSEX_MAX 4104
 
-#define VERSION "1.0.16"
+#define VERSION "1.0.19"
+#define USE_OPEN_AUDIO_LIB
 
 //*************************************************************************************************
 //* DEVICE SETTINGS
