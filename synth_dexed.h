@@ -1,12 +1,11 @@
+#pragma once
+
 #include <Arduino.h>
 #include <Audio.h>
 #include "config.h"
-#if defined(USE_OPEN_AUDIO_LIB)
-#include "OpenAudio_ArduinoLibrary.h"
-#endif
 
 /*****************************************************
-   CODE; orig_code/synth.h
+   CODE: orig_code/synth.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -24,36 +23,8 @@
    limitations under the License.
 */
 
-//#define SUPER_PRECISE
-
-// This IS not be present on MSVC.
-// See http://stackoverflow.com/questions/126279/c99-stdint-h-header-and-ms-visual-studio
-#ifdef _MSC_VER
-typedef __int32 int32_t;
-typedef unsigned __int32 uint32_t;
-typedef __int16 SInt16;
-#endif
-
 #define LG_N 6
 #define _N_ (1 << LG_N)
-
-#if defined(__APPLE__)
-#include <libkern/OSAtomic.h>
-#define SynthMemoryBarrier() OSMemoryBarrier()
-#elif defined(__GNUC__)
-#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 1)
-#define SynthMemoryBarrier() __sync_synchronize()
-#endif
-#endif
-
-
-// #undef SynthMemoryBarrier()
-
-#ifndef SynthMemoryBarrier
-// need to understand why this must be defined
-// #warning Memory barrier is not enabled
-#define SynthMemoryBarrier()
-#endif
 
 template<typename T>
 inline static T min(const T& a, const T& b) {
@@ -77,10 +48,9 @@ inline static T max(const T& a, const T& b) {
 #define SQRT_FUNC sqrtf
 // #define ARM_SQRT_FUNC arm_sqrt_f32 // fast but not as accurate
 
-
 //=====================================================
 /*****************************************************
-   CODE; orig_code/aligned_buf.h
+   CODE: orig_code/aligned_buf.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -115,7 +85,7 @@ class AlignedBuf {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/sin.h
+   CODE: orig_code/sin.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -182,7 +152,7 @@ int32_t Sin::lookup(int32_t phase) {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/exp2.h
+   CODE: orig_code/exp2.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -267,7 +237,7 @@ int32_t Tanh::lookup(int32_t x) {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/fast_log.h
+   CODE: orig_code/fast_log.h
  *****************************************************/
 /* ----------------------------------------------------------------------
   https://community.arm.com/tools/f/discussions/4292/cmsis-dsp-new-functionality-proposal/22621#22621
@@ -322,7 +292,7 @@ inline float dbToUnit(float db) {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/freqlut.h
+   CODE: orig_code/freqlut.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -348,7 +318,7 @@ class Freqlut {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/lfo.h
+   CODE: orig_code/lfo.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -396,7 +366,7 @@ class Lfo {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/env.h
+   CODE: orig_code/env.h
  *****************************************************/
 /*
    Copyright 2017 Pascal Gauthier.
@@ -476,7 +446,7 @@ class Env {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/pitchenv.h
+   CODE: orig_code/pitchenv.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -529,7 +499,7 @@ extern const int8_t pitchenv_tab[];
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/controllers.h
+   CODE: orig_code/controllers.h
  *****************************************************/
 /*
    Copyright 2013 Google Inc.
@@ -668,7 +638,7 @@ class Controllers {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/PluginFx.h
+   CODE: orig_code/PluginFx.h
  *****************************************************/
 /**
 
@@ -742,7 +712,7 @@ class PluginFx {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/fm_op_kernel.h
+   CODE: orig_code/fm_op_kernel.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -790,7 +760,7 @@ class FmOpKernel {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/fm_core.h
+   CODE: orig_code/fm_core.h
  *****************************************************/
 /*
    Copyright 2012 Google Inc.
@@ -843,7 +813,7 @@ class FmCore {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/dx7note.h
+   CODE: orig_code/dx7note.h
  *****************************************************/
 /*
    Copyright 2016-2017 Pascal Gauthier.
@@ -867,8 +837,6 @@ class FmCore {
 
 // It will continue to evolve a bit, as note-stealing logic, scaling,
 // and real-time control of parameters live here.
-
-#pragma once
 
 struct VoiceStatus {
   uint32_t amp[6];
@@ -922,7 +890,7 @@ class Dx7Note {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/dexed.h
+   CODE: orig_code/dexed.h
  *****************************************************/
 /*
    MicroDexed
@@ -1008,6 +976,22 @@ enum DexedVoiceParameters {
   DEXED_NAME                // 19
 };
 
+enum ADSR {
+  ATTACK,
+  DECAY,
+  SUSTAIN,
+  RELEASE
+};
+
+enum OPERATORS {
+  OP1,
+  OP2,
+  OP3,
+  OP4,
+  OP5,
+  OP6
+};
+
 /* #define DEXED_GLOBAL_PARAMETER_OFFSET 155
   enum DexedGlobalParameters {
   DEXED_PITCHBEND_RANGE,    // 0
@@ -1042,12 +1026,15 @@ class Dexed
   public:
     Dexed(int rate);
     ~Dexed();
+
+    //
+    // Global methods
+    //
     void activate(void);
     void deactivate(void);
     bool isMonoMode(void);
     void setMonoMode(bool mode);
     void setRefreshMode(bool mode);
-    //void getSamples(uint16_t n_samples, int16_t* buffer);
     void panic(void);
     void notesOff(void);
     void resetControllers(void);
@@ -1072,6 +1059,61 @@ class Dexed
     void setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode);
     void setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode);
     void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
+
+    //
+    // Voice configuration methods
+    //
+
+    // OP Rate/Level
+    void setRateAllOP(uint8_t rate);
+    void setLevelAllOP(uint8_t level);
+    void setRateOPAllCarrier(uint8_t step, uint8_t rate);
+    void setLevelOPAllCarrier(uint8_t step, uint8_t level);
+    void setRateOPAllModulator(uint8_t step, uint8_t rate);
+    void setLevelOPAllModulator(uint8_t step, uint8_t level);
+    void setRateOP(uint8_t op, uint8_t step, uint8_t rate);
+    void setLevelOP(uint8_t op, uint8_t step, uint8_t level);
+    uint8_t getRateOP(uint8_t op, uint8_t step);
+    uint8_t getLevelOP(uint8_t op, uint8_t step);
+    // OP
+    /*
+      void setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t midi_note); // DEXED_OP_LEV_SCL_BRK_PT,  // 8
+      void setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t midi_note); //DEXED_OP_SCL_LEFT_DEPTH,  // 9
+      void setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t midi_note); // DEXED_OP_SCL_RGHT_DEPTH,  // 10
+      void setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t midi_note); // DEXED_OP_SCL_LEFT_CURVE,  // 11
+      void setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t midi_note); // DEXED_OP_SCL_RGHT_CURVE,  // 12
+      void setOPRateScale(uint8_t op, uint8_t midi_note); // DEXED_OP_OSC_RATE_SCALE,  // 13
+      void setOPAmpModulationSensity(uint8_t op, uint8_t midi_note); // DEXED_OP_AMP_MOD_SENS,    // 14
+      void setOPKeyboardVelocitySensity(uint8_t op, uint8_t midi_note); // DEXED_OP_KEY_VEL_SENS,    // 15
+      void setOPOutputLevel(uint8_t op, uint8_t level); // DEXED_OP_OUTPUT_LEV,      // 16
+      void setOPMode(uint8_t op, uint8_t mode); // DEXED_OP_OSC_MODE,        // 17
+      void setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse); // DEXED_OP_FREQ_COARSE,     // 18
+      void setOPFrequencyFine(uint8_t op, uint8_t frq_fine); // DEXED_OP_FREQ_FINE,       // 19
+      void setOPDetune(uint8_t op, uint8_t detune); // DEXED_OP_OSC_DETUNE       // 20
+
+      DEXED_PITCH_EG_R1,        // 0
+      DEXED_PITCH_EG_R2,        // 1
+      DEXED_PITCH_EG_R3,        // 2
+      DEXED_PITCH_EG_R4,        // 3
+      DEXED_PITCH_EG_L1,        // 4
+      DEXED_PITCH_EG_L2,        // 5
+      DEXED_PITCH_EG_L3,        // 6
+      DEXED_PITCH_EG_L4,        // 7
+      DEXED_ALGORITHM,          // 8
+      DEXED_FEEDBACK,           // 9
+      DEXED_OSC_KEY_SYNC,       // 10
+      DEXED_LFO_SPEED,          // 11
+      DEXED_LFO_DELAY,          // 12
+      DEXED_LFO_PITCH_MOD_DEP,  // 13
+      DEXED_LFO_AMP_MOD_DEP,    // 14
+      DEXED_LFO_SYNC,           // 15
+      DEXED_LFO_WAVE,           // 16
+      DEXED_LFO_PITCH_MOD_SENS, // 17
+      DEXED_TRANSPOSE,          // 18
+      DEXED_NAME                // 19
+
+
+    */
 
     ProcessorVoice voices[MAX_NOTES];
     Controllers controllers;
@@ -1113,7 +1155,7 @@ class Dexed
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/porta.h
+   CODE: orig_code/porta.h
  *****************************************************/
 /*
    Copyright 2019 Jean Pierre Cimalando.
@@ -1140,16 +1182,15 @@ struct Porta {
 
 //=====================================================
 /*****************************************************
-   CODE; orig_code/source_microdexed.h
+   CODE: orig_code/synth_microdexed.h
  *****************************************************/
-
 class AudioSynthDexed : public AudioStream, public Dexed {
   public:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
     uint32_t xrun = 0;
     uint16_t render_time_max = 0;
 
-    AudioSynthDexed(int sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
+    AudioSynthDexed(uint16_t sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
 
     void update(void)
     {
@@ -1189,112 +1230,3 @@ class AudioSynthDexed : public AudioStream, public Dexed {
   private:
     volatile bool in_update = false;
 };
-
-class AudioSynthDexed_F32 : public AudioStream_F32, public Dexed {
-  public:
-    const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
-    uint32_t xrun = 0;
-    uint16_t render_time_max = 0;
-
-    AudioSynthDexed_F32(int sample_rate) : AudioStream_F32(0, NULL), Dexed(sample_rate) { };
-
-    void update(void)
-    {
-      if (in_update == true)
-      {
-        xrun++;
-        return;
-      }
-      else
-        in_update = true;
-
-      elapsedMicros render_time;
-      audio_block_f32_t *lblock;
-
-      lblock = allocate_f32();
-
-      if (!lblock)
-      {
-        in_update = false;
-        return;
-      }
-
-      getSamples(AUDIO_BLOCK_SAMPLES, lblock->data);
-
-      if (render_time > audio_block_time_us) // everything greater audio_block_time_us (2.9ms for buffer size of 128) is a buffer underrun!
-        xrun++;
-
-      if (render_time > render_time_max)
-        render_time_max = render_time;
-
-      AudioStream_F32::transmit(lblock, 0);
-      AudioStream_F32::release(lblock);
-
-      in_update = false;
-    };
-
-  private:
-    volatile bool in_update = false;
-};
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/PluginFx.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/dexed.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/dx7note.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/env.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/exp2.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/fm_core.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/fm_op_kernel.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/freqlut.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/lfo.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/pitchenv.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/porta.cpp
- *****************************************************/
-
-//=====================================================
-/*****************************************************
-   CODE; orig_code/sin.cpp
- *****************************************************/
-
-//=====================================================

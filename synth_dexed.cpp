@@ -23,6 +23,8 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
+extern int perform_attack_mod;
+extern int perform_release_mod;
 
 const float dc = 1e-18;
 
@@ -394,69 +396,6 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
-}
-
-void Dexed::getSamples(uint16_t n_samples, float32_t* buffer)
-{
-  uint16_t i, j;
-  uint8_t note;
-  float s;
-  const double decayFactor = 0.99992;
-
-  if (refreshVoice)
-  {
-    for (i = 0; i < max_notes; i++)
-    {
-      if ( voices[i].live )
-        voices[i].dx7_note->update(data, voices[i].midi_note, voices[i].velocity, voices[i].porta, &controllers);
-    }
-    lfo.reset(data + 137);
-    refreshVoice = false;
-  }
-
-  for (i = 0; i < n_samples; i += _N_)
-  {
-    AlignedBuf<int32_t, _N_> audiobuf;
-
-    for (uint8_t j = 0; j < _N_; ++j)
-    {
-      audiobuf.get()[j] = 0;
-      buffer[i + j] = 0.0;
-    }
-
-    int32_t lfovalue = lfo.getsample();
-    int32_t lfodelay = lfo.getdelay();
-
-    for (note = 0; note < max_notes; note++)
-    {
-      if (voices[note].live)
-      {
-        voices[note].dx7_note->compute(audiobuf.get(), lfovalue, lfodelay, &controllers);
-
-        for (j = 0; j < _N_; ++j)
-        {
-          buffer[i + j] += static_cast<float>(audiobuf.get()[j]) / 32768;
-          audiobuf.get()[j] = 0;
-        }
-      }
-    }
-  }
-
-  fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
-
-  // mild compression
-  for (i = 0; i < n_samples; i++)
-  {
-    s = abs(buffer[i]);
-    if (s > vuSignal)
-      vuSignal = s;
-    else if (vuSignal > 0.001f)
-      vuSignal *= decayFactor;
-    else
-      vuSignal = 0;
-  }
-
-  arm_scale_f32(buffer, 0.00015, buffer, AUDIO_BLOCK_SAMPLES);
 }
 
 void Dexed::keydown(int16_t pitch, uint8_t velo) {
@@ -1012,6 +951,124 @@ void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissa
   controllers.refresh();
 }
 
+void Dexed::setRateAllOP(uint8_t rate)
+{
+  rate = constrain(rate, 0, 99);
+
+  for (uint8_t op = 0; op < 6; op++)
+  {
+    for (uint8_t step = 0; step < 4; step++)
+    {
+      data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
+    }
+  }
+}
+
+void Dexed::setLevelAllOP(uint8_t level)
+{
+  level = constrain(level, 0, 99);
+
+  for (uint8_t op = 0; op < 6; op++)
+  {
+    for (uint8_t step = 0; step < 4; step++)
+    {
+      data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
+    }
+  }
+}
+
+void Dexed::setRateOPAllModulator(uint8_t step, uint8_t rate)
+{
+  uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
+
+  rate = constrain(rate, 0, 99);
+  step = constrain(step, 0, 3);
+
+  for (uint8_t op = 0; op < 6; op++)
+  {
+    if ((op_carrier & (1 << op)) == 0)
+      data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
+  }
+}
+
+void Dexed::setLevelOPAllModulator(uint8_t step, uint8_t level)
+{
+  uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
+
+  step = constrain(step, 0, 3);
+  level = constrain(level, 0, 99);
+
+  for (uint8_t op = 0; op < 6; op++)
+  {
+    if ((op_carrier & (1 << op)) == 0)
+      data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
+  }
+}
+
+void Dexed::setRateOPAllCarrier(uint8_t step, uint8_t rate)
+{
+  uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
+
+  rate = constrain(rate, 0, 99);
+  step = constrain(step, 0, 3);
+
+  for (uint8_t op = 0; op < 6; op++)
+  {
+    if ((op_carrier & (1 << op)) == 1)
+      data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
+  }
+}
+
+void Dexed::setLevelOPAllCarrier(uint8_t step, uint8_t level)
+{
+  uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
+
+  level = constrain(level, 0, 99);
+  step = constrain(step, 0, 3);
+
+  for (uint8_t op = 0; op < 6; op++)
+  {
+    if ((op_carrier & (1 << op)) == 1)
+      data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
+  }
+}
+
+void Dexed::setRateOP(uint8_t op, uint8_t step, uint8_t rate)
+{
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+  rate = constrain(rate, 0, 99);
+
+  data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
+}
+
+void Dexed::setLevelOP(uint8_t op, uint8_t step, uint8_t level)
+{
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+  level = constrain(level, 0, 99);
+
+  data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
+}
+
+uint8_t Dexed::getRateOP(uint8_t op, uint8_t step)
+{
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+
+  return (data[(op * 21) + DEXED_OP_EG_R1 + step]);
+}
+
+uint8_t Dexed::getLevelOP(uint8_t op, uint8_t step)
+{
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+
+  return (data[(op * 21) + DEXED_OP_EG_L1 + step]);
+}
+
+
+
 /*
   // https://www.musicdsp.org/en/latest/Effects/169-compressor.html#
   void compress
@@ -1239,7 +1296,7 @@ Dx7Note::Dx7Note() {
 }
 
 //void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity) {
-void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int srcnote, int porta, const Controllers *ctrls) {
+void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int srcnote, int porta, const Controllers * ctrls) {
   int rates[4];
   int levels[4];
   for (int op = 0; op < 6; op++) {
@@ -1248,6 +1305,7 @@ void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int src
       rates[i] = patch[off + i];
       levels[i] = patch[off + 4 + i];
     }
+
     int outlevel = patch[off + 16];
     outlevel = Env::scaleoutlevel(outlevel);
     int level_scaling = ScaleLevel(midinote, patch[off + 8], patch[off + 9],
@@ -1288,7 +1346,7 @@ void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int src
   porta_gliss_ = ctrls->values_[kControllerPortamentoGlissando];
 }
 
-void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Controllers *ctrls) {
+void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Controllers * ctrls) {
   // ==== PITCH ====
   uint32_t pmd = pitchmoddepth_ * lfo_delay;  // Q32
   int32_t senslfo = pitchmodsens_ * (lfo_val - (1 << 23));
@@ -1389,7 +1447,7 @@ void Dx7Note::keyup() {
   pitchenv_.keydown(false);
 }
 
-void Dx7Note::update(const uint8_t patch[156], int midinote, int velocity, int porta, const Controllers *ctrls) {
+void Dx7Note::update(const uint8_t patch[156], int midinote, int velocity, int porta, const Controllers * ctrls) {
   int rates[4];
   int levels[4];
   for (int op = 0; op < 6; op++) {
@@ -1431,7 +1489,7 @@ void Dx7Note::update(const uint8_t patch[156], int midinote, int velocity, int p
 
 }
 
-void Dx7Note::peekVoiceStatus(VoiceStatus &status) {
+void Dx7Note::peekVoiceStatus(VoiceStatus & status) {
   for (int i = 0; i < 6; i++) {
     status.amp[i] = Exp2::lookup(params_[i].level_in - (14 * (1 << 24)));
     env_[i].getPosition(&status.ampStep[i]);
@@ -1442,7 +1500,7 @@ void Dx7Note::peekVoiceStatus(VoiceStatus &status) {
 /**
    Used in monophonic mode to transfer voice state from different notes
 */
-void Dx7Note::transferState(Dx7Note &src) {
+void Dx7Note::transferState(Dx7Note & src) {
   for (int i = 0; i < 6; i++) {
     env_[i].transfer(src.env_[i]);
     params_[i].gain_out = src.params_[i].gain_out;
@@ -1450,14 +1508,14 @@ void Dx7Note::transferState(Dx7Note &src) {
   }
 }
 
-void Dx7Note::transferSignal(Dx7Note &src) {
+void Dx7Note::transferSignal(Dx7Note & src) {
   for (int i = 0; i < 6; i++) {
     params_[i].gain_out = src.params_[i].gain_out;
     params_[i].phase = src.params_[i].phase;
   }
 }
 
-void Dx7Note::transferPortamento(Dx7Note &src) {
+void Dx7Note::transferPortamento(Dx7Note & src) {
   for (int i = 0; i < 6; i++) {
     porta_curpitch_[i] = src.porta_curpitch_[i];
   }
@@ -1637,7 +1695,7 @@ void Env::getPosition(char *step) {
   *step = ix_;
 }
 
-void Env::transfer(Env &src) {
+void Env::transfer(Env & src) {
   for (int i = 0; i < 4; i++) {
     rates_[i] = src.rates_[i];
     levels_[i] = src.levels_[i];
@@ -1769,7 +1827,7 @@ const FmAlgorithm FmCore::algorithms[32] = {
   { { 0xc4, 0x04, 0x04, 0x04, 0x04, 0x04 } }, // 32
 };
 
-int n_out(const FmAlgorithm &alg) {
+int n_out(const FmAlgorithm & alg) {
   int count = 0;
   for (int i = 0; i < 6; i++) {
     if ((alg.ops[i] & 7) == OUT_BUS_ADD) count++;
@@ -1788,7 +1846,7 @@ uint8_t FmCore::get_carrier_operators(uint8_t algorithm)
       op_out |= 1 << i;
   }
 
-  return op_out;
+  return op_out & 0x3f;
 }
 
 void FmCore::dump() {
@@ -1812,7 +1870,7 @@ void FmCore::dump() {
 #endif
 }
 
-void FmCore::render(int32_t *output, FmOpParams *params, int algorithm, int32_t *fb_buf, int feedback_shift) {
+void FmCore::render(int32_t *output, FmOpParams * params, int algorithm, int32_t *fb_buf, int feedback_shift) {
   const int kLevelThresh = 1120;
   const FmAlgorithm alg = algorithms[algorithm];
   bool has_contents[3] = { true, false, false };
