@@ -1063,57 +1063,68 @@ class Dexed
     //
     // Voice configuration methods
     //
-
-    // OP Rate/Level
-    void setRateAllOP(uint8_t rate);
-    void setLevelAllOP(uint8_t level);
-    void setRateOPAllCarrier(uint8_t step, uint8_t rate);
-    void setLevelOPAllCarrier(uint8_t step, uint8_t level);
-    void setRateOPAllModulator(uint8_t step, uint8_t rate);
-    void setLevelOPAllModulator(uint8_t step, uint8_t level);
-    void setRateOP(uint8_t op, uint8_t step, uint8_t rate);
-    void setLevelOP(uint8_t op, uint8_t step, uint8_t level);
-    uint8_t getRateOP(uint8_t op, uint8_t step);
-    uint8_t getLevelOP(uint8_t op, uint8_t step);
-    // OP
-    /*
-      void setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t midi_note); // DEXED_OP_LEV_SCL_BRK_PT,  // 8
-      void setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t midi_note); //DEXED_OP_SCL_LEFT_DEPTH,  // 9
-      void setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t midi_note); // DEXED_OP_SCL_RGHT_DEPTH,  // 10
-      void setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t midi_note); // DEXED_OP_SCL_LEFT_CURVE,  // 11
-      void setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t midi_note); // DEXED_OP_SCL_RGHT_CURVE,  // 12
-      void setOPRateScale(uint8_t op, uint8_t midi_note); // DEXED_OP_OSC_RATE_SCALE,  // 13
-      void setOPAmpModulationSensity(uint8_t op, uint8_t midi_note); // DEXED_OP_AMP_MOD_SENS,    // 14
-      void setOPKeyboardVelocitySensity(uint8_t op, uint8_t midi_note); // DEXED_OP_KEY_VEL_SENS,    // 15
-      void setOPOutputLevel(uint8_t op, uint8_t level); // DEXED_OP_OUTPUT_LEV,      // 16
-      void setOPMode(uint8_t op, uint8_t mode); // DEXED_OP_OSC_MODE,        // 17
-      void setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse); // DEXED_OP_FREQ_COARSE,     // 18
-      void setOPFrequencyFine(uint8_t op, uint8_t frq_fine); // DEXED_OP_FREQ_FINE,       // 19
-      void setOPDetune(uint8_t op, uint8_t detune); // DEXED_OP_OSC_DETUNE       // 20
-
-      DEXED_PITCH_EG_R1,        // 0
-      DEXED_PITCH_EG_R2,        // 1
-      DEXED_PITCH_EG_R3,        // 2
-      DEXED_PITCH_EG_R4,        // 3
-      DEXED_PITCH_EG_L1,        // 4
-      DEXED_PITCH_EG_L2,        // 5
-      DEXED_PITCH_EG_L3,        // 6
-      DEXED_PITCH_EG_L4,        // 7
-      DEXED_ALGORITHM,          // 8
-      DEXED_FEEDBACK,           // 9
-      DEXED_OSC_KEY_SYNC,       // 10
-      DEXED_LFO_SPEED,          // 11
-      DEXED_LFO_DELAY,          // 12
-      DEXED_LFO_PITCH_MOD_DEP,  // 13
-      DEXED_LFO_AMP_MOD_DEP,    // 14
-      DEXED_LFO_SYNC,           // 15
-      DEXED_LFO_WAVE,           // 16
-      DEXED_LFO_PITCH_MOD_SENS, // 17
-      DEXED_TRANSPOSE,          // 18
-      DEXED_NAME                // 19
-
-
-    */
+    void setOPRateAll(uint8_t rate);
+    void setOPLevelAll(uint8_t level);
+    void setOPRateAllCarrier(uint8_t step, uint8_t rate);
+    void setOPLevelAllCarrier(uint8_t step, uint8_t level);
+    void setOPRateAllModulator(uint8_t step, uint8_t rate);
+    void setOPLevelAllModulator(uint8_t step, uint8_t level);
+    void setOPRate(uint8_t op, uint8_t step, uint8_t rate);
+    uint8_t getOPRate(uint8_t op, uint8_t step);
+    void setOPLevel(uint8_t op, uint8_t step, uint8_t level);
+    uint8_t getOPLevel(uint8_t op, uint8_t step);
+    void setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t level);
+    uint8_t getOPKeyboardLevelScalingBreakPoint(uint8_t op);
+    void setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t depth);
+    uint8_t getOPKeyboardLevelScalingDepthLeft(uint8_t op);
+    void setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t depth);
+    uint8_t getOPKeyboardLevelScalingDepthRight(uint8_t op);
+    void setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t curve);
+    uint8_t getOPKeyboardLevelScalingCurveLeft(uint8_t op);
+    void setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t curve);
+    uint8_t getOPKeyboardLevelScalingCurveRight(uint8_t op);
+    void setOPKeyboardRateScale(uint8_t op, uint8_t scale);
+    uint8_t getOPKeyboardRateScale(uint8_t op);
+    void setOPAmpModulationSensity(uint8_t op, uint8_t sensitifity);
+    uint8_t getOPAmpModulationSensity(uint8_t op);
+    void setOPKeyboardVelocitySensity(uint8_t op, uint8_t sensitivity);
+    uint8_t getOPKeyboardVelocitySensity(uint8_t op);
+    void setOPOutputLevel(uint8_t op, uint8_t level);
+    uint8_t getOPOutputLevel(uint8_t op);
+    void setOPMode(uint8_t op, uint8_t mode);
+    uint8_t getOPMode(uint8_t op);
+    void setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse);
+    uint8_t getOPFrequencyCoarse(uint8_t op);
+    void setOPFrequencyFine(uint8_t op, uint8_t frq_fine);
+    uint8_t getOPFrequencyFine(uint8_t op);
+    void setOPDetune(uint8_t op, uint8_t detune);
+    void getOPDetune(uint8_t op);
+    void setPitchRate(uint8_t step, uint8_t rate);
+    uint8_t getPitchRate(uint8_t step);
+    void setPitchLevel(uint8_t step, uint8_t Level);
+    uint8_t getPitchLevel(uint8_t step);
+    void setAlgorithm(uint8_t algorithm);
+    uint8_t getAlgorithm(void);
+    void setFeedback(uint8_t feedback);
+    uint8_t getFeedback(void);
+    void setOscillatorSync(bool sync);
+    bool getOscillatorSync(void);
+    void setLFOSpeed(uint8_t speed);
+    uint8_t getLFOSpeed(void);
+    void setLFOPitchModulationDepth(uint8_t depth);
+    uint8_t getLFOPitchModulationDepth(void);
+    void setLFOAmpModulationDepth(uint8_t depth);
+    uint8_t getLFOAmpModulationDepth(void);
+    void setLFOSync(bool sync);
+    bool getLFOSync(void);
+    void setLFOWaveform(uint8_t waveform);
+    uint8_t getLFOWaveform(void);
+    void setLFOPitchModulationSensitivity(uint8_t sensitifity);
+    uint8_t getLFOPitchModulationSensitivity(void);
+    void setTranspose(uint8_t transpose);
+    uint8_t getTranspose(void);
+    void setName(char* name);
+    void getName(char* buffer);
 
     ProcessorVoice voices[MAX_NOTES];
     Controllers controllers;

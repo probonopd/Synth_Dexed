@@ -1042,6 +1042,14 @@ void Dexed::setRateOP(uint8_t op, uint8_t step, uint8_t rate)
   data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
 }
 
+uint8_t Dexed::getRateOP(uint8_t op, uint8_t step)
+{
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+
+  return (data[(op * 21) + DEXED_OP_EG_R1 + step]);
+}
+
 void Dexed::setLevelOP(uint8_t op, uint8_t step, uint8_t level)
 {
   op = constrain(op, 0, 5);
@@ -1049,14 +1057,6 @@ void Dexed::setLevelOP(uint8_t op, uint8_t step, uint8_t level)
   level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
-}
-
-uint8_t Dexed::getRateOP(uint8_t op, uint8_t step)
-{
-  op = constrain(op, 0, 5);
-  step = constrain(step, 0, 3);
-
-  return (data[(op * 21) + DEXED_OP_EG_R1 + step]);
 }
 
 uint8_t Dexed::getLevelOP(uint8_t op, uint8_t step)
@@ -1067,7 +1067,266 @@ uint8_t Dexed::getLevelOP(uint8_t op, uint8_t step)
   return (data[(op * 21) + DEXED_OP_EG_L1 + step]);
 }
 
+void Dexed::setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t level)
+{
+  ;
+}
 
+uint8_t Dexed::getOPKeyboardLevelScalingBreakPoint(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t depth)
+{
+  ;
+}
+
+
+uint8_t Dexed::getOPKeyboardLevelScalingDepthLeft(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t depth)
+{
+  ;
+}
+
+uint8_t Dexed::getOPKeyboardLevelScalingDepthRight(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t curve)
+{
+  ;
+}
+
+uint8_t Dexed::getOPKeyboardLevelScalingCurveLeft(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t curve)
+{
+  ;
+}
+
+uint8_t Dexed::getOPKeyboardLevelScalingCurveRight(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPKeyboardRateScale(uint8_t op, uint8_t scale)
+{
+  ;
+}
+
+uint8_t Dexed::getOPKeyboardRateScale(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPAmpModulationSensity(uint8_t op, uint8_t sensitifity)
+{
+  ;
+}
+
+uint8_t Dexed::getOPAmpModulationSensity(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPKeyboardVelocitySensity(uint8_t op, uint8_t sensitivity)
+{
+  ;
+}
+
+uint8_t Dexed::getOPKeyboardVelocitySensity(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPOutputLevel(uint8_t op, uint8_t level)
+{
+  ;
+}
+
+uint8_t Dexed::getOPOutputLevel(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPMode(uint8_t op, uint8_t mode)
+{
+  ;
+}
+
+uint8_t Dexed::getOPMode(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse)
+{
+  ;
+}
+
+uint8_t Dexed::getOPFrequencyCoarse(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPFrequencyFine(uint8_t op, uint8_t frq_fine)
+{
+  ;
+}
+
+uint8_t Dexed::getOPFrequencyFine(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setOPDetune(uint8_t op, uint8_t detune)
+{
+  ;
+}
+
+void Dexed::getOPDetune(uint8_t op)
+{
+  ;
+}
+
+void Dexed::setPitchRate(uint8_t step, uint8_t rate)
+{
+  ;
+}
+
+uint8_t Dexed::getPitchRate(uint8_t step)
+{
+  ;
+}
+
+void Dexed::setPitchLevel(uint8_t step, uint8_t Level)
+{
+  ;
+}
+
+uint8_t Dexed::getPitchLevel(uint8_t step)
+{
+  ;
+}
+
+void Dexed::setAlgorithm(uint8_t algorithm)
+{
+  ;
+}
+
+uint8_t Dexed::getAlgorithm(void)
+{
+  ;
+}
+
+void Dexed::setFeedback(uint8_t feedback)
+{
+  ;
+}
+
+uint8_t Dexed::getFeedback(void)
+{
+  ;
+}
+
+void Dexed::setOscillatorSync(bool sync)
+{
+  ;
+}
+
+bool Dexed::getOscillatorSync(void)
+{
+  ;
+}
+
+void Dexed::setLFOSpeed(uint8_t speed)
+{
+  ;
+}
+
+uint8_t Dexed::getLFOSpeed(void)
+{
+  ;
+}
+
+void Dexed::setLFOPitchModulationDepth(uint8_t depth)
+{
+  ;
+}
+
+uint8_t Dexed::getLFOPitchModulationDepth(void)
+{
+  ;
+}
+
+void Dexed::setLFOAmpModulationDepth(uint8_t depth)
+{
+  ;
+}
+
+uint8_t Dexed::getLFOAmpModulationDepth(void)
+{
+  ;
+}
+
+void Dexed::setLFOSync(bool sync)
+{
+  ;
+}
+
+bool Dexed::getLFOSync(void)
+{
+  ;
+}
+
+void Dexed::setLFOWaveform(uint8_t waveform)
+{
+  ;
+}
+
+uint8_t Dexed::getLFOWaveform(void)
+{
+  ;
+}
+
+void Dexed::setLFOPitchModulationSensitivity(uint8_t sensitifity)
+{
+  ;
+}
+
+uint8_t Dexed::getLFOPitchModulationSensitivity(void)
+{
+  ;
+}
+
+void Dexed::setTranspose(uint8_t transpose)
+{
+  ;
+}
+
+uint8_t Dexed::getTranspose(void)
+{
+  ;
+}
+
+void Dexed::setName(char* name)
+{
+  ;
+}
+
+void Dexed::getName(char* buffer)
+{
+  ;
+}
 
 /*
   // https://www.musicdsp.org/en/latest/Effects/169-compressor.html#
