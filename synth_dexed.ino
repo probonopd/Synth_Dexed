@@ -13,7 +13,7 @@ uint8_t fmpiano_sysex[156] = {
   04, 06, 00,                                                                         // algorithm, feedback, osc sync
   34, 33, 00, 00, 00, 04,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
   03, 24,                                                                             // pitch_mod_sensitivity, transpose
-  69, 68, 80, 56, 85, 76, 84, 00, 00, 00                                              // 10 * char for name ("DEFAULT   ")
+  70, 77, 45, 80, 73, 65, 78, 79, 00, 00                                              // 10 * char for name ("DEFAULT   ")
 }; // FM-Piano
 
 uint8_t init_sysex[156] = {

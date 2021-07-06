@@ -47,9 +47,9 @@ inline static float tptlpupw(float & state , float inp , float cutoff , float sr
 //    return (param) * (max - min) + min;
 //}
 
-static float logsc(float param, const float min, const float max, const float rolloff = 19.0f) {
-  return ((EXP_FUNC(param * LOG_FUNC(rolloff + 1)) - 1.0f) / (rolloff)) * (max - min) + min;
-}
+// static float logsc(float param, const float min, const float max, const float rolloff = 19.0f) {
+//   return ((EXP_FUNC(param * LOG_FUNC(rolloff + 1)) - 1.0f) / (rolloff)) * (max - min) + min;
+// }
 
 PluginFx::PluginFx() {
   Cutoff = 1.0;
@@ -257,7 +257,7 @@ float PluginFx::getGain(void)
 
 */
 
-extern config_t configuration;
+//extern config_t configuration;
 
 Dexed::Dexed(int rate)
 {
@@ -275,6 +275,8 @@ Dexed::Dexed(int rate)
   fx.init(rate);
 
   engineMsfa = new FmCore;
+
+  loadInitVoice();
 
   for (i = 0; i < MAX_ACTIVE_NOTES; i++)
   {
@@ -831,7 +833,7 @@ bool Dexed::getVoiceData(uint8_t* data_copy)
   return (true);
 }
 
-bool Dexed::loadVoiceParameters(uint8_t* new_data)
+bool Dexed::loadVoiceParameters(const uint8_t* new_data)
 {
   char dexed_voice_name[11];
 
@@ -851,6 +853,11 @@ bool Dexed::loadVoiceParameters(uint8_t* new_data)
 #endif
 
   return (true);
+}
+
+void Dexed::loadInitVoice(void)
+{
+  loadVoiceParameters(init_voice);
 }
 
 void Dexed::setPBController(uint8_t pb_range, uint8_t pb_step)
