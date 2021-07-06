@@ -1027,17 +1027,12 @@ class Dexed
     Dexed(int rate);
     ~Dexed();
 
-    //
     // Global methods
-    //
     void activate(void);
     void deactivate(void);
     bool isMonoMode(void);
     void setMonoMode(bool mode);
     void setRefreshMode(bool mode);
-    void panic(void);
-    void notesOff(void);
-    void resetControllers(void);
     void setMaxNotes(uint8_t n);
     uint8_t getMaxNotes(void);
     void doRefreshVoice(void);
@@ -1048,11 +1043,16 @@ class Dexed
     bool loadVoiceParameters(uint8_t* data);
     bool loadGlobalParameters(uint8_t* data);
     bool initGlobalParameters(void);
+    uint8_t getNumNotesPlaying(void);
+
+    // Sound methods
     void keyup(int16_t pitch);
     void keydown(int16_t pitch, uint8_t velo);
     void setSustain(bool sustain);
     bool getSustain(void);
-    uint8_t getNumNotesPlaying(void);
+    void panic(void);
+    void notesOff(void);
+    void resetControllers(void);
     void setPBController(uint8_t pb_range, uint8_t pb_step);
     void setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode);
     void setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode);
@@ -1060,9 +1060,7 @@ class Dexed
     void setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode);
     void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
 
-    //
     // Voice configuration methods
-    //
     void setOPRateAll(uint8_t rate);
     void setOPLevelAll(uint8_t level);
     void setOPRateAllCarrier(uint8_t step, uint8_t rate);
@@ -1085,7 +1083,7 @@ class Dexed
     uint8_t getOPKeyboardLevelScalingCurveRight(uint8_t op);
     void setOPKeyboardRateScale(uint8_t op, uint8_t scale);
     uint8_t getOPKeyboardRateScale(uint8_t op);
-    void setOPAmpModulationSensity(uint8_t op, uint8_t sensitifity);
+    void setOPAmpModulationSensity(uint8_t op, uint8_t sensitivity);
     uint8_t getOPAmpModulationSensity(uint8_t op);
     void setOPKeyboardVelocitySensity(uint8_t op, uint8_t sensitivity);
     uint8_t getOPKeyboardVelocitySensity(uint8_t op);
@@ -1098,10 +1096,10 @@ class Dexed
     void setOPFrequencyFine(uint8_t op, uint8_t frq_fine);
     uint8_t getOPFrequencyFine(uint8_t op);
     void setOPDetune(uint8_t op, uint8_t detune);
-    void getOPDetune(uint8_t op);
+    uint8_t getOPDetune(uint8_t op);
     void setPitchRate(uint8_t step, uint8_t rate);
     uint8_t getPitchRate(uint8_t step);
-    void setPitchLevel(uint8_t step, uint8_t Level);
+    void setPitchLevel(uint8_t step, uint8_t level);
     uint8_t getPitchLevel(uint8_t step);
     void setAlgorithm(uint8_t algorithm);
     uint8_t getAlgorithm(void);
@@ -1111,15 +1109,17 @@ class Dexed
     bool getOscillatorSync(void);
     void setLFOSpeed(uint8_t speed);
     uint8_t getLFOSpeed(void);
+    void setLFODelay(uint8_t delay);
+    uint8_t getLFODelay(void);
     void setLFOPitchModulationDepth(uint8_t depth);
     uint8_t getLFOPitchModulationDepth(void);
-    void setLFOAmpModulationDepth(uint8_t depth);
+    void setLFOAmpModulationDepth(uint8_t delay);
     uint8_t getLFOAmpModulationDepth(void);
     void setLFOSync(bool sync);
     bool getLFOSync(void);
     void setLFOWaveform(uint8_t waveform);
     uint8_t getLFOWaveform(void);
-    void setLFOPitchModulationSensitivity(uint8_t sensitifity);
+    void setLFOPitchModulationSensitivity(uint8_t sensitivity);
     uint8_t getLFOPitchModulationSensitivity(void);
     void setTranspose(uint8_t transpose);
     uint8_t getTranspose(void);
