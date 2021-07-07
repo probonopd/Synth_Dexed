@@ -27,15 +27,50 @@
 
 #include <Arduino.h>
 #include <Audio.h>
+#include "teensy_board_detection.h"
 
-#define SYNTH_DEXED_VERSION "1.0"
+#define SYNTH_DEXED_VERSION "1.0.0"
 #define DEBUG 1
 #define SAMPLE_RATE 44100
 
 #define MIDI_CONTROLLER_MODE_MAX 2
-#define MAX_NOTES 16
 #define TRANSPOSE_FIX 24
 #define VOICE_SILENCE_LEVEL 1100
+
+// Teensy-4.x settings
+#ifdef TEENSY4
+#define MAX_NOTES 32
+#endif
+
+// Teensy-3.6 settings
+#if defined(TEENSY3_6)
+# if defined(USE_FX)
+#   if F_CPU == 256000000
+#    define MAX_NOTES 20
+#   elif F_CPU == 240000000
+#    define MAX_NOTES 18
+#   elif F_CPU == 216000000
+#    define MAX_NOTES 16
+#   else
+#    warning >>> You should consider to use 216MHz overclocking to get polyphony of 16 instead 12 voices <<<
+#    define MAX_NOTES 12
+#   endif
+# else
+#   if F_CPU == 256000000
+#    define MAX_NOTES 20
+#   elif F_CPU == 216000000
+#    define MAX_NOTES 20
+#   else
+#    define MAX_NOTES 16
+#   endif
+# endif
+#endif
+
+#ifdef TEENSY3_5
+#undef MIDI_DEVICE_USB_HOST
+#define MAX_NOTES 11
+#undef USE_FX
+#endif
 
 #define PB_RANGE_MIN 0
 #define PB_RANGE_MAX 12
@@ -979,6 +1014,32 @@ class Dx7Note {
 
 //=====================================================
 /*****************************************************
+   CODE: orig_code/porta.h
+ *****************************************************/
+/*
+   Copyright 2019 Jean Pierre Cimalando.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+*/
+
+struct Porta {
+  public:
+    static void init_sr(double sampleRate);
+    static int32_t rates[128];
+};
+
+//=====================================================
+/*****************************************************
    CODE: orig_code/dexed.h
  *****************************************************/
 /*
@@ -1130,7 +1191,7 @@ class Dexed
     bool encodeVoice(uint8_t* encoded_data);
     bool getVoiceData(uint8_t* data_copy);
     void loadInitVoice(void);
-    bool loadVoiceParameters(const uint8_t* data);
+    bool loadVoiceParameters(uint8_t* data);
     bool loadGlobalParameters(uint8_t* data);
     bool initGlobalParameters(void);
     uint8_t getNumNotesPlaying(void);
@@ -1149,6 +1210,54 @@ class Dexed
     void setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode);
     void setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode);
     void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
+
+    uint8_t init_voice[156] = {
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 99, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 50, 50, 50, 50,                                                     // 4 * pitch EG rates, 4 * pitch EG level
+      01, 00, 01,                                                                         // algorithm, feedback, osc sync
+      35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
+      03, 48,                                                                             // pitch_mod_sensitivity, transpose
+      73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
+    }; // INIT
+    uint8_t data[156];
+    uint16_t render_time_max = 0;
+    Controllers controllers;
+    PluginFx fx;
+    ProcessorVoice voices[MAX_NOTES];
+    uint32_t xrun = 0;
+
+  protected:
+    int lastKeyDown;
+    static const uint8_t MAX_ACTIVE_NOTES = MAX_NOTES;
+    uint8_t max_notes = MAX_ACTIVE_NOTES;
+    int16_t currentNote;
+    bool sustain;
+    float vuSignal;
+    bool monoMode;
+    bool refreshMode;
+    bool refreshVoice;
+    uint8_t engineType;
+    VoiceStatus voiceStatus;
+    Lfo lfo;
+    FmCore* engineMsfa;
+    void getSamples(uint16_t n_samples, int16_t* buffer);
+};
+
+
+//=====================================================
+/*****************************************************
+   CODE: orig_code/synth_microdexed.h
+ *****************************************************/
+class AudioSynthDexed : public AudioStream, public Dexed
+{
+  public:
+
+    AudioSynthDexed(uint16_t sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
 
     // Voice configuration methods
     void setOPRateAll(uint8_t rate);
@@ -1216,119 +1325,8 @@ class Dexed
     void setName(char* name);
     void getName(char* buffer);
 
-    ProcessorVoice voices[MAX_NOTES];
-    Controllers controllers;
-    PluginFx fx;
-
-    const uint8_t init_voice[156] = {
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 99, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 50, 50, 50, 50,                                                     // 4 * pitch EG rates, 4 * pitch EG level
-      01, 00, 01,                                                                         // algorithm, feedback, osc sync
-      35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
-      03, 48,                                                                             // pitch_mod_sensitivity, transpose
-      73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
-    }; // INIT
-    uint8_t data[156];
-    
-    int lastKeyDown;
-
   protected:
-    static const uint8_t MAX_ACTIVE_NOTES = MAX_NOTES;
-    uint8_t max_notes = MAX_ACTIVE_NOTES;
-    int16_t currentNote;
-    bool sustain;
-    float vuSignal;
-    bool monoMode;
-    bool refreshMode;
-    bool refreshVoice;
-    uint8_t engineType;
-    VoiceStatus voiceStatus;
-    Lfo lfo;
-    FmCore* engineMsfa;
-    void getSamples(uint16_t n_samples, float32_t* buffer);
-    void getSamples(uint16_t n_samples, int16_t* buffer);
-};
-
-
-//=====================================================
-/*****************************************************
-   CODE: orig_code/porta.h
- *****************************************************/
-/*
-   Copyright 2019 Jean Pierre Cimalando.
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-*/
-
-struct Porta {
-  public:
-    static void init_sr(double sampleRate);
-    static int32_t rates[128];
-};
-
-
-//=====================================================
-/*****************************************************
-   CODE: orig_code/synth_microdexed.h
- *****************************************************/
-class AudioSynthDexed : public AudioStream, public Dexed {
-  public:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
-    uint32_t xrun = 0;
-    uint16_t render_time_max = 0;
-
-    AudioSynthDexed(uint16_t sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
-
-    void update(void)
-    {
-      if (in_update == true)
-      {
-        xrun++;
-        return;
-      }
-      else
-        in_update = true;
-
-      elapsedMicros render_time;
-      audio_block_t *lblock;
-
-      lblock = allocate();
-
-      if (!lblock)
-      {
-        in_update = false;
-        return;
-      }
-
-      getSamples(AUDIO_BLOCK_SAMPLES, lblock->data);
-
-      if (render_time > audio_block_time_us) // everything greater audio_block_time_us (2.9ms for buffer size of 128) is a buffer underrun!
-        xrun++;
-
-      if (render_time > render_time_max)
-        render_time_max = render_time;
-
-      transmit(lblock, 0);
-      release(lblock);
-
-      in_update = false;
-    };
-
-  private:
     volatile bool in_update = false;
+    void update(void);
 };
