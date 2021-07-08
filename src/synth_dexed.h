@@ -72,61 +72,25 @@
 #undef USE_FX
 #endif
 
-#define PB_RANGE_MIN 0
-#define PB_RANGE_MAX 12
+#define NUM_VOICE_PARAMETERS 156
+
 #define PB_RANGE_DEFAULT 1
-
-#define PB_STEP_MIN 0
-#define PB_STEP_MAX 12
 #define PB_STEP_DEFAULT 0
-
-#define MW_RANGE_MIN 0
-#define MW_RANGE_MAX 99
 #define MW_RANGE_DEFAULT 50
-
-#define MW_ASSIGN_MIN 0
-#define MW_ASSIGN_MAX 7
 #define MW_ASSIGN_DEFAULT 0 // Bitmapped: 0: Pitch, 1: Amp, 2: Bias
-
-#define MW_MODE_MIN 0
-#define MW_MODE_MAX MIDI_CONTROLLER_MODE_MAX
 #define MW_MODE_DEFAULT 0
-
-#define FC_RANGE_MIN 0
-#define FC_RANGE_MAX 99
 #define FC_RANGE_DEFAULT 50
-
-#define FC_ASSIGN_MIN 0
-#define FC_ASSIGN_MAX 7
 #define FC_ASSIGN_DEFAULT 0 // Bitmapped: 0: Pitch, 1: Amp, 2: Bias
-
-#define FC_MODE_MIN 0
-#define FC_MODE_MAX MIDI_CONTROLLER_MODE_MAX
 #define FC_MODE_DEFAULT 0
-
-#define BC_RANGE_MIN 0
-#define BC_RANGE_MAX 99
 #define BC_RANGE_DEFAULT 50
-
-#define BC_ASSIGN_MIN 0
-#define BC_ASSIGN_MAX 7
 #define BC_ASSIGN_DEFAULT 0 // Bitmapped: 0: Pitch, 1: Amp, 2: Bias
-
-#define BC_MODE_MIN 0
-#define BC_MODE_MAX MIDI_CONTROLLER_MODE_MAX
 #define BC_MODE_DEFAULT 0
-
-#define AT_RANGE_MIN 0
-#define AT_RANGE_MAX 99
 #define AT_RANGE_DEFAULT 50
-
-#define AT_ASSIGN_MIN 0
-#define AT_ASSIGN_MAX 7
 #define AT_ASSIGN_DEFAULT 0 // Bitmapped: 0: Pitch, 1: Amp, 2: Bias
-
-#define AT_MODE_MIN 0
-#define AT_MODE_MAX MIDI_CONTROLLER_MODE_MAX
 #define AT_MODE_DEFAULT 0
+#define PORTAMENTO_MODE_DEFAULT 0 // 0: Retain, 1: Follow
+#define PORTAMENTO_GLISSANDO_DEFAULT 0
+#define PORTAMENTO_TIME_DEFAULT 0
 
 /*****************************************************
    CODE: orig_code/synth.h
@@ -674,7 +638,7 @@ class FmMod {
 
     uint8_t getRange(void)
     {
-      return(range);
+      return (range);
     }
 
     void setTarget(uint8_t assign)
@@ -687,7 +651,7 @@ class FmMod {
 
     uint8_t getTarget(void)
     {
-	return(pitch&amp&eg);
+      return (pitch & amp & eg);
     }
 
     void setMode(uint8_t m)
@@ -1152,30 +1116,26 @@ enum OPERATORS {
   OP6
 };
 
-/* #define DEXED_GLOBAL_PARAMETER_OFFSET 155
-  enum DexedGlobalParameters {
-  DEXED_PITCHBEND_RANGE,    // 0
-  DEXED_PITCHBEND_STEP,     // 1
-  DEXED_MODWHEEL_RANGE,     // 2
-  DEXED_MODWHEEL_ASSIGN,    // 3
-  DEXED_FOOTCTRL_RANGE,     // 4
-  DEXED_FOOTCTRL_ASSIGN,    // 5
-  DEXED_BREATHCTRL_RANGE,   // 6
-  DEXED_BREATHCTRL_ASSIGN,  // 7
-  DEXED_AT_RANGE,           // 8
-  DEXED_AT_ASSIGN,          // 9
-  DEXED_MASTER_TUNE,        // 10
-  DEXED_OP1_ENABLE,         // 11
-  DEXED_OP2_ENABLE,         // 12
-  DEXED_OP3_ENABLE,         // 13
-  DEXED_OP4_ENABLE,         // 14
-  DEXED_OP5_ENABLE,         // 15
-  DEXED_OP6_ENABLE,         // 16
-  DEXED_MAX_NOTES,          // 17
-  DEXED_PORTAMENTO_MODE,    // 18
-  DEXED_PORTAMENTO_GLISSANDO, // 19
-  DEXED_PORTAMENTO_TIME,    // 20
-  }; */
+enum CONTROLLER_ASSIGN {
+  NONE,
+  PITCH,
+  AMP,
+  PITCH_AMP,
+  EG,
+  PITCH_EG,
+  AMP_EG,
+  PITCH_AMP_EG
+};
+
+enum PORTAMENTO_MODE {
+  RETAIN,
+  FOLLOW
+};
+
+enum ON_OFF {
+  OFF,
+  ON
+};
 
 // GLOBALS
 
@@ -1200,7 +1160,7 @@ class Dexed
     bool decodeVoice(uint8_t* encoded_data, uint8_t* data);
     bool encodeVoice(uint8_t* encoded_data);
     bool getVoiceData(uint8_t* data_copy);
-    void setVoiceDataElement(uint8_t address,uint8_t value);
+    void setVoiceDataElement(uint8_t address, uint8_t value);
     uint8_t getVoiceDataElement(uint8_t address);
     void loadInitVoice(void);
     void loadVoiceParameters(uint8_t* data);
@@ -1218,20 +1178,14 @@ class Dexed
     void panic(void);
     void notesOff(void);
     void resetControllers(void);
+    void setMasterTune(int8_t mastertune);
+    int8_t getMasterTune(void);
+    void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
     void setPBController(uint8_t pb_range, uint8_t pb_step);
     void setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode);
     void setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode);
     void setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode);
     void setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode);
-    void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
-    void setFilterCutoff(float cutoff);
-    float getFilterCutoff(void);
-    void setFilterResonance(float resonance);
-    float getFilterResonance(void);
-    void setGain(float gain);
-    float getGain(void);
-    void setMasterTune(int16_t mastertune);
-    int16_t getMasterTune(void);
     void setModWheel(uint8_t value);
     uint8_t getModWheel(void);
     void setBreathController(uint8_t value);
@@ -1262,7 +1216,12 @@ class Dexed
     uint8_t getAftertouchRange(void);
     void setAftertouchTarget(uint8_t target);
     uint8_t getAftertouchTarget(void);
-    ProcessorVoice voices[MAX_NOTES];
+    void setFilterCutoff(float cutoff);
+    float getFilterCutoff(void);
+    void setFilterResonance(float resonance);
+    float getFilterResonance(void);
+    void setGain(float gain);
+    float getGain(void);
 
     // Voice configuration methods
     void setOPRateAll(uint8_t rate);
@@ -1330,8 +1289,10 @@ class Dexed
     void setName(char* name);
     void getName(char* buffer);
 
+    ProcessorVoice voices[MAX_NOTES];
+
   protected:
-    uint8_t init_voice[156] = {
+    uint8_t init_voice[NUM_VOICE_PARAMETERS] = {
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
@@ -1343,8 +1304,8 @@ class Dexed
       35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
       03, 48,                                                                             // pitch_mod_sensitivity, transpose
       73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
-    }; // INIT
-    uint8_t data[156];
+    };
+    uint8_t data[NUM_VOICE_PARAMETERS];
     PluginFx fx;
     Controllers controllers;
     int lastKeyDown;
@@ -1364,7 +1325,6 @@ class Dexed
     FmCore* engineMsfa;
     void getSamples(uint16_t n_samples, int16_t* buffer);
 };
-
 
 //=====================================================
 /*****************************************************

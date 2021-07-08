@@ -327,8 +327,8 @@ Dexed::Dexed(int rate)
 
   loadInitVoice();
 
-  xrun=0;
-  render_time_max=0;
+  xrun = 0;
+  render_time_max = 0;
 }
 
 Dexed::~Dexed()
@@ -541,6 +541,8 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
 void Dexed::keyup(int16_t pitch) {
   uint8_t note;
 
+  pitch = constrain(pitch, 0, 127);
+
   pitch += data[144] - TRANSPOSE_FIX;
 
   for (note = 0; note < max_notes; note++) {
@@ -624,14 +626,8 @@ bool Dexed::getSustain(void)
 
 void Dexed::panic(void)
 {
-Serial.print("MAX_ACTIVE_NOTES=");
-Serial.println(MAX_ACTIVE_NOTES,DEC);
-Serial.println("A");
   for (uint8_t i = 0; i < MAX_ACTIVE_NOTES; i++)
   {
-Serial.print("B");
-Serial.print(i);
-Serial.println();
     if (voices[i].live == true) {
       voices[i].keydown = false;
       voices[i].live = false;
@@ -642,7 +638,6 @@ Serial.println();
       }
     }
   }
-Serial.print("C");
   setSustain(0);
 }
 
@@ -867,37 +862,36 @@ bool Dexed::getVoiceData(uint8_t* data_copy)
   return (true);
 }
 
-void Dexed::setVoiceDataElement(uint8_t address,uint8_t value)
+void Dexed::setVoiceDataElement(uint8_t address, uint8_t value)
 {
-	data[address]=value;
+  address = constrain(address, 0, NUM_VOICE_PARAMETERS);
+  data[address] = value;
 }
 
 uint8_t Dexed::getVoiceDataElement(uint8_t address)
 {
-	return(data[address]);
+  address = constrain(address, 0, NUM_VOICE_PARAMETERS);
+  return (data[address]);
 }
 
 void Dexed::loadVoiceParameters(uint8_t* new_data)
 {
+#ifdef DEBUG
   char dexed_voice_name[11];
+#endif
 
-Serial.println("0");
   panic();
-Serial.println("1");
   memcpy(&data, new_data, 155);
-Serial.println("2");
   doRefreshVoice();
-Serial.println("3");
   strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
-  dexed_voice_name[10] = '\0';
-Serial.println("4");
 
 #ifdef DEBUG
+  dexed_voice_name[10] = '\0';
+
   Serial.print(F("Voice ["));
   Serial.print(dexed_voice_name);
   Serial.println(F("] loaded."));
 #endif
-Serial.println("5");
 }
 
 void Dexed::loadInitVoice(void)
@@ -911,8 +905,8 @@ void Dexed::setPBController(uint8_t pb_range, uint8_t pb_step)
   Serial.println(F("Dexed::setPBController"));
 #endif
 
-  pb_range = constrain(pb_range, PB_RANGE_MIN, PB_RANGE_MAX);
-  pb_step = constrain(pb_step, PB_STEP_MIN, PB_STEP_MAX);
+  pb_range = constrain(pb_range, 0, 12);
+  pb_step = constrain(pb_step, 0, 12);
 
   controllers.values_[kControllerPitchRange] = pb_range;
   controllers.values_[kControllerPitchStep] = pb_step;
@@ -926,9 +920,9 @@ void Dexed::setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode
   Serial.println(F("Dexed::setMWController"));
 #endif
 
-  mw_range = constrain(mw_range, MW_RANGE_MIN, MW_RANGE_MAX);
-  mw_assign = constrain(mw_assign, MW_ASSIGN_MIN, MW_ASSIGN_MAX);
-  mw_mode = constrain(mw_mode, MW_MODE_MIN, MW_MODE_MAX);
+  mw_range = constrain(mw_range, 0, 99);
+  mw_assign = constrain(mw_assign, 0, 7);
+  mw_mode = constrain(mw_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.wheel.setRange(mw_range);
   controllers.wheel.setTarget(mw_assign);
@@ -943,9 +937,9 @@ void Dexed::setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode
   Serial.println(F("Dexed::setFCController"));
 #endif
 
-  fc_range = constrain(fc_range, FC_RANGE_MIN, FC_RANGE_MAX);
-  fc_assign = constrain(fc_assign, FC_ASSIGN_MIN, FC_ASSIGN_MAX);
-  fc_mode = constrain(fc_mode, FC_MODE_MIN, FC_MODE_MAX);
+  fc_range = constrain(fc_range, 0, 99);
+  fc_assign = constrain(fc_assign, 0, 7);
+  fc_mode = constrain(fc_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.foot.setRange(fc_range);
   controllers.foot.setTarget(fc_assign);
@@ -960,9 +954,9 @@ void Dexed::setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode
   Serial.println(F("Dexed::setBCController"));
 #endif
 
-  bc_range = constrain(bc_range, BC_RANGE_MIN, BC_RANGE_MAX);
-  bc_assign = constrain(bc_assign, BC_ASSIGN_MIN, BC_ASSIGN_MAX);
-  bc_mode = constrain(bc_mode, BC_MODE_MIN, BC_MODE_MAX);
+  bc_range = constrain(bc_range, 0, 99);
+  bc_assign = constrain(bc_assign, 0, 7);
+  bc_mode = constrain(bc_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.breath.setRange(bc_range);
   controllers.breath.setTarget(bc_assign);
@@ -977,9 +971,9 @@ void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode
   Serial.println(F("Dexed::setATController"));
 #endif
 
-  at_range = constrain(at_range, AT_RANGE_MIN, AT_RANGE_MAX);
-  at_assign = constrain(at_assign, AT_ASSIGN_MIN, AT_ASSIGN_MAX);
-  at_mode = constrain(at_mode, AT_MODE_MIN, AT_MODE_MAX);
+  at_range = constrain(at_range, 0, 99);
+  at_assign = constrain(at_assign, 0, 7);
+  at_mode = constrain(at_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.at.setRange(at_range);
   controllers.at.setTarget(at_assign);
@@ -990,6 +984,10 @@ void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode
 
 void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time)
 {
+  portamento_mode = constrain(portamento_mode, 0, 1);
+  portamento_glissando = constrain(portamento_glissando, 0, 1);
+  portamento_mode = constrain(portamento_mode, 0, 99);
+
   controllers.portamento_cc = portamento_time;
   controllers.portamento_enable_cc = portamento_mode > 63;
 
@@ -1005,212 +1003,244 @@ void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissa
 
 uint32_t Dexed::getXRun(void)
 {
-	return(xrun);
+  return (xrun);
 }
 
 uint16_t Dexed::getRenderTimeMax(void)
 {
-	return(render_time_max);
+  return (render_time_max);
 }
 
 void Dexed::resetRenderTimeMax(void)
 {
-	render_time_max=0;
+  render_time_max = 0;
 }
 
 void Dexed::ControllersRefresh(void)
 {
-	controllers.refresh();
+  controllers.refresh();
 }
 
-void Dexed::setMasterTune(int16_t mastertune)
+void Dexed::setMasterTune(int8_t mastertune)
 {
-	controllers.masterTune =mastertune;
+  mastertune = constrain(mastertune, -99, 99);
+
+  controllers.masterTune = (int(mastertune / 100.0 * 0x4000) << 11) * (1.0 / 12.0);
 }
 
-int16_t Dexed::getMasterTune(void)
+int8_t Dexed::getMasterTune(void)
 {
-	return(controllers.masterTune);
+  return (controllers.masterTune);
 }
 
 void Dexed::setModWheel(uint8_t value)
 {
-	controllers.modwheel_cc = value;
+  value = constrain(value, 0, 127);
+
+  controllers.modwheel_cc = value;
 }
 
 uint8_t Dexed::getModWheel(void)
 {
-	return(controllers.modwheel_cc);
+  return (controllers.modwheel_cc);
 }
 
 void Dexed::setBreathController(uint8_t value)
 {
-	controllers.breath_cc = value;
+  value = constrain(value, 0, 127);
+
+  controllers.breath_cc = value;
 }
 
 uint8_t Dexed::getBreathController(void)
 {
-	return(controllers.breath_cc);
+  return (controllers.breath_cc);
 }
 
 void Dexed::setFootController(uint8_t value)
 {
-	controllers.foot_cc = value;
+  value = constrain(value, 0, 127);
+
+  controllers.foot_cc = value;
 }
 
 uint8_t Dexed::getFootController(void)
 {
-	return(controllers.foot_cc);
+  return (controllers.foot_cc);
 }
 
 void Dexed::setAftertouch(uint8_t value)
 {
-	controllers.aftertouch_cc = value;
+  value = constrain(value, 0, 127);
+
+  controllers.aftertouch_cc = value;
 }
 
 uint8_t Dexed::getAftertouch(void)
 {
-	return(controllers.aftertouch_cc);
+  return (controllers.aftertouch_cc);
 }
 
 void Dexed::setPitchbend(int16_t value)
 {
-	controllers.values_[kControllerPitch] = value + 0x2000; // -8192 to +8191 --> 0 to 16383
+  value = constrain(value, -8192, 8191);
+
+  controllers.values_[kControllerPitch] = value + 0x2000; // -8192 to +8191 --> 0 to 16383
 }
 
 int16_t Dexed::getPitchbend(void)
 {
-	return(controllers.values_[kControllerPitch]-0x2000);
+  return (controllers.values_[kControllerPitch] - 0x2000);
 }
 
 void Dexed::setPitchbendRange(uint8_t range)
 {
-	controllers.values_[kControllerPitchRange] = range;
+  range = constrain(range, 0, 12);
+
+  controllers.values_[kControllerPitchRange] = range;
 }
 
 uint8_t Dexed::getPitchbendRange(void)
 {
-	return(controllers.values_[kControllerPitchRange]);
+  return (controllers.values_[kControllerPitchRange]);
 }
 
 void Dexed::setPitchbendStep(uint8_t step)
 {
-	controllers.values_[kControllerPitchStep] = step;
+  step = constrain(step, 0, 12);
+
+  controllers.values_[kControllerPitchStep] = step;
 }
 
 uint8_t Dexed::getPitchbendStep(void)
 {
-	return(controllers.values_[kControllerPitchStep]);
+  return (controllers.values_[kControllerPitchStep]);
 }
 
 void Dexed::setModWheelRange(uint8_t range)
 {
-	controllers.wheel.setRange(range);
+  range = constrain(range, 0, 12);
+
+  controllers.wheel.setRange(range);
 }
 
 uint8_t Dexed::getModWheelRange(void)
 {
-	return(controllers.wheel.getRange());
+  return (controllers.wheel.getRange());
 }
 
 void Dexed::setModWheelTarget(uint8_t target)
 {
-	controllers.wheel.setTarget(target);
+  target = constrain(target, 0, 7);
+
+  controllers.wheel.setTarget(target);
 }
 
 uint8_t Dexed::getModWheelTarget(void)
 {
-	return(controllers.wheel.getTarget());
+  return (controllers.wheel.getTarget());
 }
 
 void Dexed::setFootControllerRange(uint8_t range)
 {
-	controllers.foot.setRange(range);
+  range = constrain(range, 0, 12);
+
+  controllers.foot.setRange(range);
 }
 
 uint8_t Dexed::getFootControllerRange(void)
 {
-	return(controllers.foot.getRange());
+  return (controllers.foot.getRange());
 }
 
 void Dexed::setFootControllerTarget(uint8_t target)
 {
-	controllers.foot.setTarget(target);
+  target = constrain(target, 0, 7);
+
+  controllers.foot.setTarget(target);
 }
 
 uint8_t Dexed::getFootControllerTarget(void)
 {
-	return(controllers.foot.getTarget());
+  return (controllers.foot.getTarget());
 }
 
 void Dexed::setBreathControllerRange(uint8_t range)
 {
-	controllers.breath.setRange(range);
+  range = constrain(range, 0, 12);
+
+  controllers.breath.setRange(range);
 }
 
 uint8_t Dexed::getBreathControllerRange(void)
 {
-	return(controllers.breath.getRange());
+  return (controllers.breath.getRange());
 }
 
 void Dexed::setBreathControllerTarget(uint8_t target)
 {
-	controllers.breath.setTarget(target);
+  target = constrain(target, 0, 7);
+
+  controllers.breath.setTarget(target);
 }
 
 uint8_t Dexed::getBreathControllerTarget(void)
 {
-	return(controllers.breath.getTarget());
+  return (controllers.breath.getTarget());
 }
 
 void Dexed::setAftertouchRange(uint8_t range)
 {
-	controllers.at.setRange(range);
+  range = constrain(range, 0, 12);
+
+  controllers.at.setRange(range);
 }
 
 uint8_t Dexed::getAftertouchRange(void)
 {
-	return(controllers.at.getRange());
+  return (controllers.at.getRange());
 }
 
 void Dexed::setAftertouchTarget(uint8_t target)
 {
-	controllers.at.setTarget(target);
+  target = constrain(target, 0, 7);
+
+  controllers.at.setTarget(target);
 }
 
 uint8_t Dexed::getAftertouchTarget(void)
 {
-	return(controllers.at.getTarget());
+  return (controllers.at.getTarget());
 }
 
 void Dexed::setFilterCutoff(float cutoff)
 {
-	fx.Cutoff=cutoff;
+  fx.Cutoff = cutoff;
 }
 
 float Dexed::getFilterCutoff(void)
 {
-	return(fx.Cutoff);
+  return (fx.Cutoff);
 }
 
 void Dexed::setFilterResonance(float resonance)
 {
-	fx.Reso=resonance;
+  fx.Reso = resonance;
 }
 
 float Dexed::getFilterResonance(void)
 {
-	return(fx.Reso);
+  return (fx.Reso);
 }
 
 void Dexed::setGain(float gain)
 {
-	fx.Gain=gain;
+  fx.Gain = gain;
 }
 
 float Dexed::getGain(void)
 {
-	return(fx.Gain);
+  return (fx.Gain);
 }
 
 void Dexed::setOPRateAll(uint8_t rate)
@@ -1689,43 +1719,43 @@ void Dexed::setName(char* name)
 void Dexed::getName(char* buffer)
 {
   strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], buffer, 10);
-  buffer[10]='\0';
+  buffer[10] = '\0';
 }
 
 void AudioSynthDexed::update(void)
-    {
-      if (in_update == true)
-      {
-        xrun++;
-        return;
-      }
-      else
-        in_update = true;
+{
+  if (in_update == true)
+  {
+    xrun++;
+    return;
+  }
+  else
+    in_update = true;
 
-      elapsedMicros render_time;
-      audio_block_t *lblock;
+  elapsedMicros render_time;
+  audio_block_t *lblock;
 
-      lblock = allocate();
+  lblock = allocate();
 
-      if (!lblock)
-      {
-        in_update = false;
-        return;
-      }
+  if (!lblock)
+  {
+    in_update = false;
+    return;
+  }
 
-      getSamples(AUDIO_BLOCK_SAMPLES, lblock->data);
+  getSamples(AUDIO_BLOCK_SAMPLES, lblock->data);
 
-      if (render_time > audio_block_time_us) // everything greater audio_block_time_us (2.9ms for buffer size of 128) is a buffer underrun!
-        xrun++;
+  if (render_time > audio_block_time_us) // everything greater audio_block_time_us (2.9ms for buffer size of 128) is a buffer underrun!
+    xrun++;
 
-      if (render_time > render_time_max)
-        render_time_max = render_time;
+  if (render_time > render_time_max)
+    render_time_max = render_time;
 
-      transmit(lblock, 0);
-      release(lblock);
+  transmit(lblock, 0);
+  release(lblock);
 
-      in_update = false;
-    };
+  in_update = false;
+};
 
 /*
   // https://www.musicdsp.org/en/latest/Effects/169-compressor.html#
