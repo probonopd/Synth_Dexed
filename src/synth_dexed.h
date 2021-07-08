@@ -672,12 +672,22 @@ class FmMod {
       range = r < 0 && r > 99 ? 0 : r;
     }
 
+    uint8_t getRange(void)
+    {
+      return(range);
+    }
+
     void setTarget(uint8_t assign)
     {
       assign = assign < 0 && assign > 7 ? 0 : assign;
       pitch = assign & 1; // PITCH
       amp = assign & 2; // AMP
       eg = assign & 4; // EG
+    }
+
+    uint8_t getTarget(void)
+    {
+	return(pitch&amp&eg);
     }
 
     void setMode(uint8_t m)
@@ -1190,11 +1200,15 @@ class Dexed
     bool decodeVoice(uint8_t* encoded_data, uint8_t* data);
     bool encodeVoice(uint8_t* encoded_data);
     bool getVoiceData(uint8_t* data_copy);
+    void setVoiceDataElement(uint8_t address,uint8_t value);
+    uint8_t getVoiceDataElement(uint8_t address);
     void loadInitVoice(void);
-    bool loadVoiceParameters(uint8_t* data);
-    bool loadGlobalParameters(uint8_t* data);
-    bool initGlobalParameters(void);
+    void loadVoiceParameters(uint8_t* data);
     uint8_t getNumNotesPlaying(void);
+    uint32_t getXRun(void);
+    uint16_t getRenderTimeMax(void);
+    void resetRenderTimeMax(void);
+    void ControllersRefresh(void);
 
     // Sound methods
     void keyup(int16_t pitch);
@@ -1210,54 +1224,45 @@ class Dexed
     void setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode);
     void setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode);
     void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
-
-    uint8_t init_voice[156] = {
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 99, 00, 01, 00, 00, // OP4
-      99, 99, 99, 99, 50, 50, 50, 50,                                                     // 4 * pitch EG rates, 4 * pitch EG level
-      01, 00, 01,                                                                         // algorithm, feedback, osc sync
-      35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
-      03, 48,                                                                             // pitch_mod_sensitivity, transpose
-      73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
-    }; // INIT
-    uint8_t data[156];
-    uint16_t render_time_max = 0;
-    Controllers controllers;
-    PluginFx fx;
+    void setFilterCutoff(float cutoff);
+    float getFilterCutoff(void);
+    void setFilterResonance(float resonance);
+    float getFilterResonance(void);
+    void setGain(float gain);
+    float getGain(void);
+    void setMasterTune(int16_t mastertune);
+    int16_t getMasterTune(void);
+    void setModWheel(uint8_t value);
+    uint8_t getModWheel(void);
+    void setBreathController(uint8_t value);
+    uint8_t getBreathController(void);
+    void setFootController(uint8_t value);
+    uint8_t getFootController(void);
+    void setAftertouch(uint8_t value);
+    uint8_t getAftertouch(void);
+    void setPitchbend(int16_t value);
+    int16_t getPitchbend(void);
+    void setPitchbendRange(uint8_t range);
+    uint8_t getPitchbendRange(void);
+    void setPitchbendStep(uint8_t step);
+    uint8_t getPitchbendStep(void);
+    void setModWheelRange(uint8_t range);
+    uint8_t getModWheelRange(void);
+    void setModWheelTarget(uint8_t target);
+    uint8_t getModWheelTarget(void);
+    void setFootControllerRange(uint8_t range);
+    uint8_t getFootControllerRange(void);
+    void setFootControllerTarget(uint8_t target);
+    uint8_t getFootControllerTarget(void);
+    void setBreathControllerRange(uint8_t range);
+    uint8_t getBreathControllerRange(void);
+    void setBreathControllerTarget(uint8_t target);
+    uint8_t getBreathControllerTarget(void);
+    void setAftertouchRange(uint8_t range);
+    uint8_t getAftertouchRange(void);
+    void setAftertouchTarget(uint8_t target);
+    uint8_t getAftertouchTarget(void);
     ProcessorVoice voices[MAX_NOTES];
-    uint32_t xrun = 0;
-
-  protected:
-    int lastKeyDown;
-    static const uint8_t MAX_ACTIVE_NOTES = MAX_NOTES;
-    uint8_t max_notes = MAX_ACTIVE_NOTES;
-    int16_t currentNote;
-    bool sustain;
-    float vuSignal;
-    bool monoMode;
-    bool refreshMode;
-    bool refreshVoice;
-    uint8_t engineType;
-    VoiceStatus voiceStatus;
-    Lfo lfo;
-    FmCore* engineMsfa;
-    void getSamples(uint16_t n_samples, int16_t* buffer);
-};
-
-
-//=====================================================
-/*****************************************************
-   CODE: orig_code/synth_microdexed.h
- *****************************************************/
-class AudioSynthDexed : public AudioStream, public Dexed
-{
-  public:
-
-    AudioSynthDexed(uint16_t sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
 
     // Voice configuration methods
     void setOPRateAll(uint8_t rate);
@@ -1324,6 +1329,52 @@ class AudioSynthDexed : public AudioStream, public Dexed
     uint8_t getTranspose(void);
     void setName(char* name);
     void getName(char* buffer);
+
+  protected:
+    uint8_t init_voice[156] = {
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 99, 00, 01, 00, 00, // OP4
+      99, 99, 99, 99, 50, 50, 50, 50,                                                     // 4 * pitch EG rates, 4 * pitch EG level
+      01, 00, 01,                                                                         // algorithm, feedback, osc sync
+      35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
+      03, 48,                                                                             // pitch_mod_sensitivity, transpose
+      73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
+    }; // INIT
+    uint8_t data[156];
+    PluginFx fx;
+    Controllers controllers;
+    int lastKeyDown;
+    uint32_t xrun;
+    uint16_t render_time_max;
+    static const uint8_t MAX_ACTIVE_NOTES = MAX_NOTES;
+    uint8_t max_notes = MAX_ACTIVE_NOTES;
+    int16_t currentNote;
+    bool sustain;
+    float vuSignal;
+    bool monoMode;
+    bool refreshMode;
+    bool refreshVoice;
+    uint8_t engineType;
+    VoiceStatus voiceStatus;
+    Lfo lfo;
+    FmCore* engineMsfa;
+    void getSamples(uint16_t n_samples, int16_t* buffer);
+};
+
+
+//=====================================================
+/*****************************************************
+   CODE: orig_code/synth_microdexed.h
+ *****************************************************/
+class AudioSynthDexed : public AudioStream, public Dexed
+{
+  public:
+
+    AudioSynthDexed(uint16_t sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
 
   protected:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
