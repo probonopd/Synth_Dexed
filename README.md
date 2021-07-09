@@ -4,7 +4,7 @@ Synth_Dexed is a port of the Dexed sound engine
 (https://github.com/asb2m10/dexed) as library for the Teensy-3.5/3.6/4.x with
 an audio shield. Dexed ist heavily based on
 https://github.com/google/music-synthesizer-for-android .
-Synth_Dexed ist SYSEX compatible with a famous 6-OP FM synth.
+Synth_Dexed ist SYSEX compatible with a famous 6-OP FM synth and is used in MicroDexed (https://codeberg.org/dcoredump/MicroDexed).
 
 ## License
 MicroDexed is licensed on the GPL v3. The msfa component (acronym for music synthesizer for android, see https://github.com/google/music-synthesizer-for-android) stays on the Apache 2.0 license to able to collaborate between projects.
@@ -24,7 +24,7 @@ See example sketch.
 
 ## API
 
-AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate);
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate);
 
     // Global methods
     void activate(void);
