@@ -284,7 +284,7 @@ float PluginFx::getGain(void)
 
 //extern config_t configuration;
 
-Dexed::Dexed(int rate)
+Dexed::Dexed(uint8_t maxnotes, int rate)
 {
   uint8_t i;
 
@@ -301,7 +301,10 @@ Dexed::Dexed(int rate)
 
   engineMsfa = new FmCore;
 
-  for (i = 0; i < MAX_ACTIVE_NOTES; i++)
+  max_notes=maxnotes;
+  voices=new ProcessorVoice[max_notes];
+
+  for (i = 0; i < max_notes; i++)
   {
     voices[i].dx7_note = new Dx7Note;
     voices[i].keydown = false;
@@ -310,7 +313,6 @@ Dexed::Dexed(int rate)
     voices[i].key_pressed_timer = 0;
   }
 
-  max_notes = MAX_NOTES;
   currentNote = 0;
   resetControllers();
   controllers.masterTune = 0;
@@ -335,8 +337,11 @@ Dexed::~Dexed()
 {
   currentNote = -1;
 
-  for (uint8_t note = 0; note < MAX_ACTIVE_NOTES; note++)
+  for (uint8_t note = 0; note < max_notes; note++)
     delete voices[note].dx7_note;
+
+  for (uint8_t note = 0; note < max_notes; note++)
+    delete &voices[note];
 
   delete(engineMsfa);
 }
@@ -626,7 +631,7 @@ bool Dexed::getSustain(void)
 
 void Dexed::panic(void)
 {
-  for (uint8_t i = 0; i < MAX_ACTIVE_NOTES; i++)
+  for (uint8_t i = 0; i < max_notes; i++)
   {
     if (voices[i].live == true) {
       voices[i].keydown = false;
@@ -658,7 +663,7 @@ void Dexed::resetControllers(void)
 }
 
 void Dexed::notesOff(void) {
-  for (uint8_t i = 0; i < MAX_ACTIVE_NOTES; i++) {
+  for (uint8_t i = 0; i < max_notes; i++) {
     if (voices[i].live == true) {
       voices[i].keydown = false;
       voices[i].live = false;
@@ -667,7 +672,7 @@ void Dexed::notesOff(void) {
 }
 
 void Dexed::setMaxNotes(uint8_t n) {
-  if (n <= MAX_ACTIVE_NOTES)
+  if (n <= max_notes)
   {
     notesOff();
     max_notes = n;

@@ -1144,7 +1144,7 @@ enum ON_OFF {
 class Dexed
 {
   public:
-    Dexed(int rate);
+    Dexed(uint8_t maxnotes, int rate);
     ~Dexed();
 
     // Global methods
@@ -1289,7 +1289,7 @@ class Dexed
     void setName(char* name);
     void getName(char* buffer);
 
-    ProcessorVoice voices[MAX_NOTES];
+    ProcessorVoice* voices;
 
   protected:
     uint8_t init_voice[NUM_VOICE_PARAMETERS] = {
@@ -1306,13 +1306,12 @@ class Dexed
       73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
     };
     uint8_t data[NUM_VOICE_PARAMETERS];
+    uint8_t max_notes;
     PluginFx fx;
     Controllers controllers;
     int lastKeyDown;
     uint32_t xrun;
     uint16_t render_time_max;
-    static const uint8_t MAX_ACTIVE_NOTES = MAX_NOTES;
-    uint8_t max_notes = MAX_ACTIVE_NOTES;
     int16_t currentNote;
     bool sustain;
     float vuSignal;
@@ -1334,7 +1333,7 @@ class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:
 
-    AudioSynthDexed(uint16_t sample_rate) : AudioStream(0, NULL), Dexed(sample_rate) { };
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate) { };
 
   protected:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
