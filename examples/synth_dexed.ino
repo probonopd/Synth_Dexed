@@ -15,7 +15,7 @@ uint8_t fmpiano_sysex[156] = {
   70, 77, 45, 80, 73, 65, 78, 79, 00, 00                                              // 10 * char for name ("DEFAULT   ")
 }; // FM-Piano
 
-AudioSynthDexed          dexed(SAMPLE_RATE);
+AudioSynthDexed          dexed(4,SAMPLE_RATE); // 4 voices max
 AudioOutputI2S           i2s1;
 AudioControlSGTL5000     sgtl5000_1;
 AudioConnection          patchCord1(dexed, 0, i2s1, 0);
