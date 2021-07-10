@@ -48,9 +48,6 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
-extern int perform_attack_mod;
-extern int perform_release_mod;
-
 const float dc = 1e-18;
 
 inline static float tptpc(float& state, float inp, float cutoff) {
@@ -594,7 +591,7 @@ void Dexed::doRefreshVoice(void)
   refreshVoice = true;
 }
 
-void Dexed::setOPs(uint8_t ops)
+void Dexed::setOPAll(uint8_t ops)
 {
   controllers.opSwitch = ops;
 }

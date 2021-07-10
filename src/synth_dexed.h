@@ -1156,7 +1156,7 @@ class Dexed
     void setMaxNotes(uint8_t n);
     uint8_t getMaxNotes(void);
     void doRefreshVoice(void);
-    void setOPs(uint8_t ops);
+    void setOPAll(uint8_t ops);
     bool decodeVoice(uint8_t* encoded_data, uint8_t* data);
     bool encodeVoice(uint8_t* encoded_data);
     bool getVoiceData(uint8_t* data_copy);
