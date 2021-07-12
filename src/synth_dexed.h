@@ -30,7 +30,7 @@
 #include "teensy_board_detection.h"
 
 #define SYNTH_DEXED_VERSION "1.0.0"
-#define DEBUG 1
+//#define DEBUG 1
 #define SAMPLE_RATE 44100
 
 #define MIDI_CONTROLLER_MODE_MAX 2

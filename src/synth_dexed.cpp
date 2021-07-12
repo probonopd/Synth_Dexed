@@ -900,9 +900,8 @@ void Dexed::loadVoiceParameters(uint8_t* new_data)
   panic();
   memcpy(&data, new_data, 155);
   doRefreshVoice();
-  strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
-
 #ifdef DEBUG
+  strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
   dexed_voice_name[10] = '\0';
 
   Serial.print(F("Voice ["));
