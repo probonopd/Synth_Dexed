@@ -622,7 +622,7 @@ void Dexed::setOPAll(uint8_t ops)
   controllers.opSwitch = ops;
 }
 
-bool Dexed::isMonoMode(void) {
+bool Dexed::getMonoMode(void) {
   return monoMode;
 }
 
@@ -630,7 +630,6 @@ void Dexed::setMonoMode(bool mode) {
   if (monoMode == mode)
     return;
 
-  //panic();
   notesOff();
   monoMode = mode;
 }

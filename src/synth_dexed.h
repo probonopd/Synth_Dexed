@@ -1117,7 +1117,7 @@ class Dexed
     // Global methods
     void activate(void);
     void deactivate(void);
-    bool isMonoMode(void);
+    bool getMonoMode(void);
     void setMonoMode(bool mode);
     void setRefreshMode(bool mode);
     void setMaxNotes(uint8_t n);
