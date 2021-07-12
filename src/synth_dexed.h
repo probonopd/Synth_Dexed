@@ -37,40 +37,7 @@
 #define TRANSPOSE_FIX 24
 #define VOICE_SILENCE_LEVEL 1100
 
-// Teensy-4.x settings
-#ifdef TEENSY4
-#define MAX_NOTES 32
-#endif
-
-// Teensy-3.6 settings
-#if defined(TEENSY3_6)
-# if defined(USE_FX)
-#   if F_CPU == 256000000
-#    define MAX_NOTES 20
-#   elif F_CPU == 240000000
-#    define MAX_NOTES 18
-#   elif F_CPU == 216000000
-#    define MAX_NOTES 16
-#   else
-#    warning >>> You should consider to use 216MHz overclocking to get polyphony of 16 instead 12 voices <<<
-#    define MAX_NOTES 12
-#   endif
-# else
-#   if F_CPU == 256000000
-#    define MAX_NOTES 20
-#   elif F_CPU == 216000000
-#    define MAX_NOTES 20
-#   else
-#    define MAX_NOTES 16
-#   endif
-# endif
-#endif
-
-#ifdef TEENSY3_5
-#undef MIDI_DEVICE_USB_HOST
-#define MAX_NOTES 11
-#undef USE_FX
-#endif
+#define _MAX_NOTES 32
 
 #define NUM_VOICE_PARAMETERS 156
 

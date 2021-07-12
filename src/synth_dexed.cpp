@@ -283,8 +283,6 @@ float PluginFx::getGain(void)
 
 Dexed::Dexed(uint8_t maxnotes, int rate)
 {
-  uint8_t i;
-
   Exp2::init();
   Tanh::init();
   Sin::init();
@@ -297,19 +295,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   fx.init(rate);
 
   engineMsfa = new FmCore;
-
   max_notes=maxnotes;
-  voices=new ProcessorVoice[max_notes];
-
-  for (i = 0; i < max_notes; i++)
-  {
-    voices[i].dx7_note = new Dx7Note;
-    voices[i].keydown = false;
-    voices[i].sustained = false;
-    voices[i].live = false;
-    voices[i].key_pressed_timer = 0;
-  }
-
   currentNote = 0;
   resetControllers();
   controllers.masterTune = 0;
@@ -317,13 +303,12 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   lastKeyDown = -1;
   vuSignal = 0.0;
   controllers.core = engineMsfa;
-
   lfo.reset(data + 137);
-
-  setMonoMode(false);
-
   sustain = false;
+  voices=NULL;
 
+  setMaxNotes(max_notes);
+  setMonoMode(false);
   loadInitVoice();
 
   xrun = 0;
@@ -341,6 +326,47 @@ Dexed::~Dexed()
     delete &voices[note];
 
   delete(engineMsfa);
+}
+
+void Dexed::setMaxNotes(uint8_t new_max_notes)
+{
+  uint8_t i=0;
+  
+  max_notes=constrain(max_notes,0,_MAX_NOTES);
+
+#ifdef DEBUG
+  Serial.print("Allocating memory for ");
+  Serial.print(max_notes,DEC);
+  Serial.println(" notes.");
+#endif
+
+  if(voices)
+  {
+    panic();
+    for (i = 0; i < max_notes; i++)
+    {
+      if(voices[i].dx7_note)
+    	delete voices[i].dx7_note;
+    }
+    delete voices;
+  }
+
+  max_notes=new_max_notes;
+
+  if(max_notes>0)
+  {
+    voices=new ProcessorVoice[max_notes];
+    for (i = 0; i < max_notes; i++)
+    {
+      voices[i].dx7_note = new Dx7Note;
+      voices[i].keydown = false;
+      voices[i].sustained = false;
+      voices[i].live = false;
+      voices[i].key_pressed_timer = 0;
+    }
+  }
+  else
+     voices=NULL;
 }
 
 void Dexed::activate(void)
@@ -665,16 +691,6 @@ void Dexed::notesOff(void) {
       voices[i].keydown = false;
       voices[i].live = false;
     }
-  }
-}
-
-void Dexed::setMaxNotes(uint8_t n) {
-  if (n <= max_notes)
-  {
-    notesOff();
-    max_notes = n;
-    //panic();
-    controllers.refresh();
   }
 }
 
