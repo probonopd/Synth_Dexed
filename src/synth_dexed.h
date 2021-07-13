@@ -59,6 +59,8 @@
 #define PORTAMENTO_GLISSANDO_DEFAULT 0
 #define PORTAMENTO_TIME_DEFAULT 0
 
+//#define USE_SIMPLE_COMPRESSOR 1
+
 /*****************************************************
    CODE: orig_code/synth.h
  *****************************************************/
