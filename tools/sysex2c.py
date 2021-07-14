@@ -59,11 +59,19 @@ def unpack_packed_patch(p):
     return o
 
 def print_header_data(decoded_voice):
-	for row in range(0,19):
-		print("\t\t" + ','.join(map(str,decoded_voice[(row*8):((row+1)*8)])))
-	print("\t\t" + ','.join(map(str,decoded_voice[152:156])))
+	print("\t\t",end="")
+	for y in range(0,156):
+		if((y+1)%8==0):
+			print("%02d," % decoded_voice[y],end="")
+			print("\n\t\t",end="")
+		else:
+			if(y!=155):
+				print("%02d," % decoded_voice[y],end="")
+			else:
+				print("%02d" % decoded_voice[y])
 
-with open("/tmp/sonus1.syx", "rb") as f:
+#with open("/tmp/sonus1.syx", "rb") as f:
+with open("/home/wirtz/Arduino-Teensy/MicroDexed/addon/SD/1/synth_01.syx", "rb") as f:
 	header = f.read(6)
 	if(header[0]!=240):
 		print("* Start of sysex not found.")
@@ -87,15 +95,15 @@ with open("/tmp/sonus1.syx", "rb") as f:
 		exit(204)
 	f.seek(6)
 	print("uint8_t bank[32][156] = {")
-	for v in range(1,32):
+	for v in range(1,33):
 		data=f.read(128)
 		print("\t{")
 		print_header_data(unpack_packed_patch(data))
-		if(v!=31):
+		if(v!=32):
 			print("\t},", end="")
 		else:
 			print("\t}", end="")
 
-		print(" // %s" % data[118:128].decode('ascii'))
+		print(" // %d: %s" % (v, data[118:128].decode('ascii')))
 	print("};")
 
