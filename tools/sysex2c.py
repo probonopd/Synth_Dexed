@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import sys
+
 # From: https://github.com/bwhitman/learnfm/blob/master/dx7db.py
 def unpack_packed_patch(p):
     # Input is a 128 byte thing from compact.bin
@@ -59,51 +61,59 @@ def unpack_packed_patch(p):
     return o
 
 def print_header_data(decoded_voice):
-	print("\t\t",end="")
+	print("\t\t\t",end="")
 	for y in range(0,156):
 		if((y+1)%8==0):
 			print("%02d," % decoded_voice[y],end="")
-			print("\n\t\t",end="")
+			print("\n\t\t\t",end="")
 		else:
 			if(y!=155):
 				print("%02d," % decoded_voice[y],end="")
 			else:
 				print("%02d" % decoded_voice[y])
 
-#with open("/tmp/sonus1.syx", "rb") as f:
-with open("/home/wirtz/Arduino-Teensy/MicroDexed/addon/SD/1/synth_01.syx", "rb") as f:
-	header = f.read(6)
-	if(header[0]!=240):
-		print("* Start of sysex not found.")
-		exit(200)
-	if(header[1]!=67):
-                print("* Manufactorer-ID not Yamaha.")
-                exit(201)
-	if(header[3]!=9):
-                print("* Not a 32 voice sysex file.")
-                exit(202)
-	byte_count = header[4]*128+header[5]
-	if(byte_count!=4096):
-                print("* Byte count mismatch.")
-                exit(203)
-	patch_data=f.read(4096)
-	check = ~sum(patch_data) + 1 & 0x7F
-	f.seek(4102) # Bulk checksum
-	checksum=int.from_bytes(f.read(1),"little")
-	if(check!=checksum):
-		print("* Checksum mismatch!")
-		exit(204)
-	f.seek(6)
-	print("uint8_t bank[32][156] = {")
-	for v in range(1,33):
-		data=f.read(128)
-		print("\t{")
-		print_header_data(unpack_packed_patch(data))
-		if(v!=32):
-			print("\t},", end="")
+#---------------------------------------------------------------------------
+
+print("uint8_t bank[%d][32][156] =\n{" % int(len(sys.argv)-1))
+for sysex in sys.argv[1:]:
+	print("\t{")
+	with open(sysex, "rb") as f:
+		header = f.read(6)
+		if(header[0]!=240):
+			print("* Start of sysex not found.")
+			exit(200)
+		if(header[1]!=67):
+                	print("* Manufactorer-ID not Yamaha.")
+                	exit(201)
+		if(header[3]!=9):
+                	print("* Not a 32 voice sysex file.")
+                	exit(202)
+		byte_count = header[4]*128+header[5]
+		if(byte_count!=4096):
+                	print("* Byte count mismatch.")
+                	exit(203)
+		patch_data=f.read(4096)
+		check = ~sum(patch_data) + 1 & 0x7F
+		f.seek(4102) # Bulk checksum
+		checksum=int.from_bytes(f.read(1),"little")
+		if(check!=checksum):
+			print("* Checksum mismatch!")
+			exit(204)
+		f.seek(6)
+
+		for v in range(1,33):
+			data=f.read(128)
+			print("\t\t{")
+			print_header_data(unpack_packed_patch(data))
+			if(v!=32):
+				print("\t\t},", end="")
+			else:
+				print("\t\t}", end="")
+
+			print(" // %d: %s" % (v, data[118:128].decode('ascii')))
+		if(sys.argv[len(sys.argv)-1]==sysex):
+			print("\t}",end="")
 		else:
-			print("\t}", end="")
-
-		print(" // %d: %s" % (v, data[118:128].decode('ascii')))
-	print("};")
-
+			print("\t},",end="")
+		print(" // %s" % sysex)
+print("};")
