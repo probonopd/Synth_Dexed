@@ -64,40 +64,40 @@ def print_header_data(decoded_voice):
 	print("\t\t\t",end="")
 	for y in range(0,156):
 		if((y+1)%8==0):
-			print("%02d," % decoded_voice[y],end="")
+			print("%2d, " % decoded_voice[y],end="")
 			print("\n\t\t\t",end="")
 		else:
 			if(y!=155):
-				print("%02d," % decoded_voice[y],end="")
+				print("%2d, " % decoded_voice[y],end="")
 			else:
-				print("%02d" % decoded_voice[y])
+				print("%2d" % decoded_voice[y])
 
 #---------------------------------------------------------------------------
 
-print("uint8_t bank[%d][32][156] =\n{" % int(len(sys.argv)-1))
+print("uint8_t bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)-1))
 for sysex in sys.argv[1:]:
 	print("\t{")
 	with open(sysex, "rb") as f:
 		header = f.read(6)
 		if(header[0]!=240):
-			print("* Start of sysex not found.")
+			print("* %s: Start of sysex not found." % sysex)
 			exit(200)
 		if(header[1]!=67):
-                	print("* Manufactorer-ID not Yamaha.")
+                	print("* %s: Manufactorer-ID not Yamaha." % sysex)
                 	exit(201)
 		if(header[3]!=9):
-                	print("* Not a 32 voice sysex file.")
+                	print("* %s: Not a 32 voice sysex file." % sysex)
                 	exit(202)
 		byte_count = header[4]*128+header[5]
 		if(byte_count!=4096):
-                	print("* Byte count mismatch.")
+                	print("* %s: Byte count mismatch." % sysex)
                 	exit(203)
 		patch_data=f.read(4096)
 		check = ~sum(patch_data) + 1 & 0x7F
 		f.seek(4102) # Bulk checksum
 		checksum=int.from_bytes(f.read(1),"little")
 		if(check!=checksum):
-			print("* Checksum mismatch!")
+			print("* %s: Checksum mismatch!" % sysex)
 			exit(204)
 		f.seek(6)
 
