@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import sys
+import os.path
 
 # From: https://github.com/bwhitman/learnfm/blob/master/dx7db.py
 def unpack_packed_patch(p):
@@ -60,23 +61,43 @@ def unpack_packed_patch(p):
         if(o[i] < 0): o[i] = 0
     return o
 
-def print_header_data(decoded_voice):
+def print_header_data(voice_data):
 	print("\t\t\t",end="")
-	for y in range(0,156):
-		if((y+1)%8==0):
-			print("%2d, " % decoded_voice[y],end="")
-			print("\n\t\t\t",end="")
+	for y in range(0,len(voice_data)):
+		if(y!=len(voice_data)-1):
+			print("%3d, " % voice_data[y],end="")
 		else:
-			if(y!=155):
-				print("%2d, " % decoded_voice[y],end="")
-			else:
-				print("%2d" % decoded_voice[y])
+			print("%3d\n" % voice_data[y],end="")
+		if((y+1)%8==0 and y!=len(voice_data)-1):
+			print("\n\t\t\t",end="")
+
+def help_message():
+	print(progname+" [--decode] <sysex1> [<sysex2> ... <sysexn>]")
 
 #---------------------------------------------------------------------------
 
-print("uint8_t bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)-1))
-for sysex in sys.argv[1:]:
-	print("\t{")
+progname=sys.argv.pop(0)
+if(len(sys.argv)==0):
+	help_message()
+	exit(1)
+if(sys.argv[0]=="-h" or sys.argv[0]=="--help"):
+	help_message()
+	exit(1)
+if(sys.argv[0]=="--decode"):
+	decode=True
+	sys.argv.pop(0)
+else:
+	decode=False
+
+print("uint8_t bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)))
+for sysex in sys.argv:
+	if(not os.path.isfile(sysex)):
+		print("* File "+sysex+" does not exists.")
+		exit(10)
+	if(not os.path.access(sysex,R_OK)):
+		print("* File "+sysex+" does not readable.")
+		exit(11)
+	print("\t{\t// %s" % os.path.basename(sysex))
 	with open(sysex, "rb") as f:
 		header = f.read(6)
 		if(header[0]!=240):
@@ -103,17 +124,17 @@ for sysex in sys.argv[1:]:
 
 		for v in range(1,33):
 			data=f.read(128)
-			print("\t\t{")
-			print_header_data(unpack_packed_patch(data))
-			if(v!=32):
-				print("\t\t},", end="")
+			print("\t\t{\t// %d: %s" % (v, data[118:128].decode('ascii')))
+			if(decode==True):
+				print_header_data(unpack_packed_patch(data))
 			else:
-				print("\t\t}", end="")
-
-			print(" // %d: %s" % (v, data[118:128].decode('ascii')))
+				print_header_data(data)
+			if(v!=32):
+				print("\t\t},")
+			else:
+				print("\t\t}")
 		if(sys.argv[len(sys.argv)-1]==sysex):
-			print("\t}",end="")
+			print("\t}")
 		else:
-			print("\t},",end="")
-		print(" // %s" % sysex)
+			print("\t},")
 print("};")
