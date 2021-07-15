@@ -94,7 +94,10 @@ print("""
 // File generated with sysex2c.py
 //
 """)
-print("uint8_t bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)))
+if(decode==True):
+	print("uint8_t progmem_bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)))
+else:
+	print("uint8_t progmem_bank[%d][32][128] PROGMEM =\n{" % int(len(sys.argv)))
 for sysex in sys.argv:
 	if(not os.path.isfile(sysex)):
 		print("* File "+sysex+" does not exists.")

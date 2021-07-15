@@ -31,9 +31,10 @@ void loop()
   uint8_t v = random(0, 32);
   uint8_t t = random(0, 36);
   char voice_name[11];
+  uint8_t decoded_voice[156];
 
   memset(voice_name, 0, 11);
-  memcpy(voice_name, &progmem_bank[b][v][145], 10);
+  memcpy(voice_name, &progmem_bank[b][v][117], 10);
 
   Serial.print("Voice: ");
   Serial.print(voice_name);
@@ -41,7 +42,8 @@ void loop()
   Serial.print("Transpose: ");
   Serial.println(t);
 
-  dexed.loadVoiceParameters(progmem_bank[b][v]);
+  dexed.decodeVoice(progmem_bank[b][v],decoded_voice); 
+  dexed.loadVoiceParameters(decoded_voice);
   dexed.setTranspose(t);
 
   Serial.println("Key-Down");
