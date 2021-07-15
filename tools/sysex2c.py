@@ -89,12 +89,17 @@ if(sys.argv[0]=="--decode"):
 else:
 	decode=False
 
+print("""
+//
+// File generated with sysex2c.py
+//
+""")
 print("uint8_t bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)))
 for sysex in sys.argv:
 	if(not os.path.isfile(sysex)):
 		print("* File "+sysex+" does not exists.")
 		exit(10)
-	if(not os.path.access(sysex,R_OK)):
+	if(not os.access(sysex,os.R_OK)):
 		print("* File "+sysex+" does not readable.")
 		exit(11)
 	print("\t{\t// %s" % os.path.basename(sysex))
