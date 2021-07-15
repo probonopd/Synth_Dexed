@@ -751,7 +751,7 @@ uint8_t Dexed::getNumNotesPlaying(void)
   return (count_playing_voices);
 }
 
-bool Dexed::decodeVoice(uint8_t* encoded_data, uint8_t* new_data)
+bool Dexed::decodeVoice(uint8_t* new_data, uint8_t* encoded_data)
 {
   uint8_t* p_data = new_data;
   uint8_t op;
