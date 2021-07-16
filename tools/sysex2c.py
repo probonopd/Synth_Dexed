@@ -134,7 +134,8 @@ for sysex in sys.argv:
 
 		for v in range(1,33):
 			data=f.read(128)
-			print("\t\t{\t// %d: %s" % (v, data[118:128].decode('ascii')))
+			patchname=str(data[118:128].decode('ascii')).upper().replace('\\','')
+			print("\t\t{\t// %d: %s" % (v, patchname))
 			if(decode==True):
 				print_header_data(unpack_packed_patch(data))
 			else:
