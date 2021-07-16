@@ -93,6 +93,8 @@ print("""
 //
 // File generated with sysex2c.py
 //
+
+#pragma once
 """)
 if(decode==True):
 	print("uint8_t progmem_bank[%d][32][156] PROGMEM =\n{" % int(len(sys.argv)))
