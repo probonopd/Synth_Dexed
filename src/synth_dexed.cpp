@@ -348,10 +348,10 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
       if(voices[i].dx7_note)
     	delete voices[i].dx7_note;
     }
-    delete voices;
+    delete(voices);
   }
 
-  max_notes=new_max_notes;
+  max_notes=constrain(new_max_notes,0,_MAX_NOTES);
 
   if(max_notes>0)
   {
@@ -445,7 +445,8 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     s = abs(sumbuf[i]);
     if (s > vuSignal)
       vuSignal = s;
-    else if (vuSignal > 0.001f)
+    //else if (vuSignal > 0.001f)
+    else if (vuSignal > 0.0005f)
       vuSignal *= decayFactor;
     else
       vuSignal = 0.0;
@@ -746,7 +747,7 @@ uint8_t Dexed::getNumNotesPlaying(void)
   return (count_playing_voices);
 }
 
-bool Dexed::decodeVoice(uint8_t* encoded_data, uint8_t* new_data)
+bool Dexed::decodeVoice(uint8_t* new_data, uint8_t* encoded_data)
 {
   uint8_t* p_data = new_data;
   uint8_t op;
