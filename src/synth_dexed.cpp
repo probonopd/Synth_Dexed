@@ -338,6 +338,7 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
   Serial.print("Allocating memory for ");
   Serial.print(max_notes,DEC);
   Serial.println(" notes.");
+  Serial.println();
 #endif
 
   if(voices)
@@ -355,10 +356,10 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
 
   if(max_notes>0)
   {
-    voices=new ProcessorVoice[max_notes];
+    voices=new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
     for (i = 0; i < max_notes; i++)
     {
-      voices[i].dx7_note = new Dx7Note;
+      voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
       voices[i].keydown = false;
       voices[i].sustained = false;
       voices[i].live = false;
@@ -385,8 +386,10 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
   uint16_t i, j;
   uint8_t note;
   float sumbuf[n_samples];
+#ifdef USE_SIMPLE_COMPRESSOR
   float s;
   const double decayFactor = 0.99992;
+#endif
 
   if (refreshVoice)
   {
@@ -439,6 +442,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 
   fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
 
+#ifdef USE_SIMPLE_COMPRESSOR
   // mild compression
   for (i = 0; i < n_samples; i++)
   {
@@ -451,6 +455,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     else
       vuSignal = 0.0;
   }
+#endif
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
