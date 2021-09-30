@@ -550,8 +550,10 @@ class PitchEnv {
     void advance(int newix);
 };
 
-extern const uint8_t pitchenv_rate[];
-extern const int8_t pitchenv_tab[];
+//extern const uint8_t pitchenv_rate[];
+//extern const int8_t pitchenv_tab[];
+extern uint8_t pitchenv_rate[];
+extern int8_t pitchenv_tab[];
 
 
 //=====================================================
