@@ -35,6 +35,8 @@
 // START DEFINITIONS FOR CIRCLE
 //
 
+#define USE_CIRCLE
+
 // define only one
 //#define USE_I2S
 //#define USE_HDMI
@@ -65,12 +67,31 @@
 #include <circle/usb/usbkeyboard.h>
 #include <circle/serial.h>
 #include <circle/types.h>
+
 #define constrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
   __typeof__(low) _low = (low); \
   __typeof__(high) _high = (high); \
   (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
 })
+
+static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
+{
+  int32_t out, max;
+
+  out = val >> rshift;
+  max = 1 << (bits - 1);
+  if (out >= 0)
+  {
+    if (out > max - 1) out = max - 1;
+  }
+  else
+  {
+    if (out < -max) out = -max;
+  }
+  return out;
+}
+
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
 #endif
@@ -1344,6 +1365,7 @@ class Dexed
     Lfo lfo;
     FmCore* engineMsfa;
     void getSamples(uint16_t n_samples, int16_t* buffer);
+    void getSamples(uint16_t n_samples, uint32_t* buffer);
 };
 
 //=====================================================
@@ -1355,6 +1377,7 @@ class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:
     AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate) { };
+    ~AudioSynthDexed(void);
 
   protected:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
@@ -1362,10 +1385,11 @@ class AudioSynthDexed : public AudioStream, public Dexed
     void update(void);
 };
 #else
-class AudioSynthDexed : public SOUND_CLASS, public Dexed
+class AudioSynthDexed : public Dexed, public SOUND_CLASS
 {
   public:
-    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : SOUND_CLASS(), Dexed(max_notes,sample_rate) { };
+    AudioSynthDexed(uint8_t max_notes,uint16_t sample_rate,CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster);
+    ~AudioSynthDexed(void);
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
 };
 #endif

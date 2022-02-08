@@ -381,6 +381,15 @@ void Dexed::deactivate(void)
   panic();
 }
 
+void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
+{
+  int16_t* i16_buffer;
+
+  i16_buffer=(int16_t*)buffer;
+  getSamples(n_samples,i16_buffer);
+  buffer=(uint32_t*)buffer;
+}
+
 void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 {
   uint16_t i, j;
@@ -440,6 +449,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     }
   }
 
+#if !defined(USE_CIRCLE)
   fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
 
 #ifdef USE_SIMPLE_COMPRESSOR
@@ -459,6 +469,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
+#endif
 }
 
 void Dexed::keydown(int16_t pitch, uint8_t velo) {
@@ -1780,6 +1791,16 @@ void AudioSynthDexed::update(void)
   in_update = false;
 };
 #else
+AudioSynthDexed::AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster)
+{
+  Dexed(max_notes,int(sample_rate));
+  SOUND_CLASS (pInterrupt, SAMPLE_RATE, CHUNK_SIZE
+#ifdef USE_I2S
+    , FALSE, pI2CMaster, DAC_I2C_ADDRESS
+#endif
+  );
+}
+
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
 {
   getSamples(nChunkSize, pBuffer);
