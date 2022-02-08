@@ -30,7 +30,8 @@
 #include <Arduino.h>
 #include <Audio.h>
 #else
-#include <<stdint.h>
+#include <stdint.h>
+#include <math.h>
 #include <circle/interrupt.h>
 #include <circle/i2cmaster.h>
 #include <circle/usb/usbmidi.h>
