@@ -30,6 +30,7 @@
 #include <Arduino.h>
 #include <Audio.h>
 #else
+#include <stdio.h>
 #include <stdint.h>
 #include <math.h>
 #include <circle/interrupt.h>
