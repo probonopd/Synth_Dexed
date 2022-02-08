@@ -25,9 +25,18 @@
 
 #pragma once
 
+#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
 #include <Arduino.h>
 #include <Audio.h>
 #include "teensy_board_detection.h"
+#else
+#include <circle/interrupt.h>
+#include <circle/i2cmaster.h>
+#include <circle/usb/usbmidi.h>
+#include <circle/usb/usbkeyboard.h>
+#include <circle/serial.h>
+#include <circle/types.h>
+#endif
 
 #define SYNTH_DEXED_VERSION "1.0.0"
 //#define DEBUG 1
