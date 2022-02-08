@@ -1365,7 +1365,7 @@ class AudioSynthDexed : public AudioStream, public Dexed
 class AudioSynthDexed : public SOUND_CLASS, public Dexed
 {
   public:
-    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : SOUND_CLASS, Dexed(max_notes,sample_rate) { };
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : SOUND_CLASS(), Dexed(max_notes,sample_rate) { };
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
 };
 #endif
