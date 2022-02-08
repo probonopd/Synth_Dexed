@@ -40,6 +40,12 @@
 #include <circle/serial.h>
 #include <circle/types.h>
 #define PROGMEM 
+#define constrain(amt, low, high) ({ \
+  typeof(amt) _amt = (amt); \
+  typeof(low) _low = (low); \
+  typeof(high) _high = (high); \
+  (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
+})
 #endif
 
 #define SYNTH_DEXED_VERSION "1.0.0"
