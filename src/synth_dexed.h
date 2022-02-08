@@ -38,6 +38,7 @@
 #include <circle/usb/usbkeyboard.h>
 #include <circle/serial.h>
 #include <circle/types.h>
+#define PROGMEM 
 #endif
 
 #define SYNTH_DEXED_VERSION "1.0.0"
