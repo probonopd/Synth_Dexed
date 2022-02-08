@@ -1744,6 +1744,7 @@ void Dexed::getName(char* buffer)
   buffer[10] = '\0';
 }
 
+#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
 void AudioSynthDexed::update(void)
 {
   if (in_update == true)
@@ -1778,6 +1779,13 @@ void AudioSynthDexed::update(void)
 
   in_update = false;
 };
+#else
+unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
+{
+  getSamples(nChunkSize, pBuffer);
+  return(nChunkSize);
+};
+#endif
 
 /*
   // https://www.musicdsp.org/en/latest/Effects/169-compressor.html#

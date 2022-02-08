@@ -6,8 +6,8 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-Dexed	KEYWORD1
-AudioSynthDexed KEYWORD1
+Dexed		KEYWORD1
+AudioSynthDexed	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)

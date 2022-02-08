@@ -1300,10 +1300,10 @@ class Dexed
 /*****************************************************
    CODE: orig_code/synth_microdexed.h
  *****************************************************/
+#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
 class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:
-
     AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate) { };
 
   protected:
@@ -1311,3 +1311,11 @@ class AudioSynthDexed : public AudioStream, public Dexed
     volatile bool in_update = false;
     void update(void);
 };
+#else
+class AudioSynthDexed : public SOUND_CLASS, public Dexed
+{
+  public:
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : Dexed(max_notes,sample_rate) { };
+    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
+};
+#endif
