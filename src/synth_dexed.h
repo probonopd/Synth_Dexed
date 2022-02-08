@@ -30,6 +30,31 @@
 #include <Arduino.h>
 #include <Audio.h>
 #else
+//
+// START DEFINITIONS FOR CIRCLE
+//
+
+// define only one
+//#define USE_I2S
+//#define USE_HDMI
+
+#ifdef USE_I2S
+	#include <circle/i2ssoundbasedevice.h>
+	#define SOUND_CLASS	CI2SSoundBaseDevice
+	#define SAMPLE_RATE	192000
+	#define CHUNK_SIZE	8192
+	#define DAC_I2C_ADDRESS	0		// I2C slave address of the DAC (0 for auto probing)
+#elif defined (USE_HDMI)
+	#include <circle/hdmisoundbasedevice.h>
+	#define SOUND_CLASS	CHDMISoundBaseDevice
+	#define SAMPLE_RATE	48000
+	#define CHUNK_SIZE	(384 * 10)
+#else
+	#include <circle/pwmsoundbasedevice.h>
+	#define SOUND_CLASS	CPWMSoundBaseDevice
+	#define SAMPLE_RATE	48000
+	#define CHUNK_SIZE	2048
+#endif
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
@@ -39,13 +64,19 @@
 #include <circle/usb/usbkeyboard.h>
 #include <circle/serial.h>
 #include <circle/types.h>
-#define PROGMEM 
 #define constrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
   __typeof__(low) _low = (low); \
   __typeof__(high) _high = (high); \
   (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
 })
+#ifndef M_PI
+    #define M_PI 3.14159265358979323846
+#endif
+#define PROGMEM 
+//
+// END DEFINITIONS FOR CIRCLE
+//
 #endif
 
 #define SYNTH_DEXED_VERSION "1.0.0"
