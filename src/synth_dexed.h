@@ -25,11 +25,12 @@
 
 #pragma once
 
+#include "teensy_board_detection.h"
 #if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
 #include <Arduino.h>
 #include <Audio.h>
-#include "teensy_board_detection.h"
 #else
+#include <<stdint.h>
 #include <circle/interrupt.h>
 #include <circle/i2cmaster.h>
 #include <circle/usb/usbmidi.h>
