@@ -1371,8 +1371,11 @@ class Dexed
     VoiceStatus voiceStatus;
     Lfo lfo;
     FmCore* engineMsfa;
+#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
     void getSamples(uint16_t n_samples, int16_t* buffer);
+#elif defined(USE_CIRCLE)
     void getSamples(uint16_t n_samples, uint32_t* buffer);
+#endif
 };
 
 //=====================================================
