@@ -385,9 +385,13 @@ void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
 {
   int16_t* i16_buffer;
 
-  i16_buffer=(int16_t*)buffer;
-  getSamples(n_samples,i16_buffer);
-  buffer=(uint32_t*)buffer;
+  if(malloc(i16_buffer,sizeof(int16_t)*n_samples)!=NULL)
+  {
+     getSamples(n_samples,i16_buffer);
+     for(uint8_t i=0;i<n_samples;i++)
+       buffer[i]=i16_buffer[i]+0xffff;
+     free(i16_buffer);
+  }
 }
 
 void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
@@ -1790,7 +1794,7 @@ void AudioSynthDexed::update(void)
 
   in_update = false;
 };
-#else
+#elif defined(USE_CIRCLE)
 AudioSynthDexed::AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster)
 {
   Dexed(max_notes,int(sample_rate));

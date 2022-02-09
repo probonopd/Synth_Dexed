@@ -67,6 +67,7 @@
 #include <circle/usb/usbkeyboard.h>
 #include <circle/serial.h>
 #include <circle/types.h>
+#include <circle/timer.h>
 
 #define constrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
@@ -90,6 +91,11 @@ static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
     if (out < -max) out = -max;
   }
   return out;
+}
+
+unsigned millis (void)
+{
+	return CTimer::Get ()->GetClockTicks () / (CLOCKHZ / 1000);
 }
 
 #ifndef M_PI
@@ -1384,7 +1390,7 @@ class AudioSynthDexed : public AudioStream, public Dexed
     volatile bool in_update = false;
     void update(void);
 };
-#else
+#elif defined(USE_CIRCLE)
 class AudioSynthDexed : public Dexed, public SOUND_CLASS
 {
   public:
