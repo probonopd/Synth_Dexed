@@ -383,14 +383,14 @@ void Dexed::deactivate(void)
 
 void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
 {
-  int16_t* i16_buffer;
+  int16_t* i16_buffer=new (HEAP_DMA30) int16_t[n_samples];
 
-  if(malloc(i16_buffer,sizeof(int16_t)*n_samples)!=NULL)
+  if(i16_buffer)
   {
      getSamples(n_samples,i16_buffer);
      for(uint8_t i=0;i<n_samples;i++)
        buffer[i]=i16_buffer[i]+0xffff;
-     free(i16_buffer);
+     delete(i16_buffer);
   }
 }
 

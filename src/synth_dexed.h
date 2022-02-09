@@ -68,6 +68,7 @@
 #include <circle/serial.h>
 #include <circle/types.h>
 #include <circle/timer.h>
+#include <circle/new.h>
 
 #define constrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
