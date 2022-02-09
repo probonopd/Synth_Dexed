@@ -1384,7 +1384,7 @@ class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:
     AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate) { };
-    ~AudioSynthDexed(void);
+    ~AudioSynthDexed(void) { };
 
   protected:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
