@@ -1797,14 +1797,12 @@ void AudioSynthDexed::update(void)
   in_update = false;
 };
 #elif defined(USE_CIRCLE)
-AudioSynthDexed::AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster)
-{
-  Dexed(max_notes,int(sample_rate));
-  SOUND_CLASS (pInterrupt, SAMPLE_RATE, CHUNK_SIZE
+AudioSynthDexed::AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster) : Dexed(max_notes,(int)sample_rate), SOUND_CLASS (pInterrupt, SAMPLE_RATE, CHUNK_SIZE
 #ifdef USE_I2S
     , FALSE, pI2CMaster, DAC_I2C_ADDRESS
 #endif
   );
+{
 }
 
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
