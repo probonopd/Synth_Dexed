@@ -25,8 +25,7 @@
 
 #pragma once
 
-#include "teensy_board_detection.h"
-#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
+#if defined(TEENSYDUINO)
 #include <Arduino.h>
 #include <Audio.h>
 #define SAMPLE_RATE 44100
@@ -1379,7 +1378,7 @@ class Dexed
 /*****************************************************
    CODE: orig_code/synth_microdexed.h
  *****************************************************/
-#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
+#if defined(TEENSYDUINO)
 class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:

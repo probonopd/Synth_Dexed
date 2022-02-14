@@ -440,7 +440,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     }
   }
 
-#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
+#if defined(TEENSY35) || defined(TEENSY36) || defined(TEENSY40) || defined(TEENSY41)
   fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
 
 #ifdef USE_SIMPLE_COMPRESSOR
@@ -1761,7 +1761,7 @@ void Dexed::getName(char* buffer)
   buffer[10] = '\0';
 }
 
-#if defined(TEENSY3_5) || defined(TEENSY3_6) || defined(TEENSY4)
+#if defined(TEENSY35) || defined(TEENSY36) || defined(TEENSY40) || defined(TEENSY41)
 void AudioSynthDexed::update(void)
 {
   if (in_update == true)
