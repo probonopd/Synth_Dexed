@@ -381,7 +381,7 @@ void Dexed::deactivate(void)
   panic();
 }
 
-#if defined(USE_CIRCLE)
+#if defined(__circle__)
 void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
 {
   int16_t* i16_buffer=new (HEAP_DMA30) int16_t[n_samples];
@@ -1794,7 +1794,7 @@ void AudioSynthDexed::update(void)
 
   in_update = false;
 };
-#elif defined(USE_CIRCLE)
+#elif defined(__circle__)
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
 {
   getSamples(nChunkSize, pBuffer);

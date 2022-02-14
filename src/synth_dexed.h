@@ -29,12 +29,10 @@
 #include <Arduino.h>
 #include <Audio.h>
 #define SAMPLE_RATE 44100
-#else
+#elif defined(__circle__)
 //
 // START DEFINITIONS FOR CIRCLE
 //
-
-#define USE_CIRCLE
 
 // define only one
 //#define USE_I2S
@@ -1390,7 +1388,7 @@ class AudioSynthDexed : public AudioStream, public Dexed
     volatile bool in_update = false;
     void update(void);
 };
-#elif defined(USE_CIRCLE)
+#elif defined(__circle__)
 class AudioSynthDexed : public Dexed, public SOUND_CLASS
 {
   public:
