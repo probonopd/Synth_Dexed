@@ -381,6 +381,20 @@ void Dexed::deactivate(void)
   panic();
 }
 
+#if defined(USE_CIRCLE)
+void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
+{
+  int16_t* i16_buffer=new (HEAP_DMA30) int16_t[n_samples];
+
+  if(i16_buffer)
+  {
+     getSamples(n_samples,i16_buffer);
+     for(uint8_t i=0;i<n_samples;i++)
+       buffer[i]=i16_buffer[i]+0xffff;
+     delete(i16_buffer);
+  }
+}
+#else
 void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 {
   uint16_t i, j;
@@ -440,7 +454,6 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     }
   }
 
-#if defined(TEENSY35) || defined(TEENSY36) || defined(TEENSY40) || defined(TEENSY41)
   fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
 
 #ifdef USE_SIMPLE_COMPRESSOR
@@ -460,21 +473,6 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
-}
-#elif defined(USE_CIRCLE)
-}
-
-void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
-{
-  int16_t* i16_buffer=new (HEAP_DMA30) int16_t[n_samples];
-
-  if(i16_buffer)
-  {
-     getSamples(n_samples,i16_buffer);
-     for(uint8_t i=0;i<n_samples;i++)
-       buffer[i]=i16_buffer[i]+0xffff;
-     delete(i16_buffer);
-  }
 }
 #endif
 
