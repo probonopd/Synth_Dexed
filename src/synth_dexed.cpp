@@ -1759,7 +1759,7 @@ void Dexed::getName(char* buffer)
   buffer[10] = '\0';
 }
 
-#if defined(TEENSY35) || defined(TEENSY36) || defined(TEENSY40) || defined(TEENSY41)
+#if defined(TEENSYDUINO)
 void AudioSynthDexed::update(void)
 {
   if (in_update == true)
