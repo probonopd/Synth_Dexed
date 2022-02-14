@@ -65,38 +65,14 @@
 #include <circle/serial.h>
 #include <circle/types.h>
 #include <circle/timer.h>
-#include <circle/new.h>
+#include <circle/devicenameservice.h>
+//#include <circle/new.h>
 
 #define VOLUME_PERCENT	20
 
-#define constrain(amt, low, high) ({ \
-  __typeof__(amt) _amt = (amt); \
-  __typeof__(low) _low = (low); \
-  __typeof__(high) _high = (high); \
-  (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
-})
-
-static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
-{
-  int32_t out, max;
-
-  out = val >> rshift;
-  max = 1 << (bits - 1);
-  if (out >= 0)
-  {
-    if (out > max - 1) out = max - 1;
-  }
-  else
-  {
-    if (out < -max) out = -max;
-  }
-  return out;
-}
-
-unsigned millis (void)
-{
-	return CTimer::Get ()->GetClockTicks () / (CLOCKHZ / 1000);
-}
+#define MIDI_NOTE_OFF	0b1000
+#define MIDI_NOTE_ON	0b1001
+#define KEY_NONE	255
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
@@ -1398,7 +1374,13 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
 #ifdef USE_I2S
     , FALSE, pI2CMaster, DAC_I2C_ADDRESS
 #endif
-    )
+    ),
+    m_pMIDIDevice (0),
+    m_pKeyboard (0),
+    m_Serial (pInterrupt, TRUE),
+    m_bUseSerial (FALSE),
+    m_nSerialState (0),
+    m_ucKeyNumber (KEY_NONE)
     {
       m_nLowLevel     = GetRangeMin () * VOLUME_PERCENT / 100;
       m_nHighLevel    = GetRangeMax () * VOLUME_PERCENT / 100;
@@ -1407,13 +1389,96 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
     };
 
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
+    void Process(boolean bPlugAndPlayUpdated);
+    void MIDIPacketHandler (unsigned nCable, u8 *pPacket, unsigned nLength);
 
   protected:
+    CUSBMIDIDevice     * volatile m_pMIDIDevice;
+    CUSBKeyboardDevice * volatile m_pKeyboard;
+    CSerialDevice m_Serial;
+    boolean m_bUseSerial;
+    unsigned m_nSerialState;
+    u8 m_SerialMessage[3];
+    u8 m_ucKeyNumber;
     int      m_nLowLevel;
     int      m_nNullLevel;
     int      m_nHighLevel;
     int      m_nCurrentLevel;
 };
+
+#define constrain(amt, low, high) ({ \
+  __typeof__(amt) _amt = (amt); \
+  __typeof__(low) _low = (low); \
+  __typeof__(high) _high = (high); \
+  (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
+})
+
+static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
+{
+  int32_t out, max;
+
+  out = val >> rshift;
+  max = 1 << (bits - 1);
+  if (out >= 0)
+  {
+    if (out > max - 1) out = max - 1;
+  }
+  else
+  {
+    if (out < -max) out = -max;
+  }
+  return out;
+}
+
+static uint32_t millis (void)
+{
+	return uint32_t(CTimer::Get ()->GetClockTicks () / (CLOCKHZ / 1000));
+}
+
+/* Elapsed time types - for easy-to-use measurements of elapsed time
+ * http://www.pjrc.com/teensy/
+ * Copyright (c) 2017 PJRC.COM, LLC
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+class elapsedMillis
+{
+private:
+        unsigned long ms;
+public:
+        elapsedMillis(void) { ms = millis(); }
+        elapsedMillis(unsigned long val) { ms = millis() - val; }
+        elapsedMillis(const elapsedMillis &orig) { ms = orig.ms; }
+        operator unsigned long () const { return millis() - ms; }
+        elapsedMillis & operator = (const elapsedMillis &rhs) { ms = rhs.ms; return *this; }
+        elapsedMillis & operator = (unsigned long val) { ms = millis() - val; return *this; }
+        elapsedMillis & operator -= (unsigned long val)      { ms += val ; return *this; }
+        elapsedMillis & operator += (unsigned long val)      { ms -= val ; return *this; }
+        elapsedMillis operator - (int val) const           { elapsedMillis r(*this); r.ms += val; return r; }
+        elapsedMillis operator - (unsigned int val) const  { elapsedMillis r(*this); r.ms += val; return r; }
+        elapsedMillis operator - (long val) const          { elapsedMillis r(*this); r.ms += val; return r; }
+        elapsedMillis operator - (unsigned long val) const { elapsedMillis r(*this); r.ms += val; return r; }
+        elapsedMillis operator + (int val) const           { elapsedMillis r(*this); r.ms -= val; return r; }
+        elapsedMillis operator + (unsigned int val) const  { elapsedMillis r(*this); r.ms -= val; return r; }
+        elapsedMillis operator + (long val) const          { elapsedMillis r(*this); r.ms -= val; return r; }
+        elapsedMillis operator + (unsigned long val) const { elapsedMillis r(*this); r.ms -= val; return r; }
+};
 #else
-#error PLATFORM NOT DUPPORTED
+#error PLATFORM NOT SUPPORTED
 #endif
