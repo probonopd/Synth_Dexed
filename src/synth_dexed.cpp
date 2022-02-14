@@ -381,20 +381,6 @@ void Dexed::deactivate(void)
   panic();
 }
 
-#if defined(__circle__)
-void Dexed::getSamples(uint16_t n_samples, uint32_t* buffer)
-{
-  int16_t* i16_buffer=new (HEAP_DMA30) int16_t[n_samples];
-
-  if(i16_buffer)
-  {
-     getSamples(n_samples,i16_buffer);
-     for(uint8_t i=0;i<n_samples;i++)
-       buffer[i]=i16_buffer[i]+0xffff;
-     delete(i16_buffer);
-  }
-}
-#else
 void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 {
   uint16_t i, j;
@@ -471,10 +457,13 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
   }
 #endif
 
-  //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
+#if defined(TEENSYDIONO)
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
-}
+#elif defined(__circle__)
+  for (i = 0; i < n_samples; i++)
+    buffer[i]=(sumbuf[i]*32768.0)+0.5;
 #endif
+}
 
 void Dexed::keydown(int16_t pitch, uint8_t velo) {
   if ( velo == 0 ) {
@@ -1797,7 +1786,27 @@ void AudioSynthDexed::update(void)
 #elif defined(__circle__)
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
 {
-  getSamples(nChunkSize, pBuffer);
+  int16_t* int16_buf=new int16_t[nChunkSize];
+#ifdef USE_HDMI
+  unsigned nFrame = 0;
+#endif
+
+  getSamples(nChunkSize, int16_buf);
+
+  for (; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
+  {
+    u32 nSample = (u32) *int16_buf++;
+
+#ifdef USE_HDMI
+    nSample = ConvertIEC958Sample (nSample, nFrame);
+
+    if (++nFrame == IEC958_FRAMES_PER_BLOCK)
+      nFrame = 0;
+#endif
+
+    *pBuffer++ = nSample;		// 2 stereo channels
+    *pBuffer++ = nSample;
+  }
   return(nChunkSize);
 };
 #endif

@@ -67,6 +67,8 @@
 #include <circle/timer.h>
 #include <circle/new.h>
 
+#define VOLUME_PERCENT	20
+
 #define constrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
   __typeof__(low) _low = (low); \
@@ -1369,7 +1371,6 @@ class Dexed
     Lfo lfo;
     FmCore* engineMsfa;
     void getSamples(uint16_t n_samples, int16_t* buffer);
-    void getSamples(uint16_t n_samples, uint32_t* buffer);
 };
 
 //=====================================================
@@ -1380,8 +1381,7 @@ class Dexed
 class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:
-    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate) { };
-    ~AudioSynthDexed(void) { };
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate);
 
   protected:
     const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
@@ -1392,9 +1392,26 @@ class AudioSynthDexed : public AudioStream, public Dexed
 class AudioSynthDexed : public Dexed, public SOUND_CLASS
 {
   public:
-    AudioSynthDexed(uint8_t max_notes,uint16_t sample_rate,CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster);
-    ~AudioSynthDexed(void);
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster)
+:  Dexed(max_notes,(int)sample_rate), SOUND_CLASS (pInterrupt, SAMPLE_RATE, CHUNK_SIZE
+#ifdef USE_I2S
+    , FALSE, pI2CMaster, DAC_I2C_ADDRESS
+#endif
+    )
+    {
+      m_nLowLevel     = GetRangeMin () * VOLUME_PERCENT / 100;
+      m_nHighLevel    = GetRangeMax () * VOLUME_PERCENT / 100;
+      m_nNullLevel    = (m_nHighLevel + m_nLowLevel) / 2;
+      m_nCurrentLevel = m_nNullLevel;
+    };
+
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
+
+  protected:
+    int      m_nLowLevel;
+    int      m_nNullLevel;
+    int      m_nHighLevel;
+    int      m_nCurrentLevel;
 };
 #else
 #error PLATFORM NOT DUPPORTED
