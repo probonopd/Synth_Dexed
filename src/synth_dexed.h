@@ -1396,4 +1396,6 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
     ~AudioSynthDexed(void);
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
 };
+#else
+#error PLATFORM NOT DUPPORTED
 #endif
