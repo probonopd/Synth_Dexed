@@ -1989,6 +1989,8 @@ void AudioSynthDexed::KeyStatusHandlerRaw (unsigned char ucModifiers, const unsi
                         }
                 }
         }
+
+	s_pThis->keyup(ucKeyNumber);
 }
 
 void AudioSynthDexed::USBDeviceRemovedHandler (CDevice *pDevice, void *pContext)
