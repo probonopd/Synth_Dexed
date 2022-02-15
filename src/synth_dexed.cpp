@@ -1805,16 +1805,22 @@ AudioSynthDexed *AudioSynthDexed::s_pThis = 0;
 
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
 {
-  int16_t* int16_buf=new int16_t[nChunkSize];
+  unsigned nResult = nChunkSize;
+
+  int16_t int16_buf[nChunkSize/2];
 #ifdef USE_HDMI
   unsigned nFrame = 0;
 #endif
 
-  getSamples(nChunkSize, int16_buf);
+  getSamples(nChunkSize/2, int16_buf);
 
-  for (; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
+  for (unsigned i = 0; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
   {
-    u32 nSample = (u32) *int16_buf++;
+    // TODO: This is for PWM only.
+    s32 nSample = int16_buf[i++];
+    nSample += 32768;
+    nSample *= GetRangeMax()/2;
+    nSample /= 32768;
 
 #ifdef USE_HDMI
     nSample = ConvertIEC958Sample (nSample, nFrame);
@@ -1826,7 +1832,7 @@ unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
     *pBuffer++ = nSample;		// 2 stereo channels
     *pBuffer++ = nSample;
   }
-  return(nChunkSize);
+  return(nResult);
 };
 
 void AudioSynthDexed::Process(boolean bPlugAndPlayUpdated)
@@ -1990,7 +1996,7 @@ void AudioSynthDexed::KeyStatusHandlerRaw (unsigned char ucModifiers, const unsi
                 }
         }
 
-	s_pThis->keyup(ucKeyNumber);
+	// TODO: s_pThis->keyup(ucKeyNumber);
 }
 
 void AudioSynthDexed::USBDeviceRemovedHandler (CDevice *pDevice, void *pContext)
