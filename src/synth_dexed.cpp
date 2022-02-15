@@ -1784,6 +1784,25 @@ void AudioSynthDexed::update(void)
   in_update = false;
 };
 #elif defined(__circle__)
+const TNoteInfo AudioSynthDexed::s_Keys[] =
+{
+        {',', 72}, // C4
+        {'M', 71}, // B4
+        {'J', 70}, // A#4
+        {'N', 69}, // A4
+        {'H', 68}, // G#3
+        {'B', 67}, // G3
+        {'G', 66}, // F#3
+        {'V', 65}, // F3
+        {'C', 64}, // E3
+        {'D', 63}, // D#3
+        {'X', 62}, // D3
+        {'S', 61}, // C#3
+        {'Z', 60}  // C3
+};
+
+AudioSynthDexed *AudioSynthDexed::s_pThis = 0;
+
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
 {
   int16_t* int16_buf=new int16_t[nChunkSize];
@@ -1905,7 +1924,7 @@ void AudioSynthDexed::Process(boolean bPlugAndPlayUpdated)
 
 void AudioSynthDexed::MIDIPacketHandler (unsigned nCable, u8 *pPacket, unsigned nLength)
 {
-	//assert (s_pThis != 0);
+	assert (s_pThis != 0);
 
 	// The packet contents are just normal MIDI data - see
 	// https://www.midi.org/specifications/item/table-1-summary-of-midi-message
@@ -1923,12 +1942,65 @@ void AudioSynthDexed::MIDIPacketHandler (unsigned nCable, u8 *pPacket, unsigned 
 
 	if (ucType == MIDI_NOTE_ON)
 	{
-		;
+	  s_pThis->keydown(ucKeyNumber,ucVelocity);
 	}
 	else if (ucType == MIDI_NOTE_OFF)
 	{
-		;
+	  s_pThis->keyup(ucKeyNumber);
 	}
+}
+
+void AudioSynthDexed::KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6])
+{
+        assert (s_pThis != 0);
+
+        // find the key code of a pressed key
+        char chKey = '\0';
+        for (unsigned i = 0; i <= 5; i++)
+        {
+                u8 ucKeyCode = RawKeys[i];
+                if (ucKeyCode != 0)
+                {
+                        if (0x04 <= ucKeyCode && ucKeyCode <= 0x1D)
+                        {
+                                chKey = RawKeys[i]-0x04+'A';    // key code of 'A' is 0x04
+                        }
+                        else if (ucKeyCode == 0x36)
+                        {
+                                chKey = ',';                    // key code of ',' is 0x36
+                        }
+
+                        break;
+                }
+        }
+
+        if (chKey != '\0')
+        {
+                // find the pressed key in the key table and set its frequency
+                for (unsigned i = 0; i < sizeof(s_Keys)/sizeof(s_Keys[0]); i++)
+                {
+                        if (s_Keys[i].Key == chKey)
+                        {
+                                u8 ucKeyNumber = s_Keys[i].KeyNumber;
+				
+				s_pThis->keydown(ucKeyNumber,100);
+
+                                return;
+                        }
+                }
+        }
+}
+
+void AudioSynthDexed::USBDeviceRemovedHandler (CDevice *pDevice, void *pContext)
+{
+        if (s_pThis->m_pMIDIDevice == (CUSBMIDIDevice *) pDevice)
+        {
+                s_pThis->m_pMIDIDevice = 0;
+        }
+        else if (s_pThis->m_pKeyboard == (CUSBKeyboardDevice *) pDevice)
+        {
+                s_pThis->m_pKeyboard = 0;
+        }
 }
 #endif
 

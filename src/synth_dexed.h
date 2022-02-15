@@ -1353,6 +1353,7 @@ class Dexed
 /*****************************************************
    CODE: orig_code/synth_microdexed.h
  *****************************************************/
+
 #if defined(TEENSYDUINO)
 class AudioSynthDexed : public AudioStream, public Dexed
 {
@@ -1366,6 +1367,13 @@ class AudioSynthDexed : public AudioStream, public Dexed
     void update(void);
 };
 #elif defined(__circle__)
+
+struct TNoteInfo
+{
+        char    Key;
+        u8      KeyNumber;      // MIDI number
+};
+
 class AudioSynthDexed : public Dexed, public SOUND_CLASS
 {
   public:
@@ -1390,9 +1398,11 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
 
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
     void Process(boolean bPlugAndPlayUpdated);
-    void MIDIPacketHandler (unsigned nCable, u8 *pPacket, unsigned nLength);
 
   protected:
+    static void MIDIPacketHandler (unsigned nCable, u8 *pPacket, unsigned nLength);
+    static void KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6]);
+    static void USBDeviceRemovedHandler (CDevice *pDevice, void *pContext);
     CUSBMIDIDevice     * volatile m_pMIDIDevice;
     CUSBKeyboardDevice * volatile m_pKeyboard;
     CSerialDevice m_Serial;
@@ -1400,10 +1410,13 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
     unsigned m_nSerialState;
     u8 m_SerialMessage[3];
     u8 m_ucKeyNumber;
-    int      m_nLowLevel;
-    int      m_nNullLevel;
-    int      m_nHighLevel;
-    int      m_nCurrentLevel;
+    static const TNoteInfo s_Keys[];
+    int m_nLowLevel;
+    int m_nNullLevel;
+    int m_nHighLevel;
+    int m_nCurrentLevel;
+
+    static AudioSynthDexed *s_pThis;
 };
 
 #define constrain(amt, low, high) ({ \
