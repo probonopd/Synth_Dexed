@@ -1803,22 +1803,6 @@ const TNoteInfo AudioSynthDexed::s_Keys[] =
 
 AudioSynthDexed *AudioSynthDexed::s_pThis = 0;
 
-bool AudioSynthDexed::Initialize (void)
-{
-  if (!m_Serial.Initialize(31250))
-  {
-    return false;
-  }
-
-  m_bUseSerial = true;
-
-  activate();
-
-  Start ();
-
-  return true;
-}
-
 unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
 {
   unsigned nResult = nChunkSize;

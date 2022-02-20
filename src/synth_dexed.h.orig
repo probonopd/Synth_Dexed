@@ -1398,7 +1398,6 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
       m_nCurrentLevel = m_nNullLevel;
     };
 
-    bool Initialize (void);
     unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
     void Process(boolean bPlugAndPlayUpdated);
 
