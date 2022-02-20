@@ -1385,7 +1385,7 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
     ),
     m_pMIDIDevice (0),
     m_pKeyboard (0),
-    m_Serial (pInterrupt, TRUE, 5),
+    m_Serial (pInterrupt, TRUE),
     m_bUseSerial (FALSE),
     m_nSerialState (0),
     m_ucKeyNumber (KEY_NONE)
