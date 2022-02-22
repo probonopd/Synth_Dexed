@@ -34,27 +34,6 @@
 // START DEFINITIONS FOR CIRCLE
 //
 
-// define only one
-//#define USE_I2S
-//#define USE_HDMI
-
-#ifdef USE_I2S
-	#include <circle/i2ssoundbasedevice.h>
-	#define SOUND_CLASS	CI2SSoundBaseDevice
-	#define SAMPLE_RATE	192000
-	#define CHUNK_SIZE	8192
-	#define DAC_I2C_ADDRESS	0		// I2C slave address of the DAC (0 for auto probing)
-#elif defined (USE_HDMI)
-	#include <circle/hdmisoundbasedevice.h>
-	#define SOUND_CLASS	CHDMISoundBaseDevice
-	#define SAMPLE_RATE	48000
-	#define CHUNK_SIZE	(384 * 10)
-#else
-	#include <circle/pwmsoundbasedevice.h>
-	#define SOUND_CLASS	CPWMSoundBaseDevice
-	#define SAMPLE_RATE	48000
-	#define CHUNK_SIZE	2048
-#endif
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
@@ -66,9 +45,15 @@
 #include <circle/types.h>
 #include <circle/timer.h>
 #include <circle/devicenameservice.h>
+#include <circle/pwmsoundbasedevice.h>
+#include <circle/i2ssoundbasedevice.h>
+#include <circle/hdmisoundbasedevice.h>
 //#include <circle/new.h>
 
-#define VOLUME_PERCENT	20
+#define SAMPLE_RATE	48000
+#define CHUNK_SIZE	2048
+#define CHUNK_SIZE_HDMI	(384 * 10)
+#define DAC_I2C_ADDRESS	0		// I2C slave address of the DAC (0 for auto probing)
 
 #define MIDI_NOTE_OFF	0b1000
 #define MIDI_NOTE_ON	0b1001
@@ -1374,15 +1359,11 @@ struct TNoteInfo
         u8      KeyNumber;      // MIDI number
 };
 
-class AudioSynthDexed : public Dexed, public SOUND_CLASS
+class AudioSynthDexed : public Dexed
 {
   public:
-    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt, CI2CMaster *pI2CMaster)
-:  Dexed(max_notes,(int)sample_rate), SOUND_CLASS (pInterrupt, SAMPLE_RATE, CHUNK_SIZE
-#ifdef USE_I2S
-    , FALSE, pI2CMaster, DAC_I2C_ADDRESS
-#endif
-    ),
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt)
+:   Dexed(max_notes,(int)sample_rate),
     m_pMIDIDevice (0),
     m_pKeyboard (0),
     m_Serial (pInterrupt, TRUE),
@@ -1391,15 +1372,9 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
     m_ucKeyNumber (KEY_NONE)
     {
       s_pThis = this;
-
-      m_nLowLevel     = GetRangeMin () * VOLUME_PERCENT / 100;
-      m_nHighLevel    = GetRangeMax () * VOLUME_PERCENT / 100;
-      m_nNullLevel    = (m_nHighLevel + m_nLowLevel) / 2;
-      m_nCurrentLevel = m_nNullLevel;
     };
 
-    bool Initialize (void);
-    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
+    virtual bool Initialize (void);
     void Process(boolean bPlugAndPlayUpdated);
 
   protected:
@@ -1414,12 +1389,48 @@ class AudioSynthDexed : public Dexed, public SOUND_CLASS
     u8 m_SerialMessage[3];
     u8 m_ucKeyNumber;
     static const TNoteInfo s_Keys[];
-    int m_nLowLevel;
-    int m_nNullLevel;
-    int m_nHighLevel;
-    int m_nCurrentLevel;
 
     static AudioSynthDexed *s_pThis;
+};
+
+class AudioSynthDexedPWM : public AudioSynthDexed, public CPWMSoundBaseDevice
+{
+  public:
+    AudioSynthDexedPWM(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt)
+:   AudioSynthDexed(max_notes,(int)sample_rate, pInterrupt),
+    CPWMSoundBaseDevice (pInterrupt, sample_rate, CHUNK_SIZE)
+    {
+    }
+
+    bool Initialize (void);
+    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
+};
+
+class AudioSynthDexedI2S : public AudioSynthDexed, public CI2SSoundBaseDevice
+{
+  public:
+    AudioSynthDexedI2S(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt,
+                       CI2CMaster *pI2CMaster)
+:   AudioSynthDexed(max_notes,(int)sample_rate, pInterrupt),
+    CI2SSoundBaseDevice (pInterrupt, sample_rate, CHUNK_SIZE, FALSE, pI2CMaster, DAC_I2C_ADDRESS)
+    {
+    }
+
+    bool Initialize (void);
+    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
+};
+
+class AudioSynthDexedHDMI : public AudioSynthDexed, public CHDMISoundBaseDevice
+{
+  public:
+    AudioSynthDexedHDMI(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt)
+:   AudioSynthDexed(max_notes,(int)sample_rate, pInterrupt),
+    CHDMISoundBaseDevice (pInterrupt, sample_rate, CHUNK_SIZE_HDMI)
+    {
+    }
+
+    bool Initialize (void);
+    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
 };
 
 #define constrain(amt, low, high) ({ \

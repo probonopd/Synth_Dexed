@@ -1814,42 +1814,8 @@ bool AudioSynthDexed::Initialize (void)
 
   activate();
 
-  Start ();
-
   return true;
 }
-
-unsigned AudioSynthDexed::GetChunk(u32 *pBuffer, unsigned nChunkSize)
-{
-  unsigned nResult = nChunkSize;
-
-  int16_t int16_buf[nChunkSize/2];
-#ifdef USE_HDMI
-  unsigned nFrame = 0;
-#endif
-
-  getSamples(nChunkSize/2, int16_buf);
-
-  for (unsigned i = 0; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
-  {
-    // TODO: This is for PWM only.
-    s32 nSample = int16_buf[i++];
-    nSample += 32768;
-    nSample *= GetRangeMax()/2;
-    nSample /= 32768;
-
-#ifdef USE_HDMI
-    nSample = ConvertIEC958Sample (nSample, nFrame);
-
-    if (++nFrame == IEC958_FRAMES_PER_BLOCK)
-      nFrame = 0;
-#endif
-
-    *pBuffer++ = nSample;		// 2 stereo channels
-    *pBuffer++ = nSample;
-  }
-  return(nResult);
-};
 
 void AudioSynthDexed::Process(boolean bPlugAndPlayUpdated)
 {
@@ -2026,6 +1992,101 @@ void AudioSynthDexed::USBDeviceRemovedHandler (CDevice *pDevice, void *pContext)
                 s_pThis->m_pKeyboard = 0;
         }
 }
+
+bool AudioSynthDexedPWM::Initialize (void)
+{
+  if (!AudioSynthDexed::Initialize())
+  {
+    return false;
+  }
+
+  return Start ();
+}
+
+unsigned AudioSynthDexedPWM::GetChunk(u32 *pBuffer, unsigned nChunkSize)
+{
+  unsigned nResult = nChunkSize;
+
+  int16_t int16_buf[nChunkSize/2];
+
+  getSamples(nChunkSize/2, int16_buf);
+
+  for (unsigned i = 0; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
+  {
+    s32 nSample = int16_buf[i++];
+    nSample += 32768;
+    nSample *= GetRangeMax()/2;
+    nSample /= 32768;
+
+    *pBuffer++ = nSample;		// 2 stereo channels
+    *pBuffer++ = nSample;
+  }
+  return(nResult);
+};
+
+bool AudioSynthDexedI2S::Initialize (void)
+{
+  if (!AudioSynthDexed::Initialize())
+  {
+    return false;
+  }
+
+  return Start ();
+}
+
+unsigned AudioSynthDexedI2S::GetChunk(u32 *pBuffer, unsigned nChunkSize)
+{
+  unsigned nResult = nChunkSize;
+
+  int16_t int16_buf[nChunkSize/2];
+
+  getSamples(nChunkSize/2, int16_buf);
+
+  for (unsigned i = 0; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
+  {
+    s32 nSample = int16_buf[i++];
+    nSample <<= 8;
+
+    *pBuffer++ = nSample;		// 2 stereo channels
+    *pBuffer++ = nSample;
+  }
+  return(nResult);
+};
+
+bool AudioSynthDexedHDMI::Initialize (void)
+{
+  if (!AudioSynthDexed::Initialize())
+  {
+    return false;
+  }
+
+  return Start ();
+}
+
+unsigned AudioSynthDexedHDMI::GetChunk(u32 *pBuffer, unsigned nChunkSize)
+{
+  unsigned nResult = nChunkSize;
+
+  int16_t int16_buf[nChunkSize/2];
+  unsigned nFrame = 0;
+
+  getSamples(nChunkSize/2, int16_buf);
+
+  for (unsigned i = 0; nChunkSize > 0; nChunkSize -= 2)		// fill the whole buffer
+  {
+    s32 nSample = int16_buf[i++];
+    nSample <<= 8;
+
+    nSample = ConvertIEC958Sample (nSample, nFrame);
+
+    if (++nFrame == IEC958_FRAMES_PER_BLOCK)
+      nFrame = 0;
+
+    *pBuffer++ = nSample;		// 2 stereo channels
+    *pBuffer++ = nSample;
+  }
+  return(nResult);
+};
 #endif
 
 /*
