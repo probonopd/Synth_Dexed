@@ -30,42 +30,15 @@
 #include <Audio.h>
 #define SAMPLE_RATE 44100
 #elif defined(__circle__)
-//
-// START DEFINITIONS FOR CIRCLE
-//
-
 #include <string.h>
 #include <stdint.h>
 #include <math.h>
-#include <circle/interrupt.h>
-#include <circle/i2cmaster.h>
-#include <circle/usb/usbmidi.h>
-#include <circle/usb/usbkeyboard.h>
-#include <circle/serial.h>
-#include <circle/types.h>
 #include <circle/timer.h>
-#include <circle/devicenameservice.h>
-#include <circle/pwmsoundbasedevice.h>
-#include <circle/i2ssoundbasedevice.h>
-#include <circle/hdmisoundbasedevice.h>
-//#include <circle/new.h>
-
-#define SAMPLE_RATE	48000
-#define CHUNK_SIZE	2048
-#define CHUNK_SIZE_HDMI	(384 * 10)
-#define DAC_I2C_ADDRESS	0		// I2C slave address of the DAC (0 for auto probing)
-
-#define MIDI_NOTE_OFF	0b1000
-#define MIDI_NOTE_ON	0b1001
-#define KEY_NONE	255
 
 #ifndef M_PI
     #define M_PI 3.14159265358979323846
 #endif
-#define PROGMEM 
-//
-// END DEFINITIONS FOR CIRCLE
-//
+#define PROGMEM
 #endif
 
 #define SYNTH_DEXED_VERSION "1.0.0"
@@ -1353,86 +1326,6 @@ class AudioSynthDexed : public AudioStream, public Dexed
 };
 #elif defined(__circle__)
 
-struct TNoteInfo
-{
-        char    Key;
-        u8      KeyNumber;      // MIDI number
-};
-
-class AudioSynthDexed : public Dexed
-{
-  public:
-    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt)
-:   Dexed(max_notes,(int)sample_rate),
-    m_pMIDIDevice (0),
-    m_pKeyboard (0),
-    m_Serial (pInterrupt, TRUE),
-    m_bUseSerial (FALSE),
-    m_nSerialState (0),
-    m_ucKeyNumber (KEY_NONE)
-    {
-      s_pThis = this;
-    };
-
-    virtual bool Initialize (void);
-    void Process(boolean bPlugAndPlayUpdated);
-
-  protected:
-    static void MIDIPacketHandler (unsigned nCable, u8 *pPacket, unsigned nLength);
-    static void KeyStatusHandlerRaw (unsigned char ucModifiers, const unsigned char RawKeys[6]);
-    static void USBDeviceRemovedHandler (CDevice *pDevice, void *pContext);
-    CUSBMIDIDevice     * volatile m_pMIDIDevice;
-    CUSBKeyboardDevice * volatile m_pKeyboard;
-    CSerialDevice m_Serial;
-    boolean m_bUseSerial;
-    unsigned m_nSerialState;
-    u8 m_SerialMessage[3];
-    u8 m_ucKeyNumber;
-    static const TNoteInfo s_Keys[];
-
-    static AudioSynthDexed *s_pThis;
-};
-
-class AudioSynthDexedPWM : public AudioSynthDexed, public CPWMSoundBaseDevice
-{
-  public:
-    AudioSynthDexedPWM(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt)
-:   AudioSynthDexed(max_notes,(int)sample_rate, pInterrupt),
-    CPWMSoundBaseDevice (pInterrupt, sample_rate, CHUNK_SIZE)
-    {
-    }
-
-    bool Initialize (void);
-    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
-};
-
-class AudioSynthDexedI2S : public AudioSynthDexed, public CI2SSoundBaseDevice
-{
-  public:
-    AudioSynthDexedI2S(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt,
-                       CI2CMaster *pI2CMaster)
-:   AudioSynthDexed(max_notes,(int)sample_rate, pInterrupt),
-    CI2SSoundBaseDevice (pInterrupt, sample_rate, CHUNK_SIZE, FALSE, pI2CMaster, DAC_I2C_ADDRESS)
-    {
-    }
-
-    bool Initialize (void);
-    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
-};
-
-class AudioSynthDexedHDMI : public AudioSynthDexed, public CHDMISoundBaseDevice
-{
-  public:
-    AudioSynthDexedHDMI(uint8_t max_notes, uint16_t sample_rate, CInterruptSystem *pInterrupt)
-:   AudioSynthDexed(max_notes,(int)sample_rate, pInterrupt),
-    CHDMISoundBaseDevice (pInterrupt, sample_rate, CHUNK_SIZE_HDMI)
-    {
-    }
-
-    bool Initialize (void);
-    unsigned GetChunk (u32 *pBuffer, unsigned nChunkSize);
-};
-
 #define constrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
   __typeof__(low) _low = (low); \
@@ -1457,7 +1350,7 @@ static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
   return out;
 }
 
-static uint32_t millis (void)
+static inline uint32_t millis (void)
 {
 	return uint32_t(CTimer::Get ()->GetClockTicks () / (CLOCKHZ / 1000));
 }
