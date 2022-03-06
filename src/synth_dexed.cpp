@@ -461,7 +461,14 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
   arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
 #elif defined(__circle__)
   for (i = 0; i < n_samples; i++)
-    buffer[i]=(sumbuf[i]*32768.0)+0.5;
+  {
+    int32_t val = (sumbuf[i]*32768.0)+0.5;
+    if (val < -32768)
+      val = -32768;
+    else if (val > 32767)
+      val = 32767;
+    buffer[i] = val;
+  }
 #endif
 }
 
