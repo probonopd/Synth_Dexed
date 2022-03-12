@@ -34,9 +34,8 @@
 #include <unistd.h>
 #include <limits.h>
 #include "porta.h"
-#ifdef USE_TEENSY_DSP
-#include <Audio.h>
-#endif
+//#include <dsp/support_functions.h>
+#include <arm_math.h>
 
 Dexed::Dexed(uint8_t maxnotes, int rate)
 {

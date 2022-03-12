@@ -26,8 +26,11 @@
 #ifndef DEXED_H_INCLUDED
 #define DEXED_H_INCLUDED
 
-#include <Arduino.h>
+#include <stdint.h>
+#include <stdlib.h>
+#if defined(TEENSYDUINO)
 #include <Audio.h>
+#endif
 #include "fm_op_kernel.h"
 #include "synth.h"
 #include "env.h"

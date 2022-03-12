@@ -25,8 +25,10 @@
 
 #pragma once
 #include "dexed.h"
+#if defined(TEENSYDUINO)
 #include <AudioStream.h>
-#include <Arduino.h>
+#endif
+#include <stdint.h>
 
 #define SYNTH_DEXED_VERSION "1.0.1"
 //#define DEBUG 1
@@ -57,6 +59,7 @@
 
 //#define USE_SIMPLE_COMPRESSOR 1
 
+#if defined(TEENSYDUINO)
 class AudioSynthDexed : public AudioStream, public Dexed
 {
   public:
@@ -68,3 +71,4 @@ class AudioSynthDexed : public AudioStream, public Dexed
     volatile bool in_update = false;
     void update(void);
 };
+#endif

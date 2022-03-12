@@ -17,7 +17,7 @@
 #ifndef __CONTROLLERS_H
 #define __CONTROLLERS_H
 
-#include <Arduino.h>
+#include <stdint.h>
 #include "synth.h"
 #include <stdio.h>
 #include <string.h>

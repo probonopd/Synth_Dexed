@@ -25,6 +25,7 @@
 
 #include "synth_dexed.h"
 
+#if defined(TEENSYDUINO)
 void AudioSynthDexed::update(void)
 {
   if (in_update == true)
@@ -59,7 +60,7 @@ void AudioSynthDexed::update(void)
 
   in_update = false;
 };
-
+#endif
 /*
   // https://www.musicdsp.org/en/latest/Effects/169-compressor.html#
   void compress

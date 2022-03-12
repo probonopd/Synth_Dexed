@@ -19,7 +19,7 @@
 
 //#define SUPER_PRECISE
 
-#include <Arduino.h>
+#include <stdint.h>
 
 #define MIDI_CONTROLLER_MODE_MAX 2
 #define TRANSPOSE_FIX 24
@@ -78,4 +78,46 @@ inline static T max(const T& a, const T& b) {
 #define SQRT_FUNC sqrtf
 // #define ARM_SQRT_FUNC arm_sqrt_f32 // fast but not as accurate
 
+#if defined(__circle__)
+
+#include <circle/timer.h>
+
+#ifndef AUDIOBLOCK_SAMPLES
+  #define AUDIO_BLOCK_SAMPLES 128
+#endif
+
+#ifndef M_PI
+  #define M_PI 3.14159265358979323846
+#endif
+
+#define constrain(amt, low, high) ({ \
+  __typeof__(amt) _amt = (amt); \
+  __typeof__(low) _low = (low); \
+  __typeof__(high) _high = (high); \
+  (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
+})
+
+static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
+{
+  int32_t out, max;
+
+  out = val >> rshift;
+  max = 1 << (bits - 1);
+  if (out >= 0)
+  {
+    if (out > max - 1) out = max - 1;
+  }
+  else
+  {
+    if (out < -max) out = -max;
+  }
+  return out;
+}
+
+static inline uint32_t millis (void)
+{
+        return uint32_t(CTimer::Get ()->GetClockTicks () / (CLOCKHZ / 1000));
+}
+
+#endif
 #endif
