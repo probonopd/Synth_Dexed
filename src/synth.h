@@ -82,10 +82,6 @@ inline static T max(const T& a, const T& b) {
 
 #include <circle/timer.h>
 
-#ifndef AUDIOBLOCK_SAMPLES
-  #define AUDIO_BLOCK_SAMPLES 128
-#endif
-
 #ifndef M_PI
   #define M_PI 3.14159265358979323846
 #endif

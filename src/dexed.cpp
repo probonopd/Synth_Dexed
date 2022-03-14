@@ -214,7 +214,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 #endif
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
-  arm_float_to_q15(sumbuf, buffer, AUDIO_BLOCK_SAMPLES);
+  arm_float_to_q15(sumbuf, buffer, n_samples);
 }
 
 void Dexed::keydown(int16_t pitch, uint8_t velo) {
