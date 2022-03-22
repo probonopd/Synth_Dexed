@@ -406,15 +406,6 @@ void Dexed::setSustain(bool s)
     return;
 
   sustain = s;
-
-  if (!sustain) {
-    for (int note = 0; note < max_notes; note++) {
-      if (voices[note].sustained && !voices[note].keydown) {
-        voices[note].dx7_note->keyup();
-        voices[note].sustained = false;
-      }
-    }
-  }
 }
 
 bool Dexed::getSustain(void)
