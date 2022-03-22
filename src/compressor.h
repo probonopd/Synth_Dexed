@@ -22,7 +22,7 @@ class Compressor
   //GUI: inputs:1, outputs:1  //this line used for automatic generation of GUI node
   public:
     //constructor
-    Compressor {
+    Compressor() {
 	  setDefaultValues(AUDIO_SAMPLE_RATE);   resetStates();
     };
 	
@@ -41,7 +41,7 @@ class Compressor
       if (!audio_block) return;
 
       //apply a high-pass filter to get rid of the DC offset
-      if (use_HP_prefilter) arm_biquad_cascade_df1_f32(&hp_filt_struct, audio_block->data, audio_block->data, audio_block->length);
+      if (use_HP_prefilter) arm_biquad_cascade_df1_f32(&hp_filt_struct, audio_block, audio_block, len);
       
       //apply the pre-gain...a negative gain value will disable
       if (pre_gain > 0.0f) arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
@@ -71,7 +71,7 @@ class Compressor
     // Here's the method that estimates the level of the audio (in dB)
     // It squares the signal and low-pass filters to get a time-averaged
     // signal power.  It then 
-    void calcAudioLevel_dB(audio_block_f32_t *wav_block, audio_block_f32_t *level_dB_block, uint16_t len) { 
+    void calcAudioLevel_dB(float32_t *wav_block, float32_t *level_dB_block, uint16_t len) { 
     	
       // calculate the instantaneous signal power (square the signal)
       float32_t *wav_pow_block = new float32_t[len];
@@ -79,7 +79,7 @@ class Compressor
 
       // low-pass filter and convert to dB
       float c1 = level_lp_const, c2 = 1.0f - c1; //prepare constants
-      for (int i = 0; i < wav_pow_block->length; i++) {
+      for (int i = 0; i < len; i++) {
         // first-order low-pass filter to get a running estimate of the average power
         wav_pow_block[i] = c1*prev_level_lp_pow + c2*wav_pow_block[i];
         
@@ -131,30 +131,30 @@ class Compressor
       
     //Compute the instantaneous desired gain, including the compression ratio and
     //threshold for where the comrpession kicks in
-    void calcInstantaneousTargetGain(audio_block_f32_t *audio_level_dB_block, audio_block_f32_t *inst_targ_gain_dB_block) {
+    void calcInstantaneousTargetGain(float32_t *audio_level_dB_block, float32_t *inst_targ_gain_dB_block, uint16_t len) {
       
       // how much are we above the compression threshold?
-      audio_block_f32_t *above_thresh_dB_block = AudioStream_F32::allocate_f32(); 
-      arm_offset_f32(audio_level_dB_block->data,  //CMSIS DSP for "add a constant value to all elements"
+      float32_t *above_thresh_dB_block = new float(len); 
+      arm_offset_f32(audio_level_dB_block,  //CMSIS DSP for "add a constant value to all elements"
         -thresh_dBFS,                         //this is the value to be added
-        above_thresh_dB_block->data,          //this is the output
-        audio_level_dB_block->length);  
+        above_thresh_dB_block,          //this is the output
+        len);  
 
       // scale by the compression ratio...this is what the output level should be (this is our target level)
-      arm_scale_f32(above_thresh_dB_block->data,    //CMSIS DSP for "multiply all elements by a constant value"
+      arm_scale_f32(above_thresh_dB_block,    //CMSIS DSP for "multiply all elements by a constant value"
            1.0f / comp_ratio,                       //this is the value to be multiplied 
-           inst_targ_gain_dB_block->data,           //this is the output
-           above_thresh_dB_block->length); 
+           inst_targ_gain_dB_block,           //this is the output
+           len); 
 
       // compute the instantaneous gain...which is the difference between the target level and the original level
-      arm_sub_f32(inst_targ_gain_dB_block->data,  //CMSIS DSP for "subtract two vectors element-by-element"
-           above_thresh_dB_block->data,           //this is the vector to be subtracted
-           inst_targ_gain_dB_block->data,         //this is the output
-           inst_targ_gain_dB_block->length);
+      arm_sub_f32(inst_targ_gain_dB_block,  //CMSIS DSP for "subtract two vectors element-by-element"
+           above_thresh_dB_block,           //this is the vector to be subtracted
+           inst_targ_gain_dB_block,         //this is the output
+           len);
 
       // limit the target gain to attenuation only (this part of the compressor should not make things louder!)
-      for (int i=0; i < inst_targ_gain_dB_block->length; i++) {
-        if (inst_targ_gain_dB_block->data[i] > 0.0f) inst_targ_gain_dB_block->data[i] = 0.0f;
+      for (int i=0; i < len; i++) {
+        if (inst_targ_gain_dB_block[i] > 0.0f) inst_targ_gain_dB_block[i] = 0.0f;
       }
 
       // release memory before returning
@@ -166,7 +166,7 @@ class Compressor
 
     //this method applies the "attack" and "release" constants to smooth the
     //target gain level through time.
-    void calcSmoothedGain_dB(float32_t *inst_targ_gain_dB_block, float32_t *gain_dB_block uint16_t len) {
+    void calcSmoothedGain_dB(float32_t *inst_targ_gain_dB_block, float32_t *gain_dB_block, uint16_t len) {
       float32_t gain_dB;
       float32_t one_minus_attack_const = 1.0f - attack_const;
       float32_t one_minus_release_const = 1.0f - release_const;
@@ -247,7 +247,7 @@ class Compressor
     
   private:
     //state-related variables
-    audio_block_f32_t *inputQueueArray_f32[1]; //memory pointer for the input to this module
+    float32_t *inputQueueArray_f32[1]; //memory pointer for the input to this module
     float32_t prev_level_lp_pow = 1.0;
     float32_t prev_gain_dB = 0.0; //last gain^2 used
 
