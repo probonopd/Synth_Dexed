@@ -16,14 +16,16 @@
 #define _COMPRESSOR_H
 
 #include <arm_math.h> //ARM DSP extensions.  https://www.keil.com/pack/doc/CMSIS/DSP/html/index.html
+#include "synth.h"
 
 class Compressor
 {
   //GUI: inputs:1, outputs:1  //this line used for automatic generation of GUI node
   public:
     //constructor
-    Compressor() {
-	  setDefaultValues(AUDIO_SAMPLE_RATE);   resetStates();
+    Compressor(const float sample_rate_Hz) {
+	  //setDefaultValues(AUDIO_SAMPLE_RATE);   resetStates();
+	  setDefaultValues(sample_rate_Hz);   resetStates();
     };
 	
     void setDefaultValues(const float sample_rate_Hz) {
@@ -200,7 +202,7 @@ class Compressor
     void setPreGain(float g) {  pre_gain = g;  }
     void setPreGain_dB(float gain_dB) { setPreGain(pow(10.0, gain_dB / 20.0));  }
     void setCompressionRatio(float cr) {
-      comp_ratio = max(0.001, cr); //limit to positive values
+      comp_ratio = max(0.001f, cr); //limit to positive values
       updateThresholdAndCompRatioConstants();
     }
     void setAttack_sec(float a, float fs_Hz) {

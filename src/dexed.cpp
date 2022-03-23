@@ -36,9 +36,12 @@
 #include "porta.h"
 //#include <dsp/support_functions.h>
 #include <arm_math.h>
+#include "compressor.h"
 
 Dexed::Dexed(uint8_t maxnotes, int rate)
 {
+  rate=rate;
+
   Exp2::init();
   Tanh::init();
   Sin::init();
@@ -69,6 +72,8 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
 
   xrun = 0;
   render_time_max = 0;
+
+  comp = new Compressor(float(rate));
 }
 
 Dexed::~Dexed()

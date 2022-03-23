@@ -326,7 +326,7 @@ class Dexed
     Lfo lfo;
     FmCore* engineMsfa;
     void getSamples(uint16_t n_samples, int16_t* buffer);
-    Compressor comp;
+    Compressor* comp;
 };
 
 #endif
