@@ -74,6 +74,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   render_time_max = 0;
 
   comp = new Compressor(float(rate));
+  use_compressor=false;
 }
 
 Dexed::~Dexed()
@@ -217,6 +218,9 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
       vuSignal = 0.0;
   }
 #endif
+  
+  if(use_compressor==true)
+    comp->doCompression(sumbuf, n_samples);
 
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, n_samples);
@@ -1503,4 +1507,14 @@ void Dexed::getName(char* buffer)
 {
   strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], buffer, 10);
   buffer[10] = '\0';
+}
+
+void Dexed::setCompressor(bool comp)
+{
+  use_compressor=comp;
+}
+
+bool Dexed::compressorEnabled(void)
+{
+  return(use_compressor);
 }
