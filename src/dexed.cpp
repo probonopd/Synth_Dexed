@@ -147,7 +147,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 {
   uint16_t i, j;
   uint8_t note;
-  float sumbuf[n_samples];
+  float32_t sumbuf[n_samples];
 #ifdef USE_SIMPLE_COMPRESSOR
   float s;
   const double decayFactor = 0.99992;

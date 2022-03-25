@@ -25,7 +25,8 @@ class Compressor
     //constructor
     Compressor(const float sample_rate_Hz) {
 	  //setDefaultValues(AUDIO_SAMPLE_RATE);   resetStates();
-	  setDefaultValues(sample_rate_Hz);   resetStates();
+	  setDefaultValues(sample_rate_Hz);
+          resetStates();
     };
 	
     void setDefaultValues(const float sample_rate_Hz) {
@@ -38,15 +39,20 @@ class Compressor
 
 
     //here's the method that does all the work
-    void doCompression(float32_t *audio_block,uint16_t len) {
+    void doCompression(float32_t *audio_block, uint16_t len) {
       //Serial.println("AudioEffectGain_F32: updating.");  //for debugging.
-      if (!audio_block) return;
+      if (!audio_block) {
+        printf("No audio_block available for Compressor!\n");
+        return;
+      }
 
       //apply a high-pass filter to get rid of the DC offset
-      if (use_HP_prefilter) arm_biquad_cascade_df1_f32(&hp_filt_struct, audio_block, audio_block, len);
+      if (use_HP_prefilter)
+        arm_biquad_cascade_df1_f32(&hp_filt_struct, audio_block, audio_block, len);
       
       //apply the pre-gain...a negative gain value will disable
-      if (pre_gain > 0.0f) arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
+      if (pre_gain > 0.0f)
+        arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
 
       //calculate the level of the audio (ie, calculate a smoothed version of the signal power)
       float32_t* audio_level_dB_block = new float32_t[len];
