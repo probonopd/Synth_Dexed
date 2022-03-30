@@ -174,6 +174,16 @@ class Dexed
     void ControllersRefresh(void);
     void setCompressor(bool comp);
     bool getCompressor(void);
+    void setCompressorPreGain_dB(float32_t pre_gain);
+    void setCompressorAttack_sec(float32_t attack_sec);
+    void setCompressorRelease_sec(float32_t release_sec);
+    void setCompressorThresh_dBFS(float32_t thresh_dBFS);
+    void setCompressionRatio(float32_t comp_ratio);
+    float32_t getCompressorPreGain_dB(void);
+    float32_t getCompressorAttack_sec(void);
+    float32_t getCompressorRelease_sec(void);
+    float32_t getCompressorThresh_dBFS(void);
+    float32_t getCompressionRatio(void);
 
     // Sound methods
     void keyup(int16_t pitch);
@@ -310,6 +320,7 @@ class Dexed
       03, 48,                                                                             // pitch_mod_sensitivity, transpose
       73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
     };
+    float32_t samplerate;
     uint8_t data[NUM_VOICE_PARAMETERS];
     uint8_t max_notes;
     PluginFx fx;
@@ -330,7 +341,7 @@ class Dexed
     void getSamples(uint16_t n_samples, int16_t* buffer);
     void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);
     bool use_compressor;
-    Compressor* comp;
+    Compressor* compressor;
 };
 
 #endif

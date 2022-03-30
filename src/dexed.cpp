@@ -39,7 +39,7 @@
 
 Dexed::Dexed(uint8_t maxnotes, int rate)
 {
-  rate=rate;
+  samplerate=float32_t(rate);
 
   Exp2::init();
   Tanh::init();
@@ -72,7 +72,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   xrun = 0;
   render_time_max = 0;
 
-  comp = new Compressor(float(rate));
+  compressor = new Compressor(samplerate);
   use_compressor=false;
 }
 
@@ -202,7 +202,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
   }
 
   if(use_compressor==true)
-    comp->doCompression(sumbuf,n_samples);
+    compressor->doCompression(sumbuf,n_samples);
 
   fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
 
@@ -1508,12 +1508,62 @@ void Dexed::getName(char* buffer)
   buffer[10] = '\0';
 }
 
-void Dexed::setCompressor(bool comp)
+void Dexed::setCompressor(bool enable_compressor)
 {
-  use_compressor=comp;
+  use_compressor=enable_compressor;
 }
 
 bool Dexed::getCompressor(void)
 {
   return(use_compressor);
+}
+
+void Dexed::setCompressorPreGain_dB(float32_t pre_gain)
+{
+  compressor->setPreGain_dB(pre_gain);
+}
+
+void Dexed::setCompressorAttack_sec(float32_t attack_sec)
+{
+  compressor->setAttack_sec(attack_sec,samplerate);
+}
+
+void Dexed::setCompressorRelease_sec(float32_t release_sec)
+{
+  compressor->setRelease_sec(release_sec,samplerate);
+}
+
+void Dexed::setCompressorThresh_dBFS(float32_t thresh_dBFS)
+{
+  compressor->setThresh_dBFS(thresh_dBFS);
+}
+
+void Dexed::setCompressionRatio(float32_t comp_ratio)
+{
+  compressor->setCompressionRatio(comp_ratio);
+}
+
+float32_t Dexed::getCompressorPreGain_dB(void)
+{
+  return(compressor->getPreGain_dB());
+}
+
+float32_t Dexed::getCompressorAttack_sec(void)
+{
+  return(compressor->getAttack_sec());
+}
+
+float32_t Dexed::getCompressorRelease_sec(void)
+{
+  return(compressor->getRelease_sec());
+}
+
+float32_t Dexed::getCompressorThresh_dBFS(void)
+{
+  return(compressor->getThresh_dBFS());
+}
+
+float32_t Dexed::getCompressionRatio(void)
+{
+  return(compressor->getCompressionRatio());
 }
