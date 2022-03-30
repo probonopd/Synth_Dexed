@@ -23,6 +23,8 @@
 
 */
 
+#include <arm_math.h>
+#include <limits.h>
 #include "synth.h"
 #include "dexed.h"
 #include "fm_core.h"
@@ -32,10 +34,7 @@
 #include "controllers.h"
 #include "PluginFx.h"
 #include <unistd.h>
-#include <limits.h>
 #include "porta.h"
-//#include <dsp/support_functions.h>
-#include <arm_math.h>
 #include "compressor.h"
 
 Dexed::Dexed(uint8_t maxnotes, int rate)
@@ -202,6 +201,9 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     }
   }
 
+  if(use_compressor==true)
+    comp->doCompression(sumbuf,n_samples);
+
   fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
 
 #ifdef USE_SIMPLE_COMPRESSOR
@@ -219,9 +221,6 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
   }
 #endif
   
-  if(use_compressor==true)
-    comp->doCompression(sumbuf, n_samples);
-
   //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
   arm_float_to_q15(sumbuf, buffer, n_samples);
 }
@@ -1514,7 +1513,7 @@ void Dexed::setCompressor(bool comp)
   use_compressor=comp;
 }
 
-bool Dexed::compressorEnabled(void)
+bool Dexed::getCompressor(void)
 {
   return(use_compressor);
 }

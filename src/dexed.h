@@ -173,7 +173,7 @@ class Dexed
     void resetRenderTimeMax(void);
     void ControllersRefresh(void);
     void setCompressor(bool comp);
-    bool compressorEnabled(void);
+    bool getCompressor(void);
 
     // Sound methods
     void keyup(int16_t pitch);
@@ -328,8 +328,9 @@ class Dexed
     Lfo lfo;
     FmCore* engineMsfa;
     void getSamples(uint16_t n_samples, int16_t* buffer);
-    Compressor* comp;
+    void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);
     bool use_compressor;
+    Compressor* comp;
 };
 
 #endif
