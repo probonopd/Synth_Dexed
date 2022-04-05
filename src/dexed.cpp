@@ -22,6 +22,7 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
+#define USE_DEXED_COMPRESSOR 1
 
 #include <arm_math.h>
 #include <limits.h>
@@ -142,15 +143,10 @@ void Dexed::deactivate(void)
   panic();
 }
 
-void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
+void Dexed::getSamples(float32_t* buffer, uint16_t n_samples)
 {
   uint16_t i, j;
   uint8_t note;
-  float32_t sumbuf[n_samples];
-#ifdef USE_SIMPLE_COMPRESSOR
-  float s;
-  const double decayFactor = 0.99992;
-#endif
 
   if (refreshVoice)
   {
@@ -170,7 +166,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     for (uint8_t j = 0; j < _N_; ++j)
     {
       audiobuf.get()[j] = 0;
-      sumbuf[i + j] = 0.0;
+      buffer[i + j] = 0.0;
     }
 
     int32_t lfovalue = lfo.getsample();
@@ -184,7 +180,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
 
         for (j = 0; j < _N_; ++j)
         {
-          sumbuf[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9) / 32768.0;
+          buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9) / 32768.0;
           audiobuf.get()[j] = 0;
           /*
                     int32_t val = audiobuf.get()[j];
@@ -193,7 +189,7 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
                     float f = ((float) clip_val) / (float) 0x8000;
                     if ( f > 1.0 ) f = 1.0;
                     if ( f < -1.0 ) f = -1.0;
-                    sumbuf[j] += f;
+                    buffer[j] += f;
                     audiobuf.get()[j] = 0;
           */
         }
@@ -201,28 +197,21 @@ void Dexed::getSamples(uint16_t n_samples, int16_t* buffer)
     }
   }
 
+#if defined USE_DEXED_COMPRESSOR
   if(use_compressor==true)
-    compressor->doCompression(sumbuf,n_samples);
-
-  fx.process(sumbuf, n_samples); // Needed for fx.Gain()!!!
-
-#ifdef USE_SIMPLE_COMPRESSOR
-  // mild compression
-  for (i = 0; i < n_samples; i++)
-  {
-    s = abs(sumbuf[i]);
-    if (s > vuSignal)
-      vuSignal = s;
-    //else if (vuSignal > 0.001f)
-    else if (vuSignal > 0.0005f)
-      vuSignal *= decayFactor;
-    else
-      vuSignal = 0.0;
-  }
+    compressor->doCompression(buffer,n_samples);
 #endif
+
+  fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
+
+}
+
+void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
+{
+  float32_t tmp[n_samples];
   
-  //arm_scale_f32(sumbuf, 0.00015, sumbuf, AUDIO_BLOCK_SAMPLES);
-  arm_float_to_q15(sumbuf, buffer, n_samples);
+  getSamples(tmp, n_samples);
+  arm_float_to_q15(tmp, (q15_t*)buffer, n_samples);
 }
 
 void Dexed::keydown(int16_t pitch, uint8_t velo) {

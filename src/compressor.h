@@ -15,6 +15,8 @@
 #ifndef _COMPRESSOR_H
 #define _COMPRESSOR_H
 
+#ifdef USE_DEXED_COMPRESSOR
+
 #include <arm_math.h> //ARM DSP extensions.  https://www.keil.com/pack/doc/CMSIS/DSP/html/index.html
 #include "synth.h"
 
@@ -422,4 +424,4 @@ class Compressor
 };
 
 #endif
-
+#endif

@@ -338,10 +338,13 @@ class Dexed
     VoiceStatus voiceStatus;
     Lfo lfo;
     FmCore* engineMsfa;
-    void getSamples(uint16_t n_samples, int16_t* buffer);
+    void getSamples(float32_t* buffer, uint16_t n_samples);
+    void getSamples(int16_t* buffer, uint16_t n_samples);
     void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);
     bool use_compressor;
+#ifdef USE_DEXED_COMPRESSOR
     Compressor* compressor;
+#endif
 };
 
 #endif

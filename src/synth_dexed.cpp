@@ -37,17 +37,17 @@ void AudioSynthDexed::update(void)
     in_update = true;
 
   elapsedMicros render_time;
-  audio_block_t *lblock;
+  audio_block_t *block;
 
-  lblock = allocate();
+  block = allocate();
 
-  if (!lblock)
+  if (!block)
   {
     in_update = false;
     return;
   }
 
-  getSamples(AUDIO_BLOCK_SAMPLES, lblock->data);
+  getSamples(block->data, AUDIO_BLOCK_SAMPLES);
 
   if (render_time > audio_block_time_us) // everything greater audio_block_time_us (2.9ms for buffer size of 128) is a buffer underrun!
     xrun++;
@@ -55,8 +55,8 @@ void AudioSynthDexed::update(void)
   if (render_time > render_time_max)
     render_time_max = render_time;
 
-  transmit(lblock, 0);
-  release(lblock);
+  transmit(block, 0);
+  release(block);
 
   in_update = false;
 };
