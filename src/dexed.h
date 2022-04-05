@@ -27,7 +27,8 @@
 #define DEXED_H_INCLUDED
 
 #include <stdint.h>
-#include <stdlib.h>
+#include <cstdlib>
+#include <arm_math.h>
 #if defined(TEENSYDUINO)
 #include <Audio.h>
 #endif

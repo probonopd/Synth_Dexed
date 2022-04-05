@@ -26,6 +26,8 @@
 
 #include <arm_math.h>
 #include <limits.h>
+#include <cstdlib>
+#include <stdint.h>
 #include "synth.h"
 #include "dexed.h"
 #include "fm_core.h"
