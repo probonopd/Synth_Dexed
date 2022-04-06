@@ -22,7 +22,6 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
-#define USE_DEXED_COMPRESSOR 1
 
 #include <arm_math.h>
 #include <limits.h>
@@ -75,8 +74,10 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   xrun = 0;
   render_time_max = 0;
 
+#ifdef USE_DEXED_COMPRESSOR
   compressor = new Compressor(samplerate);
   use_compressor=false;
+#endif
 }
 
 Dexed::~Dexed()
@@ -1499,6 +1500,7 @@ void Dexed::getName(char* buffer)
   buffer[10] = '\0';
 }
 
+#ifdef USE_DEXED_COMPRESSOR
 void Dexed::setCompressor(bool enable_compressor)
 {
   use_compressor=enable_compressor;
@@ -1558,3 +1560,4 @@ float32_t Dexed::getCompressionRatio(void)
 {
   return(compressor->getCompressionRatio());
 }
+#endif
