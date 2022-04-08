@@ -148,12 +148,9 @@ void Dexed::deactivate(void)
 
 void Dexed::getSamples(float32_t* buffer, uint16_t n_samples)
 {
-  uint16_t i, j;
-  uint8_t note;
-
   if (refreshVoice)
   {
-    for (i = 0; i < max_notes; i++)
+    for (uint8_t i = 0; i < max_notes; i++)
     {
       if ( voices[i].live )
         voices[i].dx7_note->update(data, voices[i].midi_note, voices[i].velocity, voices[i].porta, &controllers);
@@ -162,51 +159,41 @@ void Dexed::getSamples(float32_t* buffer, uint16_t n_samples)
     refreshVoice = false;
   }
 
-  for (i = 0; i < n_samples; i += _N_)
+  arm_fill_f32(0.0, buffer, n_samples);
+
+  for (uint16_t i = 0; i < n_samples; i += _N_)
   {
     AlignedBuf<int32_t, _N_> audiobuf;
 
     for (uint8_t j = 0; j < _N_; ++j)
     {
       audiobuf.get()[j] = 0;
-      buffer[i + j] = 0.0;
     }
 
     int32_t lfovalue = lfo.getsample();
     int32_t lfodelay = lfo.getdelay();
 
-    for (note = 0; note < max_notes; note++)
+    for (uint8_t note = 0; note < max_notes; note++)
     {
       if (voices[note].live)
       {
         voices[note].dx7_note->compute(audiobuf.get(), lfovalue, lfodelay, &controllers);
 
-        for (j = 0; j < _N_; ++j)
+        for (uint8_t j = 0; j < _N_; ++j)
         {
           buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9) / 32768.0;
           audiobuf.get()[j] = 0;
-          /*
-                    int32_t val = audiobuf.get()[j];
-                    val = val >> 4;
-                    int32_t clip_val = val < -(1 << 24) ? 0x8000 : val >= (1 << 24) ? 0x7fff : val >> 9;
-                    float f = ((float) clip_val) / (float) 0x8000;
-                    if ( f > 1.0 ) f = 1.0;
-                    if ( f < -1.0 ) f = -1.0;
-                    buffer[j] += f;
-                    audiobuf.get()[j] = 0;
-          */
         }
       }
     }
   }
 
+  fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
+
 #if defined USE_DEXED_COMPRESSOR
   if(use_compressor==true)
     compressor->doCompression(buffer,n_samples);
 #endif
-
-  fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
-
 }
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
