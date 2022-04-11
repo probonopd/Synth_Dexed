@@ -86,7 +86,7 @@ inline static T max(const T& a, const T& b) {
   #define M_PI 3.14159265358979323846
 #endif
 
-#define constrain(amt, low, high) ({ \
+#define myconstrain(amt, low, high) ({ \
   __typeof__(amt) _amt = (amt); \
   __typeof__(low) _low = (low); \
   __typeof__(high) _high = (high); \
