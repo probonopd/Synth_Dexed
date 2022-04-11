@@ -97,7 +97,7 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
 {
   uint8_t i=0;
   
-  max_notes=myconstrain(max_notes,0,_MAX_NOTES);
+  max_notes=constrain(max_notes,0,_MAX_NOTES);
 
 #ifdef DEBUG
   Serial.print("Allocating memory for ");
@@ -117,7 +117,7 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
     delete(voices);
   }
 
-  max_notes=myconstrain(new_max_notes,0,_MAX_NOTES);
+  max_notes=constrain(new_max_notes,0,_MAX_NOTES);
 
   if(max_notes>0)
   {
@@ -318,7 +318,7 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
 void Dexed::keyup(int16_t pitch) {
   uint8_t note;
 
-  pitch = myconstrain(pitch, 0, 127);
+  pitch = constrain(pitch, 0, 127);
 
   pitch += data[144] - TRANSPOSE_FIX;
 
@@ -630,13 +630,13 @@ bool Dexed::getVoiceData(uint8_t* data_copy)
 
 void Dexed::setVoiceDataElement(uint8_t address, uint8_t value)
 {
-  address = myconstrain(address, 0, NUM_VOICE_PARAMETERS);
+  address = constrain(address, 0, NUM_VOICE_PARAMETERS);
   data[address] = value;
 }
 
 uint8_t Dexed::getVoiceDataElement(uint8_t address)
 {
-  address = myconstrain(address, 0, NUM_VOICE_PARAMETERS);
+  address = constrain(address, 0, NUM_VOICE_PARAMETERS);
   return (data[address]);
 }
 
@@ -670,8 +670,8 @@ void Dexed::setPBController(uint8_t pb_range, uint8_t pb_step)
   Serial.println(F("Dexed::setPBController"));
 #endif
 
-  pb_range = myconstrain(pb_range, 0, 12);
-  pb_step = myconstrain(pb_step, 0, 12);
+  pb_range = constrain(pb_range, 0, 12);
+  pb_step = constrain(pb_step, 0, 12);
 
   controllers.values_[kControllerPitchRange] = pb_range;
   controllers.values_[kControllerPitchStep] = pb_step;
@@ -685,9 +685,9 @@ void Dexed::setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode
   Serial.println(F("Dexed::setMWController"));
 #endif
 
-  mw_range = myconstrain(mw_range, 0, 99);
-  mw_assign = myconstrain(mw_assign, 0, 7);
-  mw_mode = myconstrain(mw_mode, 0, MIDI_CONTROLLER_MODE_MAX);
+  mw_range = constrain(mw_range, 0, 99);
+  mw_assign = constrain(mw_assign, 0, 7);
+  mw_mode = constrain(mw_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.wheel.setRange(mw_range);
   controllers.wheel.setTarget(mw_assign);
@@ -702,9 +702,9 @@ void Dexed::setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode
   Serial.println(F("Dexed::setFCController"));
 #endif
 
-  fc_range = myconstrain(fc_range, 0, 99);
-  fc_assign = myconstrain(fc_assign, 0, 7);
-  fc_mode = myconstrain(fc_mode, 0, MIDI_CONTROLLER_MODE_MAX);
+  fc_range = constrain(fc_range, 0, 99);
+  fc_assign = constrain(fc_assign, 0, 7);
+  fc_mode = constrain(fc_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.foot.setRange(fc_range);
   controllers.foot.setTarget(fc_assign);
@@ -719,9 +719,9 @@ void Dexed::setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode
   Serial.println(F("Dexed::setBCController"));
 #endif
 
-  bc_range = myconstrain(bc_range, 0, 99);
-  bc_assign = myconstrain(bc_assign, 0, 7);
-  bc_mode = myconstrain(bc_mode, 0, MIDI_CONTROLLER_MODE_MAX);
+  bc_range = constrain(bc_range, 0, 99);
+  bc_assign = constrain(bc_assign, 0, 7);
+  bc_mode = constrain(bc_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.breath.setRange(bc_range);
   controllers.breath.setTarget(bc_assign);
@@ -736,9 +736,9 @@ void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode
   Serial.println(F("Dexed::setATController"));
 #endif
 
-  at_range = myconstrain(at_range, 0, 99);
-  at_assign = myconstrain(at_assign, 0, 7);
-  at_mode = myconstrain(at_mode, 0, MIDI_CONTROLLER_MODE_MAX);
+  at_range = constrain(at_range, 0, 99);
+  at_assign = constrain(at_assign, 0, 7);
+  at_mode = constrain(at_mode, 0, MIDI_CONTROLLER_MODE_MAX);
 
   controllers.at.setRange(at_range);
   controllers.at.setTarget(at_assign);
@@ -749,9 +749,9 @@ void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode
 
 void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time)
 {
-  portamento_mode = myconstrain(portamento_mode, 0, 1);
-  portamento_glissando = myconstrain(portamento_glissando, 0, 1);
-  portamento_mode = myconstrain(portamento_mode, 0, 99);
+  portamento_mode = constrain(portamento_mode, 0, 1);
+  portamento_glissando = constrain(portamento_glissando, 0, 1);
+  portamento_mode = constrain(portamento_mode, 0, 99);
 
   controllers.portamento_cc = portamento_time;
   controllers.portamento_enable_cc = portamento_mode > 63;
@@ -788,7 +788,7 @@ void Dexed::ControllersRefresh(void)
 
 void Dexed::setMasterTune(int8_t mastertune)
 {
-  mastertune = myconstrain(mastertune, -99, 99);
+  mastertune = constrain(mastertune, -99, 99);
 
   controllers.masterTune = (int(mastertune / 100.0 * 0x4000) << 11) * (1.0 / 12.0);
 }
@@ -800,7 +800,7 @@ int8_t Dexed::getMasterTune(void)
 
 void Dexed::setModWheel(uint8_t value)
 {
-  value = myconstrain(value, 0, 127);
+  value = constrain(value, 0, 127);
 
   controllers.modwheel_cc = value;
 }
@@ -812,7 +812,7 @@ uint8_t Dexed::getModWheel(void)
 
 void Dexed::setBreathController(uint8_t value)
 {
-  value = myconstrain(value, 0, 127);
+  value = constrain(value, 0, 127);
 
   controllers.breath_cc = value;
 }
@@ -824,7 +824,7 @@ uint8_t Dexed::getBreathController(void)
 
 void Dexed::setFootController(uint8_t value)
 {
-  value = myconstrain(value, 0, 127);
+  value = constrain(value, 0, 127);
 
   controllers.foot_cc = value;
 }
@@ -836,7 +836,7 @@ uint8_t Dexed::getFootController(void)
 
 void Dexed::setAftertouch(uint8_t value)
 {
-  value = myconstrain(value, 0, 127);
+  value = constrain(value, 0, 127);
 
   controllers.aftertouch_cc = value;
 }
@@ -848,7 +848,7 @@ uint8_t Dexed::getAftertouch(void)
 
 void Dexed::setPitchbend(int16_t value)
 {
-  value = myconstrain(value, -8192, 8191);
+  value = constrain(value, -8192, 8191);
 
   controllers.values_[kControllerPitch] = value + 0x2000; // -8192 to +8191 --> 0 to 16383
 }
@@ -860,7 +860,7 @@ int16_t Dexed::getPitchbend(void)
 
 void Dexed::setPitchbendRange(uint8_t range)
 {
-  range = myconstrain(range, 0, 12);
+  range = constrain(range, 0, 12);
 
   controllers.values_[kControllerPitchRange] = range;
 }
@@ -872,7 +872,7 @@ uint8_t Dexed::getPitchbendRange(void)
 
 void Dexed::setPitchbendStep(uint8_t step)
 {
-  step = myconstrain(step, 0, 12);
+  step = constrain(step, 0, 12);
 
   controllers.values_[kControllerPitchStep] = step;
 }
@@ -884,7 +884,7 @@ uint8_t Dexed::getPitchbendStep(void)
 
 void Dexed::setModWheelRange(uint8_t range)
 {
-  range = myconstrain(range, 0, 12);
+  range = constrain(range, 0, 12);
 
   controllers.wheel.setRange(range);
 }
@@ -896,7 +896,7 @@ uint8_t Dexed::getModWheelRange(void)
 
 void Dexed::setModWheelTarget(uint8_t target)
 {
-  target = myconstrain(target, 0, 7);
+  target = constrain(target, 0, 7);
 
   controllers.wheel.setTarget(target);
 }
@@ -908,7 +908,7 @@ uint8_t Dexed::getModWheelTarget(void)
 
 void Dexed::setFootControllerRange(uint8_t range)
 {
-  range = myconstrain(range, 0, 12);
+  range = constrain(range, 0, 12);
 
   controllers.foot.setRange(range);
 }
@@ -920,7 +920,7 @@ uint8_t Dexed::getFootControllerRange(void)
 
 void Dexed::setFootControllerTarget(uint8_t target)
 {
-  target = myconstrain(target, 0, 7);
+  target = constrain(target, 0, 7);
 
   controllers.foot.setTarget(target);
 }
@@ -932,7 +932,7 @@ uint8_t Dexed::getFootControllerTarget(void)
 
 void Dexed::setBreathControllerRange(uint8_t range)
 {
-  range = myconstrain(range, 0, 12);
+  range = constrain(range, 0, 12);
 
   controllers.breath.setRange(range);
 }
@@ -944,7 +944,7 @@ uint8_t Dexed::getBreathControllerRange(void)
 
 void Dexed::setBreathControllerTarget(uint8_t target)
 {
-  target = myconstrain(target, 0, 7);
+  target = constrain(target, 0, 7);
 
   controllers.breath.setTarget(target);
 }
@@ -956,7 +956,7 @@ uint8_t Dexed::getBreathControllerTarget(void)
 
 void Dexed::setAftertouchRange(uint8_t range)
 {
-  range = myconstrain(range, 0, 12);
+  range = constrain(range, 0, 12);
 
   controllers.at.setRange(range);
 }
@@ -968,7 +968,7 @@ uint8_t Dexed::getAftertouchRange(void)
 
 void Dexed::setAftertouchTarget(uint8_t target)
 {
-  target = myconstrain(target, 0, 7);
+  target = constrain(target, 0, 7);
 
   controllers.at.setTarget(target);
 }
@@ -1010,7 +1010,7 @@ float Dexed::getGain(void)
 
 void Dexed::setOPRateAll(uint8_t rate)
 {
-  rate = myconstrain(rate, 0, 99);
+  rate = constrain(rate, 0, 99);
 
   for (uint8_t op = 0; op < 6; op++)
   {
@@ -1023,7 +1023,7 @@ void Dexed::setOPRateAll(uint8_t rate)
 
 void Dexed::setOPLevelAll(uint8_t level)
 {
-  level = myconstrain(level, 0, 99);
+  level = constrain(level, 0, 99);
 
   for (uint8_t op = 0; op < 6; op++)
   {
@@ -1038,8 +1038,8 @@ void Dexed::setOPRateAllModulator(uint8_t step, uint8_t rate)
 {
   uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
 
-  rate = myconstrain(rate, 0, 99);
-  step = myconstrain(step, 0, 3);
+  rate = constrain(rate, 0, 99);
+  step = constrain(step, 0, 3);
 
   for (uint8_t op = 0; op < 6; op++)
   {
@@ -1052,8 +1052,8 @@ void Dexed::setOPLevelAllModulator(uint8_t step, uint8_t level)
 {
   uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
 
-  step = myconstrain(step, 0, 3);
-  level = myconstrain(level, 0, 99);
+  step = constrain(step, 0, 3);
+  level = constrain(level, 0, 99);
 
   for (uint8_t op = 0; op < 6; op++)
   {
@@ -1066,8 +1066,8 @@ void Dexed::setOPRateAllCarrier(uint8_t step, uint8_t rate)
 {
   uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
 
-  rate = myconstrain(rate, 0, 99);
-  step = myconstrain(step, 0, 3);
+  rate = constrain(rate, 0, 99);
+  step = constrain(step, 0, 3);
 
   for (uint8_t op = 0; op < 6; op++)
   {
@@ -1080,8 +1080,8 @@ void Dexed::setOPLevelAllCarrier(uint8_t step, uint8_t level)
 {
   uint8_t op_carrier = controllers.core->get_carrier_operators(data[134]); // look for carriers
 
-  level = myconstrain(level, 0, 99);
-  step = myconstrain(step, 0, 3);
+  level = constrain(level, 0, 99);
+  step = constrain(step, 0, 3);
 
   for (uint8_t op = 0; op < 6; op++)
   {
@@ -1092,266 +1092,266 @@ void Dexed::setOPLevelAllCarrier(uint8_t step, uint8_t level)
 
 void Dexed::setOPRate(uint8_t op, uint8_t step, uint8_t rate)
 {
-  op = myconstrain(op, 0, 5);
-  step = myconstrain(step, 0, 3);
-  rate = myconstrain(rate, 0, 99);
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+  rate = constrain(rate, 0, 99);
 
   data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
 }
 
 uint8_t Dexed::getOPRate(uint8_t op, uint8_t step)
 {
-  op = myconstrain(op, 0, 5);
-  step = myconstrain(step, 0, 3);
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
 
   return (data[(op * 21) + DEXED_OP_EG_R1 + step]);
 }
 
 void Dexed::setOPLevel(uint8_t op, uint8_t step, uint8_t level)
 {
-  op = myconstrain(op, 0, 5);
-  step = myconstrain(step, 0, 3);
-  level = myconstrain(level, 0, 99);
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
+  level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
 }
 
 uint8_t Dexed::getOPLevel(uint8_t op, uint8_t step)
 {
-  op = myconstrain(op, 0, 5);
-  step = myconstrain(step, 0, 3);
+  op = constrain(op, 0, 5);
+  step = constrain(step, 0, 3);
 
   return (data[(op * 21) + DEXED_OP_EG_L1 + step]);
 }
 
 void Dexed::setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t level)
 {
-  op = myconstrain(op, 0, 5);
-  level = myconstrain(level, 0, 99);
+  op = constrain(op, 0, 5);
+  level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_LEV_SCL_BRK_PT] = level;
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingBreakPoint(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_LEV_SCL_BRK_PT]);
 }
 
 void Dexed::setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t depth)
 {
-  op = myconstrain(op, 0, 5);
-  depth = myconstrain(depth, 0, 99);
+  op = constrain(op, 0, 5);
+  depth = constrain(depth, 0, 99);
 
   data[(op * 21) + DEXED_OP_SCL_LEFT_DEPTH] = depth;
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingDepthLeft(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_SCL_LEFT_DEPTH]);
 }
 
 void Dexed::setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t depth)
 {
-  op = myconstrain(op, 0, 5);
-  depth = myconstrain(depth, 0, 99);
+  op = constrain(op, 0, 5);
+  depth = constrain(depth, 0, 99);
 
   data[(op * 21) + DEXED_OP_SCL_RGHT_DEPTH] = depth;
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingDepthRight(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_SCL_RGHT_DEPTH]);
 }
 
 void Dexed::setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t curve)
 {
-  op = myconstrain(op, 0, 5);
-  curve = myconstrain(curve, 0, 3);
+  op = constrain(op, 0, 5);
+  curve = constrain(curve, 0, 3);
 
   data[(op * 21) + DEXED_OP_SCL_LEFT_CURVE] = curve;
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingCurveLeft(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_SCL_LEFT_CURVE]);
 }
 
 void Dexed::setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t curve)
 {
-  op = myconstrain(op, 0, 5);
-  curve = myconstrain(curve, 0, 3);
+  op = constrain(op, 0, 5);
+  curve = constrain(curve, 0, 3);
 
   data[(op * 21) + DEXED_OP_SCL_RGHT_CURVE] = curve;
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingCurveRight(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_SCL_RGHT_CURVE]);
 }
 
 void Dexed::setOPKeyboardRateScale(uint8_t op, uint8_t scale)
 {
-  op = myconstrain(op, 0, 5);
-  scale = myconstrain(scale, 0, 7);
+  op = constrain(op, 0, 5);
+  scale = constrain(scale, 0, 7);
 
   data[(op * 21) + DEXED_OP_OSC_RATE_SCALE] = scale;
 }
 
 uint8_t Dexed::getOPKeyboardRateScale(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_OSC_RATE_SCALE]);
 }
 
 void Dexed::setOPAmpModulationSensity(uint8_t op, uint8_t sensitivity)
 {
-  op = myconstrain(op, 0, 5);
-  sensitivity = myconstrain(sensitivity, 0, 3);
+  op = constrain(op, 0, 5);
+  sensitivity = constrain(sensitivity, 0, 3);
 
   data[(op * 21) + DEXED_OP_AMP_MOD_SENS] = sensitivity;
 }
 
 uint8_t Dexed::getOPAmpModulationSensity(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_AMP_MOD_SENS]);
 }
 
 void Dexed::setOPKeyboardVelocitySensity(uint8_t op, uint8_t sensitivity)
 {
-  op = myconstrain(op, 0, 5);
-  sensitivity = myconstrain(sensitivity, 0, 7);
+  op = constrain(op, 0, 5);
+  sensitivity = constrain(sensitivity, 0, 7);
 
   data[(op * 21) + DEXED_OP_KEY_VEL_SENS] = sensitivity;
 }
 
 uint8_t Dexed::getOPKeyboardVelocitySensity(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_KEY_VEL_SENS]);
 }
 
 void Dexed::setOPOutputLevel(uint8_t op, uint8_t level)
 {
-  op = myconstrain(op, 0, 5);
-  level = myconstrain(level, 0, 99);
+  op = constrain(op, 0, 5);
+  level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_OUTPUT_LEV] = level;
 }
 
 uint8_t Dexed::getOPOutputLevel(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_OUTPUT_LEV]);
 }
 
 void Dexed::setOPMode(uint8_t op, uint8_t mode)
 {
-  op = myconstrain(op, 0, 5);
-  mode = myconstrain(mode, 0, 1);
+  op = constrain(op, 0, 5);
+  mode = constrain(mode, 0, 1);
 
   data[(op * 21) + DEXED_OP_OSC_MODE] = mode;
 }
 
 uint8_t Dexed::getOPMode(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_OSC_MODE]);
 }
 
 void Dexed::setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse)
 {
-  op = myconstrain(op, 0, 5);
-  frq_coarse = myconstrain(frq_coarse, 0, 31);
+  op = constrain(op, 0, 5);
+  frq_coarse = constrain(frq_coarse, 0, 31);
 
   data[(op * 21) + DEXED_OP_FREQ_COARSE] = frq_coarse;
 }
 
 uint8_t Dexed::getOPFrequencyCoarse(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_FREQ_COARSE ]);
 }
 
 void Dexed::setOPFrequencyFine(uint8_t op, uint8_t frq_fine)
 {
-  op = myconstrain(op, 0, 5);
-  frq_fine = myconstrain(frq_fine, 0, 99);
+  op = constrain(op, 0, 5);
+  frq_fine = constrain(frq_fine, 0, 99);
 
   data[(op * 21) + DEXED_OP_FREQ_FINE] = frq_fine;
 }
 
 uint8_t Dexed::getOPFrequencyFine(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_FREQ_FINE]);
 }
 
 void Dexed::setOPDetune(uint8_t op, uint8_t detune)
 {
-  op = myconstrain(op, 0, 5);
-  detune = myconstrain(detune, 0, 14);
+  op = constrain(op, 0, 5);
+  detune = constrain(detune, 0, 14);
 
   data[(op * 21) + DEXED_OP_OSC_DETUNE] = detune;
 }
 
 uint8_t Dexed::getOPDetune(uint8_t op)
 {
-  op = myconstrain(op, 0, 5);
+  op = constrain(op, 0, 5);
 
   return (data[(op * 21) + DEXED_OP_OSC_DETUNE]);
 }
 
 void Dexed::setPitchRate(uint8_t step, uint8_t rate)
 {
-  step = myconstrain(step, 0, 3);
-  rate = myconstrain(rate, 0, 99);
+  step = constrain(step, 0, 3);
+  rate = constrain(rate, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_PITCH_EG_R1 + step] = rate;
 }
 
 uint8_t Dexed::getPitchRate(uint8_t step)
 {
-  step = myconstrain(step, 0, 3);
+  step = constrain(step, 0, 3);
 
   return (data[DEXED_VOICE_OFFSET + DEXED_PITCH_EG_R1 + step]);
 }
 
 void Dexed::setPitchLevel(uint8_t step, uint8_t level)
 {
-  step = myconstrain(step, 0, 3);
-  level = myconstrain(level, 0, 99);
+  step = constrain(step, 0, 3);
+  level = constrain(level, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_PITCH_EG_L1 + step] = level;
 }
 
 uint8_t Dexed::getPitchLevel(uint8_t step)
 {
-  step = myconstrain(step, 0, 3);
+  step = constrain(step, 0, 3);
 
   return (data[DEXED_VOICE_OFFSET + DEXED_PITCH_EG_L1 + step]);
 }
 
 void Dexed::setAlgorithm(uint8_t algorithm)
 {
-  algorithm  = myconstrain(algorithm, 0, 31);
+  algorithm  = constrain(algorithm, 0, 31);
 
   data[DEXED_VOICE_OFFSET + DEXED_ALGORITHM] = algorithm;
 }
@@ -1363,7 +1363,7 @@ uint8_t Dexed::getAlgorithm(void)
 
 void Dexed::setFeedback(uint8_t feedback)
 {
-  feedback  = myconstrain(feedback, 0, 31);
+  feedback  = constrain(feedback, 0, 31);
 
   data[DEXED_VOICE_OFFSET + DEXED_FEEDBACK] = feedback;
 }
@@ -1385,7 +1385,7 @@ bool Dexed::getOscillatorSync(void)
 
 void Dexed::setLFOSpeed(uint8_t speed)
 {
-  speed  = myconstrain(speed, 0, 99);
+  speed  = constrain(speed, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_SPEED] = speed;
 }
@@ -1397,7 +1397,7 @@ uint8_t Dexed::getLFOSpeed(void)
 
 void Dexed::setLFODelay(uint8_t delay)
 {
-  delay  = myconstrain(delay, 0, 99);
+  delay  = constrain(delay, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_DELAY] = delay;
 }
@@ -1409,7 +1409,7 @@ uint8_t Dexed::getLFODelay(void)
 
 void Dexed::setLFOPitchModulationDepth(uint8_t depth)
 {
-  depth = myconstrain(depth, 0, 99);
+  depth = constrain(depth, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_PITCH_MOD_DEP] = depth;
 }
@@ -1420,7 +1420,7 @@ uint8_t Dexed::getLFOPitchModulationDepth(void)
 
 void Dexed::setLFOAmpModulationDepth(uint8_t depth)
 {
-  depth = myconstrain(depth, 0, 99);
+  depth = constrain(depth, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_AMP_MOD_DEP] = depth;
 }
@@ -1442,7 +1442,7 @@ bool Dexed::getLFOSync(void)
 
 void Dexed::setLFOWaveform(uint8_t waveform)
 {
-  waveform = myconstrain(waveform, 0, 5);
+  waveform = constrain(waveform, 0, 5);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_WAVE] = waveform;
 }
@@ -1454,7 +1454,7 @@ uint8_t Dexed::getLFOWaveform(void)
 
 void Dexed::setLFOPitchModulationSensitivity(uint8_t sensitivity)
 {
-  sensitivity  = myconstrain(sensitivity, 0, 5);
+  sensitivity  = constrain(sensitivity, 0, 5);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_PITCH_MOD_SENS] = sensitivity;
 }
@@ -1466,7 +1466,7 @@ uint8_t Dexed::getLFOPitchModulationSensitivity(void)
 
 void Dexed::setTranspose(uint8_t transpose)
 {
-  transpose = myconstrain(transpose, 0, 48);
+  transpose = constrain(transpose, 0, 48);
 
   data[DEXED_VOICE_OFFSET + DEXED_TRANSPOSE] = transpose;
 }
