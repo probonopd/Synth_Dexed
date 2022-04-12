@@ -18,7 +18,8 @@
 #include <cstdlib>
 #include <stdint.h>
 
-#ifdef HAVE_NEON
+#ifdef __ARM_NEON
+#error
 #include <arm_neon.h>
 #endif
 
@@ -26,11 +27,7 @@
 #include "sin.h"
 #include "fm_op_kernel.h"
 
-#ifdef HAVE_NEON
-static bool hasNeon() {
-  return true;
-}
-
+#ifdef __ARM_NEON
 extern "C"
 void neon_fm_kernel(const int *in, const int *busin, int *out, int count,
   int32_t phase0, int32_t freq, int32_t gain1, int32_t dgain);
@@ -156,10 +153,6 @@ void neon_fm_kernel(const int *in, const int *busin, int *out, int count,
     }
   }
 }
-#else
-static bool hasNeon() {
-  return false;
-}
 #endif
 
 void FmOpKernel::compute(int32_t *output, const int32_t *input,
@@ -168,12 +161,10 @@ void FmOpKernel::compute(int32_t *output, const int32_t *input,
   int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
   int32_t gain = gain1;
   int32_t phase = phase0;
-  if (hasNeon()) {
-#ifdef HAVE_NEON
+#ifdef __ARM_NEON
     neon_fm_kernel(input, add ? output : zeros, output, _N_,
                    phase0, freq, gain, dgain);
-#endif
-  } else {
+#else
     if (add) {
       for (int i = 0; i < _N_; i++) {
         gain += dgain;
@@ -191,6 +182,7 @@ void FmOpKernel::compute(int32_t *output, const int32_t *input,
         phase += freq;
       }
     }
+#endif
   }
 }
 
@@ -199,11 +191,10 @@ void FmOpKernel::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
   int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
   int32_t gain = gain1;
   int32_t phase = phase0;
-  if (hasNeon()) {
-#ifdef HAVE_NEON
+#ifdef __ARM_NEON
     neon_fm_kernel(zeros, add ? output : zeros, output, _N_,
                    phase0, freq, gain, dgain);
-#endif
+#else
   } else {
     if (add) {
       for (int i = 0; i < _N_; i++) {
@@ -222,6 +213,7 @@ void FmOpKernel::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
         phase += freq;
       }
     }
+#endif
   }
 }
 
