@@ -19,7 +19,6 @@
 #include <stdint.h>
 
 #ifdef __ARM_NEON
-#error
 #include <arm_neon.h>
 #endif
 
