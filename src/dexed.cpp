@@ -632,6 +632,7 @@ void Dexed::setVoiceDataElement(uint8_t address, uint8_t value)
 {
   address = constrain(address, 0, NUM_VOICE_PARAMETERS);
   data[address] = value;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getVoiceDataElement(uint8_t address)
