@@ -1019,6 +1019,7 @@ void Dexed::setOPRateAll(uint8_t rate)
       data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
     }
   }
+  doRefreshVoice();
 }
 
 void Dexed::setOPLevelAll(uint8_t level)
@@ -1032,6 +1033,7 @@ void Dexed::setOPLevelAll(uint8_t level)
       data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
     }
   }
+  doRefreshVoice();
 }
 
 void Dexed::setOPRateAllModulator(uint8_t step, uint8_t rate)
@@ -1046,6 +1048,7 @@ void Dexed::setOPRateAllModulator(uint8_t step, uint8_t rate)
     if ((op_carrier & (1 << op)) == 0)
       data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
   }
+  doRefreshVoice();
 }
 
 void Dexed::setOPLevelAllModulator(uint8_t step, uint8_t level)
@@ -1060,6 +1063,7 @@ void Dexed::setOPLevelAllModulator(uint8_t step, uint8_t level)
     if ((op_carrier & (1 << op)) == 0)
       data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
   }
+  doRefreshVoice();
 }
 
 void Dexed::setOPRateAllCarrier(uint8_t step, uint8_t rate)
@@ -1074,6 +1078,7 @@ void Dexed::setOPRateAllCarrier(uint8_t step, uint8_t rate)
     if ((op_carrier & (1 << op)) == 1)
       data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
   }
+  doRefreshVoice();
 }
 
 void Dexed::setOPLevelAllCarrier(uint8_t step, uint8_t level)
@@ -1088,6 +1093,7 @@ void Dexed::setOPLevelAllCarrier(uint8_t step, uint8_t level)
     if ((op_carrier & (1 << op)) == 1)
       data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
   }
+  doRefreshVoice();
 }
 
 void Dexed::setOPRate(uint8_t op, uint8_t step, uint8_t rate)
@@ -1097,6 +1103,7 @@ void Dexed::setOPRate(uint8_t op, uint8_t step, uint8_t rate)
   rate = constrain(rate, 0, 99);
 
   data[(op * 21) + DEXED_OP_EG_R1 + step] = rate;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPRate(uint8_t op, uint8_t step)
@@ -1114,6 +1121,7 @@ void Dexed::setOPLevel(uint8_t op, uint8_t step, uint8_t level)
   level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_EG_L1 + step] = level;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPLevel(uint8_t op, uint8_t step)
@@ -1130,6 +1138,7 @@ void Dexed::setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t level)
   level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_LEV_SCL_BRK_PT] = level;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingBreakPoint(uint8_t op)
@@ -1145,6 +1154,7 @@ void Dexed::setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t depth)
   depth = constrain(depth, 0, 99);
 
   data[(op * 21) + DEXED_OP_SCL_LEFT_DEPTH] = depth;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingDepthLeft(uint8_t op)
@@ -1160,6 +1170,7 @@ void Dexed::setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t depth)
   depth = constrain(depth, 0, 99);
 
   data[(op * 21) + DEXED_OP_SCL_RGHT_DEPTH] = depth;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingDepthRight(uint8_t op)
@@ -1175,6 +1186,7 @@ void Dexed::setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t curve)
   curve = constrain(curve, 0, 3);
 
   data[(op * 21) + DEXED_OP_SCL_LEFT_CURVE] = curve;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingCurveLeft(uint8_t op)
@@ -1190,6 +1202,7 @@ void Dexed::setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t curve)
   curve = constrain(curve, 0, 3);
 
   data[(op * 21) + DEXED_OP_SCL_RGHT_CURVE] = curve;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardLevelScalingCurveRight(uint8_t op)
@@ -1205,6 +1218,7 @@ void Dexed::setOPKeyboardRateScale(uint8_t op, uint8_t scale)
   scale = constrain(scale, 0, 7);
 
   data[(op * 21) + DEXED_OP_OSC_RATE_SCALE] = scale;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardRateScale(uint8_t op)
@@ -1220,6 +1234,7 @@ void Dexed::setOPAmpModulationSensity(uint8_t op, uint8_t sensitivity)
   sensitivity = constrain(sensitivity, 0, 3);
 
   data[(op * 21) + DEXED_OP_AMP_MOD_SENS] = sensitivity;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPAmpModulationSensity(uint8_t op)
@@ -1235,6 +1250,7 @@ void Dexed::setOPKeyboardVelocitySensity(uint8_t op, uint8_t sensitivity)
   sensitivity = constrain(sensitivity, 0, 7);
 
   data[(op * 21) + DEXED_OP_KEY_VEL_SENS] = sensitivity;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPKeyboardVelocitySensity(uint8_t op)
@@ -1250,6 +1266,7 @@ void Dexed::setOPOutputLevel(uint8_t op, uint8_t level)
   level = constrain(level, 0, 99);
 
   data[(op * 21) + DEXED_OP_OUTPUT_LEV] = level;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPOutputLevel(uint8_t op)
@@ -1265,6 +1282,7 @@ void Dexed::setOPMode(uint8_t op, uint8_t mode)
   mode = constrain(mode, 0, 1);
 
   data[(op * 21) + DEXED_OP_OSC_MODE] = mode;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPMode(uint8_t op)
@@ -1280,6 +1298,7 @@ void Dexed::setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse)
   frq_coarse = constrain(frq_coarse, 0, 31);
 
   data[(op * 21) + DEXED_OP_FREQ_COARSE] = frq_coarse;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPFrequencyCoarse(uint8_t op)
@@ -1295,6 +1314,7 @@ void Dexed::setOPFrequencyFine(uint8_t op, uint8_t frq_fine)
   frq_fine = constrain(frq_fine, 0, 99);
 
   data[(op * 21) + DEXED_OP_FREQ_FINE] = frq_fine;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPFrequencyFine(uint8_t op)
@@ -1310,6 +1330,7 @@ void Dexed::setOPDetune(uint8_t op, uint8_t detune)
   detune = constrain(detune, 0, 14);
 
   data[(op * 21) + DEXED_OP_OSC_DETUNE] = detune;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getOPDetune(uint8_t op)
@@ -1325,6 +1346,7 @@ void Dexed::setPitchRate(uint8_t step, uint8_t rate)
   rate = constrain(rate, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_PITCH_EG_R1 + step] = rate;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getPitchRate(uint8_t step)
@@ -1340,6 +1362,7 @@ void Dexed::setPitchLevel(uint8_t step, uint8_t level)
   level = constrain(level, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_PITCH_EG_L1 + step] = level;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getPitchLevel(uint8_t step)
@@ -1354,6 +1377,7 @@ void Dexed::setAlgorithm(uint8_t algorithm)
   algorithm  = constrain(algorithm, 0, 31);
 
   data[DEXED_VOICE_OFFSET + DEXED_ALGORITHM] = algorithm;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getAlgorithm(void)
@@ -1366,6 +1390,7 @@ void Dexed::setFeedback(uint8_t feedback)
   feedback  = constrain(feedback, 0, 31);
 
   data[DEXED_VOICE_OFFSET + DEXED_FEEDBACK] = feedback;
+  doRefreshVoice();
 }
 
 uint8_t Dexed::getFeedback(void)
@@ -1376,6 +1401,7 @@ uint8_t Dexed::getFeedback(void)
 void Dexed::setOscillatorSync(bool sync)
 {
   data[DEXED_VOICE_OFFSET + DEXED_OSC_KEY_SYNC] = sync;
+  doRefreshVoice();
 }
 
 bool Dexed::getOscillatorSync(void)
@@ -1388,6 +1414,7 @@ void Dexed::setLFOSpeed(uint8_t speed)
   speed  = constrain(speed, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_SPEED] = speed;
+  lfo.reset(data + 137);
 }
 
 uint8_t Dexed::getLFOSpeed(void)
@@ -1400,6 +1427,7 @@ void Dexed::setLFODelay(uint8_t delay)
   delay  = constrain(delay, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_DELAY] = delay;
+  lfo.reset(data + 137);
 }
 
 uint8_t Dexed::getLFODelay(void)
@@ -1412,7 +1440,9 @@ void Dexed::setLFOPitchModulationDepth(uint8_t depth)
   depth = constrain(depth, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_PITCH_MOD_DEP] = depth;
+  lfo.reset(data + 137);
 }
+
 uint8_t Dexed::getLFOPitchModulationDepth(void)
 {
   return (data[DEXED_VOICE_OFFSET + DEXED_LFO_PITCH_MOD_DEP]);
@@ -1423,6 +1453,7 @@ void Dexed::setLFOAmpModulationDepth(uint8_t depth)
   depth = constrain(depth, 0, 99);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_AMP_MOD_DEP] = depth;
+  lfo.reset(data + 137);
 }
 
 uint8_t Dexed::getLFOAmpModulationDepth(void)
@@ -1438,6 +1469,7 @@ void Dexed::setLFOSync(bool sync)
 bool Dexed::getLFOSync(void)
 {
   return (data[DEXED_VOICE_OFFSET + DEXED_LFO_SYNC]);
+  lfo.reset(data + 137);
 }
 
 void Dexed::setLFOWaveform(uint8_t waveform)
@@ -1445,6 +1477,7 @@ void Dexed::setLFOWaveform(uint8_t waveform)
   waveform = constrain(waveform, 0, 5);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_WAVE] = waveform;
+  lfo.reset(data + 137);
 }
 
 uint8_t Dexed::getLFOWaveform(void)
@@ -1457,6 +1490,7 @@ void Dexed::setLFOPitchModulationSensitivity(uint8_t sensitivity)
   sensitivity  = constrain(sensitivity, 0, 5);
 
   data[DEXED_VOICE_OFFSET + DEXED_LFO_PITCH_MOD_SENS] = sensitivity;
+  lfo.reset(data + 137);
 }
 
 uint8_t Dexed::getLFOPitchModulationSensitivity(void)
