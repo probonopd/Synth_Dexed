@@ -17,18 +17,14 @@
 #include <math.h>
 #include <cstdlib>
 #include <stdint.h>
-
-#ifdef __ARM_NEON
-#include <arm_neon.h>
-#endif
-
 #include "synth.h"
 #include "sin.h"
 #include "fm_op_kernel.h"
 
 #ifdef __ARM_NEON
+#include <arm_neon.h>
 extern "C"
-void neon_fm_kernel(const int *in, const int *busin, int *out, int count,
+void neon_fm_kernel(const int32_t *in, const int32_t *busin, int32_t *out, int32_t count,
   int32_t phase0, int32_t freq, int32_t gain1, int32_t dgain);
 
 const int32_t __attribute__ ((aligned(16))) const_0_1_2_3_arg[4] = {0, 1, 2, 3};
@@ -39,7 +35,7 @@ const float32_t __attribute__ ((aligned(16))) coeffs_arg[4] = {
 const int32_t __attribute__ ((aligned(16))) zeros[_N_] = {0};
 
 
-void neon_fm_kernel(const int *in, const int *busin, int *out, int count,
+void neon_fm_kernel(const int32_t *in, const int32_t *busin, int32_t *out, int32_t count,
     int32_t phase0, int32_t freq_arg, int32_t gain1_arg, int32_t dgain_arg) {
   int32x4_t phase = vld1q_dup_s32(&phase0);
   int32x4_t freq = vld1q_dup_s32(&freq_arg);
