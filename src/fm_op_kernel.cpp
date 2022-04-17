@@ -155,11 +155,11 @@ void FmOpKernel::compute(int32_t *output, const int32_t *input,
                          int32_t gain1, int32_t gain2, bool add) {
   int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
   int32_t gain = gain1;
-  int32_t phase = phase0;
 #ifdef __ARM_NEON
     neon_fm_kernel(input, add ? output : zeros, output, _N_,
                    phase0, freq, gain, dgain);
 #else
+  int32_t phase = phase0;
     if (add) {
       for (int i = 0; i < _N_; i++) {
         gain += dgain;
@@ -184,11 +184,11 @@ void FmOpKernel::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
                               int32_t gain1, int32_t gain2, bool add) {
   int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
   int32_t gain = gain1;
-  int32_t phase = phase0;
 #ifdef __ARM_NEON
     neon_fm_kernel(zeros, add ? output : zeros, output, _N_,
                    phase0, freq, gain, dgain);
 #else
+  int32_t phase = phase0;
     if (add) {
       for (int i = 0; i < _N_; i++) {
         gain += dgain;
