@@ -41,7 +41,7 @@
 
 Dexed::Dexed(uint8_t maxnotes, int rate)
 {
-  samplerate=float32_t(rate);
+  samplerate = float32_t(rate);
 
   Exp2::init();
   Tanh::init();
@@ -55,7 +55,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   fx.init(rate);
 
   engineMsfa = new FmCore;
-  max_notes=maxnotes;
+  max_notes = maxnotes;
   currentNote = 0;
   resetControllers();
   controllers.masterTune = 0;
@@ -65,7 +65,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   controllers.core = engineMsfa;
   lfo.reset(data + 137);
   sustain = false;
-  voices=NULL;
+  voices = NULL;
 
   setMaxNotes(max_notes);
   setMonoMode(false);
@@ -76,7 +76,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
 
 #ifdef USE_DEXED_COMPRESSOR
   compressor = new Compressor(samplerate);
-  use_compressor=false;
+  use_compressor = false;
 #endif
 }
 
@@ -95,33 +95,33 @@ Dexed::~Dexed()
 
 void Dexed::setMaxNotes(uint8_t new_max_notes)
 {
-  uint8_t i=0;
-  
-  max_notes=constrain(max_notes,0,_MAX_NOTES);
+  uint8_t i = 0;
 
-#ifdef DEBUG
+  max_notes = constrain(max_notes, 0, _MAX_NOTES);
+
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.print("Allocating memory for ");
-  Serial.print(max_notes,DEC);
+  Serial.print(max_notes, DEC);
   Serial.println(" notes.");
   Serial.println();
 #endif
 
-  if(voices)
+  if (voices)
   {
     panic();
     for (i = 0; i < max_notes; i++)
     {
-      if(voices[i].dx7_note)
-    	delete voices[i].dx7_note;
+      if (voices[i].dx7_note)
+        delete voices[i].dx7_note;
     }
     delete(voices);
   }
 
-  max_notes=constrain(new_max_notes,0,_MAX_NOTES);
+  max_notes = constrain(new_max_notes, 0, _MAX_NOTES);
 
-  if(max_notes>0)
+  if (max_notes > 0)
   {
-    voices=new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
+    voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
     for (i = 0; i < max_notes; i++)
     {
       voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
@@ -132,7 +132,7 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
     }
   }
   else
-     voices=NULL;
+    voices = NULL;
 }
 
 void Dexed::activate(void)
@@ -191,15 +191,15 @@ void Dexed::getSamples(float32_t* buffer, uint16_t n_samples)
   fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
 
 #if defined USE_DEXED_COMPRESSOR
-  if(use_compressor==true)
-    compressor->doCompression(buffer,n_samples);
+  if (use_compressor == true)
+    compressor->doCompression(buffer, n_samples);
 #endif
 }
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
   float32_t tmp[n_samples];
-  
+
   getSamples(tmp, n_samples);
   arm_float_to_q15(tmp, (q15_t*)buffer, n_samples);
 }
@@ -495,7 +495,7 @@ uint8_t Dexed::getNumNotesPlaying(void)
         voices[i].live = false;
         voices[i].sustained = false;
         voices[i].keydown = false;
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
         Serial.print(F("Shutdown voice: "));
         Serial.println(i, DEC);
 #endif
@@ -575,7 +575,7 @@ bool Dexed::decodeVoice(uint8_t* new_data, uint8_t* encoded_data)
 
   strncpy(dexed_voice_name, (char *)&encoded_data[118], sizeof(dexed_voice_name) - 1);
   dexed_voice_name[10] = '\0';
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.print(F("Voice ["));
   Serial.print(dexed_voice_name);
   Serial.println(F("] decoded."));
@@ -655,14 +655,14 @@ uint8_t Dexed::getVoiceDataElement(uint8_t address)
 
 void Dexed::loadVoiceParameters(uint8_t* new_data)
 {
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   char dexed_voice_name[11];
 #endif
 
   panic();
   memcpy(&data, new_data, 155);
   doRefreshVoice();
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
   dexed_voice_name[10] = '\0';
 
@@ -679,7 +679,7 @@ void Dexed::loadInitVoice(void)
 
 void Dexed::setPBController(uint8_t pb_range, uint8_t pb_step)
 {
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.println(F("Dexed::setPBController"));
 #endif
 
@@ -694,7 +694,7 @@ void Dexed::setPBController(uint8_t pb_range, uint8_t pb_step)
 
 void Dexed::setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode)
 {
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.println(F("Dexed::setMWController"));
 #endif
 
@@ -711,7 +711,7 @@ void Dexed::setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode
 
 void Dexed::setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode)
 {
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.println(F("Dexed::setFCController"));
 #endif
 
@@ -728,7 +728,7 @@ void Dexed::setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode
 
 void Dexed::setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode)
 {
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.println(F("Dexed::setBCController"));
 #endif
 
@@ -745,7 +745,7 @@ void Dexed::setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode
 
 void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode)
 {
-#ifdef DEBUG
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.println(F("Dexed::setATController"));
 #endif
 
@@ -777,6 +777,471 @@ void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissa
   controllers.values_[kControllerPortamentoGlissando] = portamento_glissando;
 
   controllers.refresh();
+}
+
+void handleSystemExclusive(byte * sysex, uint len)
+{
+  // Check for SYSEX end byte
+  if (sysex[len - 1] != 0xf7)
+  {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+    Serial.println(F("E: SysEx end status byte not detected."));
+#elif defined(__circle__)
+    mLogger.Write(GetKernelName (), LogNotice, "E: SysEx end status byte not detected.");
+#endif
+    return;
+  }
+
+  // check for Yamaha sysex
+  if (sysex[1] != 0x43)
+  {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+    Serial.println(F("E: SysEx vendor not Yamaha."));
+#elif defined(__circle__)
+    mLogger.Write(GetKernelName (), LogNotice, "E: SysEx vendor not Yamaha.");
+#endif
+    return;
+  }
+
+  // Decode SysEx by means of length
+  switch (len)
+  {
+    case 7: // parse parameter change
+      if (((sysex[3] & 0x7c) >> 2) != 0 && ((sysex[3] & 0x7c) >> 2) != 2)
+      {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("E: Not a SysEx parameter or function parameter change."));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "E: Not a SysEx parameter or function parameter change.");
+#endif
+        return;
+      }
+
+      sysex[4] &= 0x7f;
+      sysex[5] &= 0x7f;
+
+      if ((sysex[3] & 0x7c) >> 2 == 0)
+      {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("SysEx Voice parameter:"));
+        Serial.print("Parameter #");
+        Serial.print(sysex[4] + ((sysex[3] & 0x03) * 128), DEC);
+        Serial.print(" Value: ");
+        Serial.println(sysex[5], DEC);
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "E: Not a SysEx parameter or function parameter change.");
+        mLogger.Write(GetKernelName (), LogNotice, "SysEx Voice parameter:"
+                      mLogger.Write(GetKernelName (), LogNotice, "Parameter #" sysex[4] + ((sysex[3] & 0x03) * 128) " Value: " sysex[5]);
+#endif
+        setVoiceDataElement(sysex[4] + ((sysex[3] & 0x03) * 128), sysex[5]);
+      }
+      else if ((sysex[3] & 0x7c) >> 2 == 2)
+      {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("SysEx Function parameter:"));
+        Serial.print("Parameter #");
+        Serial.print(sysex[4], DEC);
+        Serial.print(" Value: ");
+        Serial.println(sysex[5], DEC);
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "SysEx Function parameter:"));
+        mLogger.Write(GetKernelName (), LogNotice, "Parameter #" sysex[4] " Value: " sysex[5]);
+#endif
+
+        switch (sysex[4])
+        {
+          case 65:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].pb_range = constrain(sysex[5], PB_RANGE_MIN, PB_RANGE_MAX);
+            setPitchbendRange(configuration.dexed[instance_id].pb_range);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_pb_range))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setPitchbendRange(constrain(sysex[5], 0, 12));
+#endif
+            break;
+          case 66:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].pb_step = constrain(sysex[5], PB_STEP_MIN, PB_STEP_MAX);
+            setPitchbendRange(configuration.dexed[instance_id].pb_step);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_pb_step))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setPitchbendRange(constrain(sysex[5], 0, 12));
+#endif
+            break;
+          case 67:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].portamento_mode = constrain(sysex[5], PORTAMENTO_MODE_MIN, PORTAMENTO_MODE_MAX);
+            setPortamentoMode(configuration.dexed[instance_id].portamento_mode, configuration.dexed[instance_id].portamento_glissando, configuration.dexed[instance_id].portamento_time);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_portamento_mode))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setPortamentoMode(constrain(sysex[5], 0, 1));
+#endif
+            break;
+          case 68:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].portamento_glissando = constrain(sysex[5], PORTAMENTO_GLISSANDO_MIN, PORTAMENTO_GLISSANDO_MAX);
+            setPortamentoMode(configuration.dexed[instance_id].portamento_mode, configuration.dexed[instance_id].portamento_glissando, configuration.dexed[instance_id].portamento_time);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_portamento_glissando))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setPortamentoMode(constrain(sysex[5], 0, 1));
+#endif
+            break;
+          case 69:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].portamento_time = constrain(sysex[5], PORTAMENTO_TIME_MIN, PORTAMENTO_TIME_MAX);
+            setPortamentoMode(configuration.dexed[instance_id].portamento_mode, configuration.dexed[instance_id].portamento_glissando, configuration.dexed[instance_id].portamento_time);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_portamento_time))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setPortamentoMode(constrain(sysex[5], 0, 99));
+#endif
+            break;
+          case 70:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].mw_range = constrain(sysex[5], MW_RANGE_MIN, MW_RANGE_MAX);
+            setModWheelRange(configuration.dexed[instance_id].mw_range);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_mw_range))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setModWheelRange(constrain(sysex[5], 0, 99));
+#endif
+            break;
+          case 71:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].mw_assign = constrain(sysex[5], MW_ASSIGN_MIN, MW_ASSIGN_MAX);
+            setModWheelTarget(configuration.dexed[instance_id].mw_assign);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_mw_assign))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setModWheelTarget(constrain(sysex[5], 0, 7));
+#endif
+            break;
+          case 72:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].fc_range = constrain(sysex[5], FC_RANGE_MIN, FC_RANGE_MAX);
+            setFootControllerRange(configuration.dexed[instance_id].fc_range);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_fc_range))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setFootControllerRange(constrain(sysex[5], 0, 99));
+#endif
+            break;
+          case 73:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].fc_assign = constrain(sysex[5], FC_ASSIGN_MIN, FC_ASSIGN_MAX);
+            setFootControllerTarget(configuration.dexed[instance_id].fc_assign);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_fc_assign))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setFootControllerTarget(constrain(sysex[5], 0, 7));
+#endif
+            break;
+          case 74:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].bc_range = constrain(sysex[5], BC_RANGE_MIN, BC_RANGE_MAX);
+            setBreathControllerRange(configuration.dexed[instance_id].bc_range);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_bc_range))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setBreathControllerRange(constrain(sysex[5], 0, 99));
+#endif
+            break;
+          case 75:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].bc_assign = constrain(sysex[5], BC_ASSIGN_MIN, BC_ASSIGN_MAX);
+            setBreathControllerTarget(configuration.dexed[instance_id].bc_assign);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_bc_assign))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setBreathControllerTarget(constrain(sysex[5], 0, 7));
+#endif
+            break;
+          case 76:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].at_range = constrain(sysex[5], AT_RANGE_MIN, AT_RANGE_MAX);
+            setAftertouchRange(configuration.dexed[instance_id].at_range);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_at_range))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setAftertouchRange(constrain(sysex[5], 0, 99));
+#endif
+            break;
+          case 77:
+#if defined(MICRODEXED_VERSION)
+            configuration.dexed[instance_id].at_assign = constrain(sysex[5], AT_ASSIGN_MIN, AT_ASSIGN_MAX);
+            setAftertouchTarget(configuration.dexed[instance_id].at_assign);
+            if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_at_assign))
+            {
+              LCDML.OTHER_updateFunc();
+              LCDML.loop_menu();
+            }
+#else
+            setAftertouchTarget(constrain(sysex[5], 0, 7));
+#endif
+            break;
+          default:
+            setVoiceDataElement(sysex[4], sysex[5]); // set function parameter
+            break;
+        }
+        ControllersRefresh();
+      }
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+      else
+      {
+        Serial.println(F("E: Unknown SysEx voice or function."));
+      }
+#elif defined(__circle__)
+      else
+      {
+        mLogger.Write(GetKernelName (), LogNotice, "E: Unknown SysEx voice or function.");
+      }
+#endif
+      break;
+    case 163: // 1 Voice bulk upload
+      int32_t bulk_checksum_calc = 0;
+      int8_t bulk_checksum = sysex[161];
+
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+      Serial.println(F("One Voice bulk upload"));
+#elif defined(__circle__)
+      mLogger.Write(GetKernelName (), LogNotice, "One Voice bulk upload");
+#endif
+
+      if ((sysex[3] & 0x7f) != 0)
+      {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("E: Not a SysEx voice bulk upload."));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "E: Not a SysEx voice bulk upload.");
+#endif
+        return;
+      }
+
+      if (((sysex[4] << 7) | sysex[5]) != 0x9b)
+      {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("E: Wrong length for SysEx voice bulk upload (not 155)."));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "E: Wrong length for SysEx voice bulk upload (not 155).");
+#endif
+        return;
+      }
+
+      // checksum calculation
+      for (uint8_t i = 0; i < 155 ; i++)
+      {
+        bulk_checksum_calc -= sysex[i + 6];
+      }
+      bulk_checksum_calc &= 0x7f;
+
+      if (bulk_checksum_calc != bulk_checksum)
+      {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.print(F("E: Checksum error for one voice [0x"));
+        Serial.print(bulk_checksum, HEX);
+        Serial.print(F("/0x"));
+        Serial.print(bulk_checksum_calc, HEX);
+        Serial.println(F("]"));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "E: Checksum error for one voice " bulk_checksum "/" bulk_checksum_calc "]");
+#endif
+        return;
+      }
+
+      // fix voice name
+      for (uint8_t i = 0; i < 10; i++)
+      {
+        if (sysex[151 + i] > 126) // filter characters
+          sysex[151 + i] = 32;
+      }
+
+      // load sysex-data into voice memory
+      loadVoiceParameters(&sysex[6]);
+
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+      show_patch(instance_id);
+#endif
+
+      // show voice name
+      strncpy(g_voice_name[instance_id], (char*)&sysex[151], VOICE_NAME_LEN - 1);
+
+      if (LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_voice_select))
+      {
+        LCDML.OTHER_updateFunc();
+        LCDML.loop_menu();
+      }
+      break;
+    case 4104: // 1 Bank bulk upload
+      if (strlen(receive_bank_filename) > 0 && LCDML.FUNC_getID() == LCDML.OTHER_getIDFromFunction(UI_func_sysex_receive_bank))
+      {
+        int32_t bulk_checksum_calc = 0;
+        int8_t bulk_checksum = sysex[4102];
+
+        if ((sysex[3] & 0x7f) != 9)
+        {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+          Serial.println(F("E: Not a SysEx bank bulk upload."));
+#elif defined(__circle__)
+          mLogger.Write(GetKernelName (), LogNotice, "E: Not a SysEx bank bulk upload.");
+#endif
+#if defined(MICRODEXED_VERSION)
+          display.setCursor(0, 1);
+          display.print(F("Error (TYPE)      "));
+          delay(MESSAGE_WAIT_TIME);
+          LCDML.FUNC_goBackToMenu();
+#endif
+          return;
+        }
+
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("Bank bulk upload."));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "Bank bulk upload.");
+#endif
+
+        if (((sysex[4] << 7) | sysex[5]) != 0x1000)
+        {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+          Serial.println(F("E: Wrong length for SysEx bank bulk upload (not 4096)."));
+#elif defined(__circle__)
+          mLogger.Write(GetKernelName (), LogNotice, "E: Wrong length for SysEx bank bulk upload (not 4096).");
+#endif
+#if defined(MICRODEXED_VERSION)
+          display.setCursor(0, 1);
+          display.print(F("Error (SIZE)     "));
+          delay(MESSAGE_WAIT_TIME);
+          LCDML.FUNC_goBackToMenu();
+#endif
+          return;
+        }
+
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("Bank type ok"));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "Bank type ok");
+#endif
+
+        // checksum calculation
+        for (uint16_t i = 0; i < 4096 ; i++)
+        {
+          bulk_checksum_calc -= sysex[i + 6];
+        }
+        bulk_checksum_calc &= 0x7f;
+
+        if (bulk_checksum_calc != bulk_checksum)
+        {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+          Serial.print(F("E: Checksum error for bank [0x"));
+          Serial.print(bulk_checksum, HEX);
+          Serial.print(F("/0x"));
+          Serial.print(bulk_checksum_calc, HEX);
+          Serial.println(F("]"));
+#elif defined(__circle__)
+          mLogger.Write(GetKernelName (), LogNotice, "E: Checksum error for one voice " bulk_checksum "/" bulk_checksum_calc "]");
+#endif
+#if defined(MICRODEXED_VERSION)
+          display.setCursor(0, 1);
+          display.print(F("Error (CHECKSUM)"));
+          delay(MESSAGE_WAIT_TIME);
+          LCDML.FUNC_goBackToMenu();
+#endif
+          return;
+        }
+
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+        Serial.println(F("Bank checksum ok"));
+#elif defined(__circle__)
+        mLogger.Write(GetKernelName (), LogNotice, "Bank checksum ok");
+#endif
+
+        if (save_sd_bank(receive_bank_filename, sysex))
+        {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+          Serial.print(F("Bank saved as ["));
+          Serial.print(receive_bank_filename);
+          Serial.println(F("]"));
+#elif defined(__circle__)
+          mLogger.Write(GetKernelName (), LogNotice, "Bank saved as [" receive_bank_filename "]");
+#endif
+#if defined(MICRODEXED_VERSION)
+          display.setCursor(0, 1);
+          display.print(F("Done.           "));
+          delay(MESSAGE_WAIT_TIME);
+          LCDML.FUNC_goBackToMenu();
+#endif
+        }
+        else
+        {
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+          Serial.println(F("Error during saving bank as ["));
+          Serial.print(receive_bank_filename);
+          Serial.println(F("]"));
+#elif defined(__circle__)
+          mLogger.Write(GetKernelName (), LogNotice, "Error during saving bank as [" receive_bank_filename "]");
+#endif
+#if defined(MICRODEXED_VERSION)
+          display.setCursor(0, 1);
+          display.print(F("Error.          "));
+          delay(MESSAGE_WAIT_TIME);
+          LCDML.FUNC_goBackToMenu();
+#endif
+        }
+        memset(receive_bank_filename, 0, FILENAME_LEN);
+      }
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+      else
+        Serial.println(F("E: Not in MIDI receive bank mode."));
+#elif defined(__circle__)
+      mLogger.Write(GetKernelName (), LogNotice, "E: Not in MIDI receive bank mode.");
+#endif
+  }
+  break;
+default:
+#if defined(MICRODEXED_VERSION) && defined(DEBUG)
+  Serial.println(F("E: SysEx parameter length wrong."));
+#elif defined(__circle__)
+  mLogger.Write(GetKernelName (), LogNotice, "E: SysEx parameter length wrong.");
+#endif
 }
 
 uint32_t Dexed::getXRun(void)
@@ -1537,12 +2002,12 @@ void Dexed::getName(char* buffer)
 #ifdef USE_DEXED_COMPRESSOR
 void Dexed::setCompressor(bool enable_compressor)
 {
-  use_compressor=enable_compressor;
+  use_compressor = enable_compressor;
 }
 
 bool Dexed::getCompressor(void)
 {
-  return(use_compressor);
+  return (use_compressor);
 }
 
 void Dexed::setCompressorPreGain_dB(float32_t pre_gain)
@@ -1552,12 +2017,12 @@ void Dexed::setCompressorPreGain_dB(float32_t pre_gain)
 
 void Dexed::setCompressorAttack_sec(float32_t attack_sec)
 {
-  compressor->setAttack_sec(attack_sec,samplerate);
+  compressor->setAttack_sec(attack_sec, samplerate);
 }
 
 void Dexed::setCompressorRelease_sec(float32_t release_sec)
 {
-  compressor->setRelease_sec(release_sec,samplerate);
+  compressor->setRelease_sec(release_sec, samplerate);
 }
 
 void Dexed::setCompressorThresh_dBFS(float32_t thresh_dBFS)
@@ -1572,26 +2037,26 @@ void Dexed::setCompressionRatio(float32_t comp_ratio)
 
 float32_t Dexed::getCompressorPreGain_dB(void)
 {
-  return(compressor->getPreGain_dB());
+  return (compressor->getPreGain_dB());
 }
 
 float32_t Dexed::getCompressorAttack_sec(void)
 {
-  return(compressor->getAttack_sec());
+  return (compressor->getAttack_sec());
 }
 
 float32_t Dexed::getCompressorRelease_sec(void)
 {
-  return(compressor->getRelease_sec());
+  return (compressor->getRelease_sec());
 }
 
 float32_t Dexed::getCompressorThresh_dBFS(void)
 {
-  return(compressor->getThresh_dBFS());
+  return (compressor->getThresh_dBFS());
 }
 
 float32_t Dexed::getCompressionRatio(void)
 {
-  return(compressor->getCompressionRatio());
+  return (compressor->getCompressionRatio());
 }
 #endif
