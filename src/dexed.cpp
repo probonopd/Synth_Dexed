@@ -222,7 +222,7 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
   uint8_t note = currentNote;
   uint8_t keydown_counter = 0;
 
-  if (!monoMode && refreshMode)
+  if (!monoMode && noteRefreshMode)
   {
     for (uint8_t i = 0; i < max_notes; i++)
     {
@@ -383,8 +383,8 @@ void Dexed::setMonoMode(bool mode) {
   monoMode = mode;
 }
 
-void Dexed::setRefreshMode(bool mode) {
-  refreshMode = mode;
+void Dexed::setNoteRefreshMode(bool mode) {
+  noteRefreshMode = mode;
 }
 
 void Dexed::setSustain(bool s)

@@ -158,7 +158,7 @@ class Dexed
     void deactivate(void);
     bool getMonoMode(void);
     void setMonoMode(bool mode);
-    void setRefreshMode(bool mode);
+    void setNoteRefreshMode(bool mode);
     void setMaxNotes(uint8_t n);
     uint8_t getMaxNotes(void);
     void doRefreshVoice(void);
@@ -337,7 +337,7 @@ class Dexed
     bool sustain;
     float vuSignal;
     bool monoMode;
-    bool refreshMode;
+    bool noteRefreshMode;
     bool refreshVoice;
     uint8_t engineType;
     VoiceStatus voiceStatus;
