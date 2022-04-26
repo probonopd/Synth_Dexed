@@ -18,7 +18,7 @@ activate	KEYWORD2
 deactivate	KEYWORD2
 getMonoMode	KEYWORD2
 setMonoMode	KEYWORD2
-setRefreshMode	KEYWORD2
+setNoteRefreshMode	KEYWORD2
 setMaxNotes	KEYWORD2
 getMaxNotes	KEYWORD2
 doRefreshVoice	KEYWORD2
