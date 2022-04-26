@@ -760,11 +760,11 @@ void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode
   controllers.refresh();
 }
 
-void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time)
+void Dexed::setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time)
 {
   portamento_mode = constrain(portamento_mode, 0, 1);
   portamento_glissando = constrain(portamento_glissando, 0, 1);
-  portamento_mode = constrain(portamento_mode, 0, 99);
+  portamento_time = constrain(portamento_time, 0, 99);
 
   controllers.portamento_cc = portamento_time;
   controllers.portamento_enable_cc = portamento_mode > 63;
@@ -779,10 +779,54 @@ void Dexed::setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissa
   controllers.refresh();
 }
 
+void Dexed::setPortamentoMode(uint8_t portamento_mode)
+{
+  portamento_mode = constrain(portamento_mode, 0, 1);
+  controllers.portamento_enable_cc = portamento_mode > 63;
+
+  controllers.refresh();
+}
+
+uint8_t Dexed::getPortamentoMode(void)
+{
+  return(controllers.portamento_enable_cc);
+}
+
+void Dexed::setPortamentoGlissando(uint8_t portamento_glissando)
+{
+  portamento_glissando = constrain(portamento_glissando, 0, 1);
+  controllers.values_[kControllerPortamentoGlissando] = portamento_glissando;
+
+  controllers.refresh();
+}
+
+uint8_t Dexed::getPortamentoGlissando(void)
+{
+  return(controllers.values_[kControllerPortamentoGlissando]);
+}
+
+void Dexed::setPortamentoTime(uint8_t portamento_time)
+{
+  portamento_time = constrain(portamento_time, 0, 99);
+  controllers.portamento_cc = portamento_time;
+
+  if (portamento_time > 0)
+    controllers.portamento_enable_cc = true;
+  else
+    controllers.portamento_enable_cc = false;
+
+  controllers.refresh();
+}
+
+uint8_t Dexed::getPortamentoTime(void)
+{
+  return(controllers.portamento_cc);
+}
+
 int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
 /*
         -1:     SysEx end status byte not detected.
-        -2:     SysEx vendor not Yamaha.
+        -2:     SysEx vendor not Yamaha.:wq
         -3:     Not a SysEx parameter or function parameter change.
         -4:     Not a SysEx parameter or function parameter change.
         -5:     Not a SysEx voice bulk upload.
@@ -839,13 +883,13 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
             setPitchbendStep(constrain(sysex[5], 0, 12));
             break;
           case 67:
-            //setPortamentoMode(constrain(sysex[5], 0, 1));
+            setPortamentoMode(constrain(sysex[5], 0, 1));
             break;
           case 68:
-            //setPortamentoMode(constrain(sysex[5], 0, 1));
+            setPortamentoGlissando(constrain(sysex[5], 0, 1));
             break;
           case 69:
-            //setPortamentoMode(constrain(sysex[5], 0, 99));
+            setPortamentoTime(constrain(sysex[5], 0, 99));
             break;
           case 70:
             setModWheelRange(constrain(sysex[5], 0, 99));

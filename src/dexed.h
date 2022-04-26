@@ -201,7 +201,13 @@ class Dexed
     void resetControllers(void);
     void setMasterTune(int8_t mastertune);
     int8_t getMasterTune(void);
-    void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
+    void setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
+    void setPortamentoMode(uint8_t portamento_mode);
+    uint8_t getPortamentoMode(void);
+    void setPortamentoGlissando(uint8_t portamento_glissando);
+    uint8_t getPortamentoGlissando(void);
+    void setPortamentoTime(uint8_t portamento_time);
+    uint8_t getPortamentoTime(void);
     void setPBController(uint8_t pb_range, uint8_t pb_step);
     void setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode);
     void setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode);
