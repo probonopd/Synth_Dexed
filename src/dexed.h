@@ -189,7 +189,7 @@ class Dexed
     float32_t getCompressorThresh_dBFS(void);
     float32_t getCompressionRatio(void);
 #endif
-    int16_t handleSystemExclusive(uint8_t* sysex, uint16_t len);
+    int16_t handleSystemExclusive(const uint8_t* sysex, const uint16_t len);
 
     // Sound methods
     void keyup(int16_t pitch);

@@ -823,7 +823,7 @@ uint8_t Dexed::getPortamentoTime(void)
   return(controllers.portamento_cc);
 }
 
-int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
+int16_t Dexed::handleSystemExclusive(const uint8_t* sysex, const uint16_t len)
 /*
         -1:     SysEx end status byte not detected.
         -2:     SysEx vendor not Yamaha.
@@ -860,13 +860,10 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
       if (((sysex[3] & 0x7c) >> 2) != 0 && ((sysex[3] & 0x7c) >> 2) != 2)
         return(-3);
 
-      sysex[4] &= 0x7f;
-      sysex[5] &= 0x7f;
-
       if ((sysex[3] & 0x7c) >> 2 == 0) // Voice parameter
       {
-        setVoiceDataElement(sysex[4] + ((sysex[3] & 0x03) * 128), sysex[5]);
-	return(sysex[4] + ((sysex[3] & 0x03) * 128)+300);
+        setVoiceDataElement((sysex[4] & 0x7f) + ((sysex[3] & 0x03) * 128), sysex[5]);
+	return((sysex[4] & 0x7f) + ((sysex[3] & 0x03) * 128)+300);
       }
       else if ((sysex[3] & 0x7c) >> 2 == 2) // Function parameter
       {
@@ -918,7 +915,6 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
             setVoiceDataElement(sysex[4], sysex[5]); // set function parameter
             break;
         }
-	doRefreshVoice();
         ControllersRefresh();
         return(sysex[4]);
       }
@@ -940,18 +936,11 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
       if (bulk_checksum_calc != bulk_checksum)
         return(-7);
 
-      // fix voice name
-      for (uint8_t i = 0; i < 10; i++)
-      {
-        if (sysex[151 + i] > 126) // filter characters
-          sysex[151 + i] = 32;
-      }
-
-      // load sysex-data into voice memory
-      loadVoiceParameters(&sysex[6]);
-
       return(100);
       break;
+    case 300:
+        setVoiceDataElement(sysex[4] + ((sysex[3] & 0x03) * 128), sysex[5]);
+	doRefreshVoice();
     case 4104: // 1 Bank bulk upload
       if ((sysex[3] & 0x7f) != 9)
         return(-8);
