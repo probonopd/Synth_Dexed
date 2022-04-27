@@ -826,21 +826,20 @@ uint8_t Dexed::getPortamentoTime(void)
 int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
 /*
         -1:     SysEx end status byte not detected.
-        -2:     SysEx vendor not Yamaha.:wq
-        -3:     Not a SysEx parameter or function parameter change.
-        -4:     Not a SysEx parameter or function parameter change.
+        -2:     SysEx vendor not Yamaha.
+        -3:     Unknown SysEx parameter change.
+        -4:     Unknown SysEx voice or function.
         -5:     Not a SysEx voice bulk upload.
         -6:     Wrong length for SysEx voice bulk upload (not 155).
         -7:     Checksum error for one voice.
         -8:     Not a SysEx bank bulk upload.
         -9:     Wrong length for SysEx bank bulk upload (not 4096).
-        -11:    Checksum error for bank.
-        -12:    SysEx parameter length wrong.
-	-13:	Unknown SysEx voice or function.
+        -10:    Checksum error for bank.
+        -11:    Unknown SysEx message.
 	64-77:	Function parameter changed.
-	163:	Voice loaded.
-	200-355:	Voice parameter changed.
-	4104:	Bank loaded.
+	100:	Voice loaded.
+	200:	Bank loaded.
+	300-455:	Voice parameter changed.
 */
 {
   int32_t bulk_checksum_calc = 0;
@@ -859,7 +858,7 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
   {
     case 7: // parse parameter change
       if (((sysex[3] & 0x7c) >> 2) != 0 && ((sysex[3] & 0x7c) >> 2) != 2)
-        return(-4);
+        return(-3);
 
       sysex[4] &= 0x7f;
       sysex[5] &= 0x7f;
@@ -867,7 +866,7 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
       if ((sysex[3] & 0x7c) >> 2 == 0) // Voice parameter
       {
         setVoiceDataElement(sysex[4] + ((sysex[3] & 0x03) * 128), sysex[5]);
-	return(sysex[4] + ((sysex[3] & 0x03) * 128));
+	return(sysex[4] + ((sysex[3] & 0x03) * 128)+300);
       }
       else if ((sysex[3] & 0x7c) >> 2 == 2) // Function parameter
       {
@@ -924,7 +923,7 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
         return(sysex[4]);
       }
       else
-	return(-13);
+	return(-4);
       break;
     case 163: // 1 Voice bulk upload
       if ((sysex[3] & 0x7f) != 0)
@@ -951,7 +950,7 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
       // load sysex-data into voice memory
       loadVoiceParameters(&sysex[6]);
 
-      return(len);
+      return(100);
       break;
     case 4104: // 1 Bank bulk upload
       if ((sysex[3] & 0x7f) != 9)
@@ -966,12 +965,12 @@ int16_t Dexed::handleSystemExclusive(uint8_t* sysex, uint16_t len)
       bulk_checksum_calc &= 0x7f;
 
       if (bulk_checksum_calc != bulk_checksum)
-        return(-11);
+        return(-10);
 
-      return(len);
+      return(200);
       break;
     default:
-      return(-12);
+      return(-11);
   }
 }
 
