@@ -863,6 +863,7 @@ int16_t Dexed::handleSystemExclusive(const uint8_t* sysex, const uint16_t len)
       if ((sysex[3] & 0x7c) >> 2 == 0) // Voice parameter
       {
         setVoiceDataElement((sysex[4] & 0x7f) + ((sysex[3] & 0x03) * 128), sysex[5]);
+	doRefreshVoice();
 	return((sysex[4] & 0x7f) + ((sysex[3] & 0x03) * 128)+300);
       }
       else if ((sysex[3] & 0x7c) >> 2 == 2) // Function parameter
@@ -938,9 +939,6 @@ int16_t Dexed::handleSystemExclusive(const uint8_t* sysex, const uint16_t len)
 
       return(100);
       break;
-    case 300:
-        setVoiceDataElement(sysex[4] + ((sysex[3] & 0x03) * 128), sysex[5]);
-	doRefreshVoice();
     case 4104: // 1 Bank bulk upload
       if ((sysex[3] & 0x7f) != 9)
         return(-8);
