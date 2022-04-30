@@ -917,7 +917,7 @@ int16_t Dexed::handleSystemExclusive(const uint8_t* sysex, const uint16_t len)
             break;
         }
         ControllersRefresh();
-        return(sysex[4]);
+        return(sysex[4]+400);
       }
       else
 	return(-4);
