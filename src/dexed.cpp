@@ -823,7 +823,7 @@ uint8_t Dexed::getPortamentoTime(void)
   return(controllers.portamento_cc);
 }
 
-int16_t Dexed::handleSystemExclusive(const uint8_t* sysex, const uint16_t len)
+int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
 /*
         -1:     SysEx end status byte not detected.
         -2:     SysEx vendor not Yamaha.
