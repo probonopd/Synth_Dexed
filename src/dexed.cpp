@@ -867,58 +867,7 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
 	return((sysex[4] & 0x7f) + ((sysex[3] & 0x03) * 128)+300);
       }
       else if ((sysex[3] & 0x7c) >> 2 == 2) // Function parameter
-      {
-        switch (sysex[4])
-        {
-          case 64:
-            setMonoMode(constrain(sysex[5], 0, 1));
-            break;
-          case 65:
-            setPitchbendRange(constrain(sysex[5], 0, 12));
-            break;
-          case 66:
-            setPitchbendStep(constrain(sysex[5], 0, 12));
-            break;
-          case 67:
-            setPortamentoMode(constrain(sysex[5], 0, 1));
-            break;
-          case 68:
-            setPortamentoGlissando(constrain(sysex[5], 0, 1));
-            break;
-          case 69:
-            setPortamentoTime(constrain(sysex[5], 0, 99));
-            break;
-          case 70:
-            setModWheelRange(constrain(sysex[5], 0, 99));
-            break;
-          case 71:
-            setModWheelTarget(constrain(sysex[5], 0, 7));
-            break;
-          case 72:
-            setFootControllerRange(constrain(sysex[5], 0, 99));
-            break;
-          case 73:
-            setFootControllerTarget(constrain(sysex[5], 0, 7));
-            break;
-          case 74:
-            setBreathControllerRange(constrain(sysex[5], 0, 99));
-            break;
-          case 75:
-            setBreathControllerTarget(constrain(sysex[5], 0, 7));
-            break;
-          case 76:
-            setAftertouchRange(constrain(sysex[5], 0, 99));
-            break;
-          case 77:
-            setAftertouchTarget(constrain(sysex[5], 0, 7));
-            break;
-          default:
-            setVoiceDataElement(sysex[4], sysex[5]); // set function parameter
-            break;
-        }
-        ControllersRefresh();
         return(sysex[4]);
-      }
       else
 	return(-4);
       break;
