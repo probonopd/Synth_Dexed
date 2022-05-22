@@ -825,21 +825,22 @@ uint8_t Dexed::getPortamentoTime(void)
 
 int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
 /*
-        -1:     SysEx end status byte not detected.
-        -2:     SysEx vendor not Yamaha.
-        -3:     Unknown SysEx parameter change.
-        -4:     Unknown SysEx voice or function.
-        -5:     Not a SysEx voice bulk upload.
-        -6:     Wrong length for SysEx voice bulk upload (not 155).
-        -7:     Checksum error for one voice.
-        -8:     Not a SysEx bank bulk upload.
-        -9:     Wrong length for SysEx bank bulk upload (not 4096).
-        -10:    Checksum error for bank.
-        -11:    Unknown SysEx message.
-	64-77:	Function parameter changed.
-	100:	Voice loaded.
-	200:	Bank loaded.
+        -1:     	SysEx end status byte not detected.
+        -2:     	SysEx vendor not Yamaha.
+        -3:     	Unknown SysEx parameter change.
+        -4:     	Unknown SysEx voice or function.
+        -5:     	Not a SysEx voice bulk upload.
+        -6:     	Wrong length for SysEx voice bulk upload (not 155).
+        -7:     	Checksum error for one voice.
+        -8:     	Not a SysEx bank bulk upload.
+        -9:     	Wrong length for SysEx bank bulk upload (not 4096).
+        -10:    	Checksum error for bank.
+        -11:    	Unknown SysEx message.
+	64-77:		Function parameter changed.
+	100:		Voice loaded.
+	200:		Bank loaded.
 	300-455:	Voice parameter changed.
+	500-531:	Send patch request.
 */
 {
   int32_t bulk_checksum_calc = 0;
@@ -856,6 +857,10 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
   // Decode SYSEX by means of length
   switch (len)
   {
+    case 5:
+      if ((sysex[2] & 0x70) == 0x20) // Send voice request
+        return(500 + (sysex[3] & 0x7c));
+      break;
     case 7: // parse parameter change
       if (((sysex[3] & 0x7c) >> 2) != 0 && ((sysex[3] & 0x7c) >> 2) != 2)
         return(-3);
@@ -908,6 +913,7 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
     default:
       return(-11);
   }
+  return(SHRT_MIN);
 }
 
 uint32_t Dexed::getXRun(void)
