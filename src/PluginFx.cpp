@@ -48,11 +48,9 @@ inline static float tptlpupw(float & state , float inp , float cutoff , float sr
 //    return (param) * (max - min) + min;
 //}
 
-#ifdef USE_FX
 static float logsc(float param, const float min, const float max, const float rolloff = 19.0f) {
   return ((EXP_FUNC(param * LOG_FUNC(rolloff + 1)) - 1.0f) / (rolloff)) * (max - min) + min;
 }
-#endif
 
 PluginFx::PluginFx() {
   Cutoff = 1.0;
@@ -131,7 +129,6 @@ void PluginFx::process(float *work, int sampleSize) {
       work[i] *= Gain;
   }
 
-#ifdef USE_FX
   // don't apply the LPF if the cutoff is to maximum
   if ( Cutoff == 1.0 )
     return;
@@ -193,7 +190,6 @@ void PluginFx::process(float *work, int sampleSize) {
     //half volume comp
     work[i] = mc * (1 + R24 * 0.45);
   }
-#endif
 }
 
 /*
