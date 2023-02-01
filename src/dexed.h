@@ -23,7 +23,7 @@
 
 */
 
-#define USE_DEXED_COMPRESSOR 1
+//#define DISABLE_DEXED_COMPRESSOR 1
 
 #ifndef DEXED_H_INCLUDED
 #define DEXED_H_INCLUDED
@@ -175,7 +175,7 @@ class Dexed
     uint16_t getRenderTimeMax(void);
     void resetRenderTimeMax(void);
     void ControllersRefresh(void);
-#ifdef USE_DEXED_COMPRESSOR
+#ifndef TEENSYDUINO
     void setCompressor(bool comp);
     bool getCompressor(void);
     void setCompressorPreGain_dB(float32_t pre_gain);
@@ -353,8 +353,8 @@ class Dexed
     void getSamples(float32_t* buffer, uint16_t n_samples);
     void getSamples(int16_t* buffer, uint16_t n_samples);
     void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);
-#ifdef USE_DEXED_COMPRESSOR
     bool use_compressor;
+#ifndef TEENSYDUINO
     Compressor* compressor;
 #endif
 };
