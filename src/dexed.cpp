@@ -74,6 +74,8 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   xrun = 0;
   render_time_max = 0;
 
+  setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
+
 #ifndef TEENSYDUINO
   compressor = new Compressor(samplerate);
 #endif
@@ -209,6 +211,8 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
     keyup(pitch);
     return;
   }
+
+  velo=uint8_t((float(velo)/127.0)*velocity_diff+0.5)+velocity_offset;
 
   pitch += data[144] - TRANSPOSE_FIX;
 
@@ -1663,6 +1667,39 @@ void Dexed::getName(char* buffer)
 {
   strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], buffer, 10);
   buffer[10] = '\0';
+}
+
+void Dexed::setVelocityScale(uint8_t offset, uint8_t max)
+{
+  velocity_offset = offset & 0x7f;
+  velocity_max = max & 0x7f;
+  velocity_diff = velocity_max - velocity_offset;
+}
+
+void Dexed::getVelocityScale(uint8_t* offset, uint8_t* max)
+{
+  *offset = velocity_offset;
+  *max = velocity_max;
+}
+
+void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
+{
+  switch(setup)
+  {
+    case MIDI_VELOCITY_SCALING_DX7:
+      velocity_offset=16;
+      velocity_max=109;
+      break;
+    case MIDI_VELOCITY_SCALING_DX7II:
+      velocity_offset=6;
+      velocity_max=119;
+      break;
+    default: // default setup
+      velocity_offset=0;
+      velocity_max=127;
+      break;
+  }
+  setVelocityScale(velocity_offset, velocity_max);
 }
 
 #ifndef TEENSYDUINO

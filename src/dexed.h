@@ -175,6 +175,9 @@ class Dexed
     uint16_t getRenderTimeMax(void);
     void resetRenderTimeMax(void);
     void ControllersRefresh(void);
+    void setVelocityScale(uint8_t offset, uint8_t max);
+    void getVelocityScale(uint8_t* offset, uint8_t* max);
+    void setVelocityScale(uint8_t setup);
 #ifndef TEENSYDUINO
     void setCompressor(bool comp);
     bool getCompressor(void);
@@ -354,9 +357,18 @@ class Dexed
     void getSamples(int16_t* buffer, uint16_t n_samples);
     void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);
     bool use_compressor;
+    uint8_t velocity_offset;
+    uint8_t velocity_max;
+    float velocity_diff;
 #ifndef TEENSYDUINO
     Compressor* compressor;
 #endif
+
+    enum {
+      MIDI_VELOCITY_SCALING_OFF,
+      MIDI_VELOCITY_SCALING_DX7,
+      MIDI_VELOCITY_SCALING_DX7II
+    };
 };
 
 #endif
