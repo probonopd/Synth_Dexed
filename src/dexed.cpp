@@ -55,6 +55,8 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   fx.init(rate);
 
   engineMsfa = new FmCore;
+  engineMkI = new EngineMkI;
+  engineOpl = new EngineOpl;
   max_notes = maxnotes;
   currentNote = 0;
   resetControllers();
@@ -62,6 +64,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   controllers.opSwitch = 0x3f; // enable all operators
   lastKeyDown = -1;
   vuSignal = 0.0;
+  engineType=MSFA;
   controllers.core = engineMsfa;
   lfo.reset(data + 137);
   sustain = false;
@@ -75,6 +78,8 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   render_time_max = 0;
 
   setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
+
+  setEngineType(MSFA);
 
 #ifndef TEENSYDUINO
   compressor = new Compressor(samplerate);
@@ -93,6 +98,34 @@ Dexed::~Dexed()
     delete &voices[note];
 
   delete(engineMsfa);
+}
+
+void Dexed::setEngineType(uint8_t engine)
+{
+  switch(engine)
+  {
+    case MSFA:
+      panic();
+      controllers.core = engineMsfa;
+      break;
+    case MKI:
+      panic();
+      controllers.core = engineMkI;
+      break;
+    case OPL:
+      panic();
+      controllers.core = engineOpl;
+      break;
+    default:
+      panic();
+      controllers.core = engineMsfa;
+      break;
+  }
+}
+
+uint8_t Dexed::getEngineType(void)
+{
+  return(engineType);
 }
 
 void Dexed::setMaxNotes(uint8_t new_max_notes)

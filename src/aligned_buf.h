@@ -22,6 +22,7 @@
 #define __ALIGNED_BUF_H
 
 #include <stdlib.h>
+#include <stdint.h>
 
 template<typename T, size_t size, size_t alignment = 16>
 class AlignedBuf {

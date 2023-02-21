@@ -44,6 +44,8 @@
 #include "lfo.h"
 #include "PluginFx.h"
 #include "compressor.h"
+#include "EngineMkI.h"
+#include "EngineOpl.h"
 
 #define NUM_VOICE_PARAMETERS 156
 
@@ -143,6 +145,12 @@ enum ON_OFF {
   ON
 };
 
+enum ENGINES {
+  MSFA,
+  MKI,
+  OPL
+};
+
 // GLOBALS
 
 //==============================================================================
@@ -178,6 +186,8 @@ class Dexed
     void setVelocityScale(uint8_t offset, uint8_t max);
     void getVelocityScale(uint8_t* offset, uint8_t* max);
     void setVelocityScale(uint8_t setup);
+    void setEngineType(uint8_t engine);
+    uint8_t getEngineType(void);
 #ifndef TEENSYDUINO
     void setCompressor(bool comp);
     bool getCompressor(void);
@@ -353,6 +363,8 @@ class Dexed
     VoiceStatus voiceStatus;
     Lfo lfo;
     FmCore* engineMsfa;
+    EngineMkI* engineMkI;
+    EngineOpl* engineOpl;
     void getSamples(float32_t* buffer, uint16_t n_samples);
     void getSamples(int16_t* buffer, uint16_t n_samples);
     void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);
