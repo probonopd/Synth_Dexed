@@ -1721,6 +1721,10 @@ void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
 {
   switch(setup)
   {
+    case MIDI_VELOCITY_SCALING_OFF:
+      velocity_offset=0;
+      velocity_max=127;
+      break;
     case MIDI_VELOCITY_SCALING_DX7:
       velocity_offset=16;
       velocity_max=109;
@@ -1729,7 +1733,7 @@ void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
       velocity_offset=6;
       velocity_max=119;
       break;
-    default: // default setup
+    default:
       velocity_offset=0;
       velocity_max=127;
       break;

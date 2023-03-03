@@ -145,6 +145,12 @@ enum ON_OFF {
   ON
 };
 
+enum VELOCITY_SCALES {
+  MIDI_VELOCITY_SCALING_OFF,
+  MIDI_VELOCITY_SCALING_DX7,
+  MIDI_VELOCITY_SCALING_DX7II
+};
+
 enum ENGINES {
   MSFA,
   MKI,
@@ -375,12 +381,6 @@ class Dexed
 #ifndef TEENSYDUINO
     Compressor* compressor;
 #endif
-
-    enum {
-      MIDI_VELOCITY_SCALING_OFF,
-      MIDI_VELOCITY_SCALING_DX7,
-      MIDI_VELOCITY_SCALING_DX7II
-    };
 };
 
 #endif
