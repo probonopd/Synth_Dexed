@@ -64,8 +64,6 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   controllers.opSwitch = 0x3f; // enable all operators
   lastKeyDown = -1;
   vuSignal = 0.0;
-  engineType=MSFA;
-  controllers.core = engineMsfa;
   lfo.reset(data + 137);
   sustain = false;
   voices = NULL;
@@ -107,18 +105,22 @@ void Dexed::setEngineType(uint8_t engine)
     case MSFA:
       panic();
       controllers.core = engineMsfa;
+      engineType=MSFA;
       break;
     case MKI:
       panic();
       controllers.core = engineMkI;
+      engineType=MKI;
       break;
     case OPL:
       panic();
       controllers.core = engineOpl;
+      engineType=OPL;
       break;
     default:
       panic();
       controllers.core = engineMsfa;
+      engineType=MSFA;
       break;
   }
 }
