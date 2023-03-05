@@ -45,10 +45,9 @@ void loop() {
   }
 
   dexed.setEngineType(engine_change++ % 3);
-  Serial.print("Engine changed to: ");
-  Serial.println(engine_change % 3, DEC);
+  Serial.printf("Engine changed to: %d at address 0x%8d\n", dexed.getEngineType(), dexed.getEngineAddress());
 
-  Serial.println("Key-Down");
+  Serial.printf("Key-Down\n");
   dexed.keydown(48, 100);
   delay(100);
   dexed.keydown(52, 100);
@@ -58,7 +57,7 @@ void loop() {
   dexed.keydown(60, 100);
   delay(2000);
 
-  Serial.println("Key-Up");
+  Serial.printf("Key-Up\n");
   dexed.keyup(48);
   dexed.keyup(52);
   dexed.keyup(55);

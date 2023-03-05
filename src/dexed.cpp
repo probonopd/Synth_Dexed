@@ -22,7 +22,6 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
-
 #include <arm_math.h>
 #include <limits.h>
 #include <cstdlib>
@@ -54,9 +53,6 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   Porta::init_sr(rate);
   fx.init(rate);
 
-  engineMsfa = new FmCore;
-  engineMkI = new EngineMkI;
-  engineOpl = new EngineOpl;
   max_notes = maxnotes;
   currentNote = 0;
   resetControllers();
@@ -76,7 +72,7 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
   render_time_max = 0;
 
   setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
-
+  setNoteRefreshMode(false);
   setEngineType(MSFA);
 
 #ifndef TEENSYDUINO
@@ -94,8 +90,6 @@ Dexed::~Dexed()
 
   for (uint8_t note = 0; note < max_notes; note++)
     delete &voices[note];
-
-  delete(engineMsfa);
 }
 
 void Dexed::setEngineType(uint8_t engine)
@@ -103,31 +97,35 @@ void Dexed::setEngineType(uint8_t engine)
   switch(engine)
   {
     case MSFA:
-      panic();
-      controllers.core = engineMsfa;
+      controllers.core = &engineMsfa;
       engineType=MSFA;
       break;
     case MKI:
-      panic();
-      controllers.core = engineMkI;
+      controllers.core = &engineMkI;
       engineType=MKI;
       break;
     case OPL:
-      panic();
-      controllers.core = engineOpl;
+      controllers.core = &engineOpl;
       engineType=OPL;
       break;
     default:
-      panic();
-      controllers.core = engineMsfa;
+      controllers.core = &engineMsfa;
       engineType=MSFA;
       break;
   }
+
+  panic();
+  controllers.refresh();
 }
 
 uint8_t Dexed::getEngineType(void)
 {
   return(engineType);
+}
+
+uint32_t Dexed::getEngineAddress(void)
+{
+  return((uint32_t)controllers.core);
 }
 
 void Dexed::setMaxNotes(uint8_t new_max_notes)

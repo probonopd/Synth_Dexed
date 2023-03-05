@@ -145,14 +145,13 @@ void EngineMkI::compute(int32_t *output, const int32_t *input,
     int32_t gain = gain1;
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
-    
+
     for (int i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = mkiSin((phase+input[i]), gain);
         output[i] = y + adder[i];
         phase += freq;
     }
-    
 }
 
 void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq,

@@ -124,8 +124,8 @@ void EngineOpl::compute(int32_t *output, const int32_t *input, int32_t phase0, i
         output[i] = (y << 14) + adder[i];
         phase += freq;
     }
-
 }
+
 void EngineOpl::compute_pure(int32_t *output, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2, bool add) {
     int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
     int32_t gain = gain1;
