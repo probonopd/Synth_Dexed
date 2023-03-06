@@ -123,9 +123,9 @@ uint8_t Dexed::getEngineType(void)
   return(engineType);
 }
 
-uint32_t Dexed::getEngineAddress(void)
+FmCore* Dexed::getEngineAddress(void)
 {
-  return((uint32_t)controllers.core);
+  return(controllers.core);
 }
 
 void Dexed::setMaxNotes(uint8_t new_max_notes)

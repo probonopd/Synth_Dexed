@@ -45,7 +45,7 @@ void loop() {
   }
 
   dexed.setEngineType(engine_change++ % 3);
-  Serial.printf("Engine changed to: %d at address 0x%8d\n", dexed.getEngineType(), dexed.getEngineAddress());
+  Serial.printf("Engine changed to: %d at address %p\n", dexed.getEngineType(), int(dexed.getEngineAddress()));
 
   Serial.printf("Key-Down\n");
   dexed.keydown(48, 100);

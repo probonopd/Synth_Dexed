@@ -194,7 +194,7 @@ class Dexed
     void setVelocityScale(uint8_t setup);
     void setEngineType(uint8_t engine);
     uint8_t getEngineType(void);
-    uint32_t getEngineAddress(void);
+    FmCore* getEngineAddress(void);
 #ifndef TEENSYDUINO
     void setCompressor(bool comp);
     bool getCompressor(void);
