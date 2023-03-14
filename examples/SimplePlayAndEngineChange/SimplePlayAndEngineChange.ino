@@ -130,6 +130,11 @@ AudioOutputI2S i2s1;
 AudioControlSGTL5000 sgtl5000_1;
 AudioConnection patchCord1(dexed, 0, i2s1, 0);
 AudioConnection patchCord2(dexed, 0, i2s1, 1);
+#ifdef AUDIO_INTERFACE 
+AudioOutputUSB           usb1;
+AudioConnection          patchCord3(dexed, 0, usb1, 0);
+AudioConnection          patchCord4(dexed, 0, usb1, 1);
+#endif
 
 void setup() {
   AudioMemory(32);
