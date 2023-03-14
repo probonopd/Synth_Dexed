@@ -1,3 +1,5 @@
+#ifdef AUDIO_INTERFACE 
+
 #include "usb_names.h"
 #define MIDI_NAME   {'S','y','n','t','h','D','e','x','e','d'}
 #define MIDI_NAME_LEN 10
@@ -9,3 +11,5 @@ struct usb_string_descriptor_struct usb_string_product_name = {
   3,
   MIDI_NAME
 };
+
+#endif
