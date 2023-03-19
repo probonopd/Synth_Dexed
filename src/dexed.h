@@ -44,6 +44,7 @@
 #include "lfo.h"
 #include "PluginFx.h"
 #include "compressor.h"
+#include "EngineMsfa.h"
 #include "EngineMkI.h"
 #include "EngineOpl.h"
 
@@ -369,9 +370,9 @@ class Dexed
     uint8_t engineType;
     VoiceStatus voiceStatus;
     Lfo lfo;
-    FmCore engineMsfa;
-    EngineMkI engineMkI;
-    EngineOpl engineOpl;
+    EngineMsfa* engineMsfa;
+    EngineMkI* engineMkI;
+    EngineOpl* engineOpl;
     void getSamples(float32_t* buffer, uint16_t n_samples);
     void getSamples(int16_t* buffer, uint16_t n_samples);
     void compress(float32_t* wav_in, float32_t* wav_out, uint16_t n, float32_t threshold, float32_t slope, uint16_t sr,  float32_t tla, float32_t twnd, float32_t tatt, float32_t trel);

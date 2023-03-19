@@ -22,14 +22,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include "fm_core.h"
 
 // State of MIDI controllers
 const int kControllerPitch = 0;
 const int kControllerPitchRange = 1;
 const int kControllerPitchStep = 2;
 const int kControllerPortamentoGlissando = 3;
-
-class FmCore;
 
 class FmMod {
   public:
@@ -38,7 +37,6 @@ class FmMod {
     bool amp;
     bool eg;
     uint8_t ctrl_mode;
-    uint8_t _dummy_;
 
     FmMod()
     {
@@ -148,7 +146,7 @@ class Controllers {
         eg_mod = 127;
     }
 
-    FmCore *core;
+    class FmCore* core;
 };
 
 #endif

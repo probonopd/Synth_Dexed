@@ -73,7 +73,11 @@ Dexed::Dexed(uint8_t maxnotes, int rate)
 
   setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
   setNoteRefreshMode(false);
-  setEngineType(MSFA);
+
+  engineMsfa = new EngineMsfa;
+  engineMkI = new EngineMkI;
+  engineOpl = new EngineOpl;
+  setEngineType(MKI);
 
 #ifndef TEENSYDUINO
   compressor = new Compressor(samplerate);
@@ -94,27 +98,28 @@ Dexed::~Dexed()
 
 void Dexed::setEngineType(uint8_t engine)
 {
+  panic();
+
   switch(engine)
   {
     case MSFA:
-      controllers.core = &engineMsfa;
+      controllers.core = (EngineMkI*)engineMsfa;
       engineType=MSFA;
       break;
     case MKI:
-      controllers.core = &engineMkI;
+      controllers.core = (EngineMkI*)engineMkI;
       engineType=MKI;
       break;
     case OPL:
-      controllers.core = &engineOpl;
+      controllers.core = (EngineMkI*)engineOpl;
       engineType=OPL;
       break;
     default:
-      controllers.core = &engineMsfa;
+      controllers.core = (EngineMkI*)engineMsfa;
       engineType=MSFA;
       break;
   }
 
-  panic();
   controllers.refresh();
 }
 

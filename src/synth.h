@@ -27,34 +27,8 @@
 
 #define _MAX_NOTES 32
 
-// This IS not be present on MSVC.
-// See http://stackoverflow.com/questions/126279/c99-stdint-h-header-and-ms-visual-studio
-#ifdef _MSC_VER
-typedef __int32 int32_t;
-typedef unsigned __int32 uint32_t;
-typedef __int16 SInt16;
-#endif
-
 #define LG_N 6
 #define _N_ (1 << LG_N)
-
-#if defined(__APPLE__)
-#include <libkern/OSAtomic.h>
-#define SynthMemoryBarrier() OSMemoryBarrier()
-#elif defined(__GNUC__)
-#if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 1)
-#define SynthMemoryBarrier() __sync_synchronize()
-#endif
-#endif
-
-
-// #undef SynthMemoryBarrier()
-
-#ifndef SynthMemoryBarrier
-// need to understand why this must be defined
-// #warning Memory barrier is not enabled
-#define SynthMemoryBarrier()
-#endif
 
 template<typename T>
 inline static T min(const T& a, const T& b) {
