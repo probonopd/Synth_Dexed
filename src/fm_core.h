@@ -46,10 +46,11 @@ class FmAlgorithm {
 
 class FmCore {
   public:
-    //virtual ~FmCore() {};
+    FmCore() {};
+    virtual ~FmCore() {};
     static void dump();
-    uint8_t get_carrier_operators(uint8_t algorithm);
-    virtual void render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_gain);
+    static uint8_t get_carrier_operators(uint8_t algorithm);
+    virtual void render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_gain) = 0;
   protected:
     AlignedBuf<int32_t, _N_>buf_[2];
     const static FmAlgorithm algorithms[32];
