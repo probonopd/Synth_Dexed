@@ -27,7 +27,7 @@ class EngineMkI : public FmCore {
 public:
     EngineMkI();
     ~EngineMkI() {};
-    void render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_shift);
+    void render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_shift) override;
     
     void compute(int32_t *output, const int32_t *input, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2, bool add);
     
