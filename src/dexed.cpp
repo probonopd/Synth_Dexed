@@ -312,6 +312,8 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
     if (!voices[note].keydown)
     {
       currentNote = (note + 1) % max_notes;
+      //if (keydown_counter == 0) // Original comment: TODO: should only do this if # keys down was 0
+        lfo.keydown();
       voices[note].midi_note = pitch;
       voices[note].velocity = velo;
       voices[note].sustained = sustain;
@@ -330,10 +332,6 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
     }
     note = (note + 1) % max_notes;
   }
-
-
-  if (keydown_counter == 0)
-    lfo.keydown();
 
   if ( monoMode ) {
     for (uint8_t i = 0; i < max_notes; i++) {
