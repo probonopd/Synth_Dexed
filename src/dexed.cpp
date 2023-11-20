@@ -729,7 +729,7 @@ void Dexed::setPBController(uint8_t pb_range, uint8_t pb_step)
   controllers.values_[kControllerPitchRange] = pb_range;
   controllers.values_[kControllerPitchStep] = pb_step;
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 void Dexed::setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode)
@@ -746,7 +746,7 @@ void Dexed::setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode
   controllers.wheel.setTarget(mw_assign);
   controllers.wheel.setMode(mw_mode);
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 void Dexed::setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode)
@@ -763,7 +763,7 @@ void Dexed::setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode
   controllers.foot.setTarget(fc_assign);
   controllers.foot.setMode(fc_mode);
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 void Dexed::setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode)
@@ -780,7 +780,7 @@ void Dexed::setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode
   controllers.breath.setTarget(bc_assign);
   controllers.breath.setMode(bc_mode);
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode)
@@ -797,7 +797,7 @@ void Dexed::setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode
   controllers.at.setTarget(at_assign);
   controllers.at.setMode(at_mode);
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 void Dexed::setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time)
@@ -816,7 +816,7 @@ void Dexed::setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando,
 
   controllers.values_[kControllerPortamentoGlissando] = portamento_glissando;
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 void Dexed::setPortamentoMode(uint8_t portamento_mode)
@@ -824,7 +824,7 @@ void Dexed::setPortamentoMode(uint8_t portamento_mode)
   portamento_mode = constrain(portamento_mode, 0, 1);
   controllers.portamento_enable_cc = portamento_mode > 63;
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 uint8_t Dexed::getPortamentoMode(void)
@@ -837,7 +837,7 @@ void Dexed::setPortamentoGlissando(uint8_t portamento_glissando)
   portamento_glissando = constrain(portamento_glissando, 0, 1);
   controllers.values_[kControllerPortamentoGlissando] = portamento_glissando;
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 uint8_t Dexed::getPortamentoGlissando(void)
@@ -855,7 +855,7 @@ void Dexed::setPortamentoTime(uint8_t portamento_time)
   else
     controllers.portamento_enable_cc = false;
 
-  //controllers.refresh();
+  controllers.refresh();
 }
 
 uint8_t Dexed::getPortamentoTime(void)

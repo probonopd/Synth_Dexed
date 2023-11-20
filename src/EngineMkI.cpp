@@ -69,23 +69,23 @@ static inline uint16_t sinLog(uint16_t phi) {
 EngineMkI::EngineMkI() {
     float bitReso = SINLOG_TABLESIZE;
     
-    for(int i=0;i<SINLOG_TABLESIZE;i++) {
+    for(int32_t i=0;i<SINLOG_TABLESIZE;i++) {
         float x1 = sin(((0.5+i)/bitReso) * M_PI/2.0);
         sinLogTable[i] = round(-1024 * log2(x1));
     }
     
     bitReso = SINEXP_TABLESIZE;
-    for(int i=0;i<SINEXP_TABLESIZE;i++) {
+    for(int32_t i=0;i<SINEXP_TABLESIZE;i++) {
         float x1 = (pow(2, float(i)/bitReso)-1) * 4096;
         sinExpTable[i] = round(x1);
     }
     
 #ifdef MKIDEBUG
     char buffer[4096];
-    int pos = 0;
+    int32_t pos = 0;
     
     TRACE("****************************************");
-    for(int i=0;i<SINLOG_TABLESIZE;i++) {
+    for(int32_t i=0;i<SINLOG_TABLESIZE;i++) {
         pos += sprintf(buffer+pos, "%d ", sinLogTable[i]);
         if ( pos > 90 ) {
             TRACE("SINLOGTABLE: %s" ,buffer);
@@ -97,7 +97,7 @@ EngineMkI::EngineMkI() {
     buffer[0] = 0;
     pos = 0;
     TRACE("----------------------------------------");    
-    for(int i=0;i<SINEXP_TABLESIZE;i++) {
+    for(int32_t i=0;i<SINEXP_TABLESIZE;i++) {
         pos += sprintf(buffer+pos, "%d ", sinExpTable[i]);
         if ( pos > 90 ) {
             TRACE("SINEXTTABLE: %s" ,buffer);
@@ -146,7 +146,7 @@ void EngineMkI::compute(int32_t *output, const int32_t *input,
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
 
-    for (int i = 0; i < _N_; i++) {
+    for (int32_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = mkiSin((phase+input[i]), gain);
         output[i] = y + adder[i];
@@ -161,7 +161,7 @@ void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
     
-    for (int i = 0; i < _N_; i++) {
+    for (int32_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = mkiSin(phase , gain);
         output[i] = y + adder[i];
@@ -171,7 +171,7 @@ void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
 
 void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
                            int32_t gain1, int32_t gain2,
-                           int32_t *fb_buf, int fb_shift, bool add) {
+                           int32_t *fb_buf, int32_t fb_shift, bool add) {
     int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
     int32_t gain = gain1;
     int32_t phase = phase0;
@@ -179,7 +179,7 @@ void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
     int32_t y0 = fb_buf[0];
     int32_t y = fb_buf[1];
     
-    for (int i = 0; i < _N_; i++) {
+    for (int32_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         y0 = y;
@@ -193,7 +193,7 @@ void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
 }
 
 // exclusively used for ALGO 6 with feedback
-void EngineMkI::compute_fb2(int32_t *output, FmOpParams *parms, int32_t gain01, int32_t gain02, int32_t *fb_buf, int fb_shift) {
+void EngineMkI::compute_fb2(int32_t *output, FmOpParams *parms, int32_t gain01, int32_t gain02, int32_t *fb_buf, int32_t fb_shift) {
     int32_t dgain[2];
     int32_t gain[2];
     int32_t phase[2];
@@ -211,7 +211,7 @@ void EngineMkI::compute_fb2(int32_t *output, FmOpParams *parms, int32_t gain01, 
     dgain[0] = (gain02 - gain01 + (_N_ >> 1)) >> LG_N;
     dgain[1] = (parms[1].gain_out - (parms[1].gain_out == 0 ? (ENV_MAX-1) : parms[1].gain_out));
     
-    for (int i = 0; i < _N_; i++) {
+    for (int32_t i = 0; i < _N_; i++) {
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         
         // op 0
@@ -232,7 +232,7 @@ void EngineMkI::compute_fb2(int32_t *output, FmOpParams *parms, int32_t gain01, 
 }
 
 // exclusively used for ALGO 4 with feedback
-void EngineMkI::compute_fb3(int32_t *output, FmOpParams *parms, int32_t gain01, int32_t gain02, int32_t *fb_buf, int fb_shift) {
+void EngineMkI::compute_fb3(int32_t *output, FmOpParams *parms, int32_t gain01, int32_t gain02, int32_t *fb_buf, int32_t fb_shift) {
     int32_t dgain[3];
     int32_t gain[3];
     int32_t phase[3];
@@ -255,7 +255,7 @@ void EngineMkI::compute_fb3(int32_t *output, FmOpParams *parms, int32_t gain01, 
     dgain[2] = (parms[2].gain_out - (parms[2].gain_out == 0 ? (ENV_MAX-1) : parms[2].gain_out));
     
     
-    for (int i = 0; i < _N_; i++) {
+    for (int32_t i = 0; i < _N_; i++) {
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         
         // op 0
@@ -281,7 +281,7 @@ void EngineMkI::compute_fb3(int32_t *output, FmOpParams *parms, int32_t gain01, 
 }
 
 void EngineMkI::render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_shift) {
-    const int kLevelThresh = ENV_MAX-100;
+    const int32_t kLevelThresh = ENV_MAX-100;
     FmAlgorithm alg = algorithms[algorithm];
     bool has_contents[3] = { true, false, false };
     bool fb_on = feedback_shift < 16;
@@ -292,12 +292,12 @@ void EngineMkI::render(int32_t *output, FmOpParams *params, int32_t algorithm, i
                 alg.ops[0] = 0xc4;
     }
     
-    for (int op = 0; op < 6; op++) {
-        int flags = alg.ops[op];
+    for (int32_t op = 0; op < 6; op++) {
+        int32_t flags = alg.ops[op];
         bool add = (flags & OUT_BUS_ADD) != 0;
         FmOpParams &param = params[op];
-        int inbus = (flags >> 4) & 3;
-        int outbus = flags & 3;
+        int32_t inbus = (flags >> 4) & 3;
+        int32_t outbus = flags & 3;
         int32_t *outptr = (outbus == 0) ? output : buf_[outbus - 1].get();
         int32_t gain1 = param.gain_out == 0 ? (ENV_MAX-1) : param.gain_out;
         int32_t gain2 = ENV_MAX-(param.level_in >> (28-ENV_BITDEPTH));
