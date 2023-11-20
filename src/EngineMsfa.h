@@ -25,5 +25,5 @@ class EngineMsfa : public FmCore {
   public:
     EngineMsfa() {};
     ~EngineMsfa() {};
-    void render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_gain) override;
+    void render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_gain);
 };
