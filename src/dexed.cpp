@@ -1030,21 +1030,11 @@ uint8_t Dexed::getAftertouch(void)
   return (controllers.aftertouch_cc);
 }
 
-void Dexed::setPitchbend(uint8_t value1, uint8_t value2)
-{
-  setPitchbend(uint16_t(((value2 & 0x7f) << 7) | (value1 & 0x7f)));
-}
-
 void Dexed::setPitchbend(int16_t value)
 {
   value = constrain(value, -8192, 8191);
 
-  setPitchbend(uint16_t(value + 0x2000)); // -8192 to +8191 --> 0 to 16383
-}
-
-void Dexed::setPitchbend(uint16_t value)
-{
-  controllers.values_[kControllerPitch] = (value & 0x3fff);
+  controllers.values_[kControllerPitch] = value + 0x2000; // -8192 to +8191 --> 0 to 16383
 }
 
 int16_t Dexed::getPitchbend(void)
