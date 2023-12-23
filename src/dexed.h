@@ -242,7 +242,9 @@ class Dexed
     uint8_t getFootController(void);
     void setAftertouch(uint8_t value);
     uint8_t getAftertouch(void);
+    void setPitchbend(uint8_t value1, uint8_t value2);
     void setPitchbend(int16_t value);
+    void setPitchbend(uint16_t value);
     int16_t getPitchbend(void);
     void setPitchbendRange(uint8_t range);
     uint8_t getPitchbendRange(void);
