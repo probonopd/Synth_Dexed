@@ -25,8 +25,8 @@
 
 class FmOperatorInfo {
   public:
-    int in;
-    int out;
+    int32_t in;
+    int32_t out;
 };
 
 enum FmOperatorFlags {
@@ -41,7 +41,7 @@ enum FmOperatorFlags {
 
 class FmAlgorithm {
   public:
-    int ops[6];
+    int32_t ops[6];
 };
 
 class FmCore {

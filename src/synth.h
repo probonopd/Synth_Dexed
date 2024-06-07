@@ -30,7 +30,7 @@
 #define LG_N 6
 #define _N_ (1 << LG_N)
 
-template<typename T>
+/*template<typename T>
 inline static T min(const T& a, const T& b) {
   return a < b ? a : b;
 }
@@ -38,7 +38,7 @@ inline static T min(const T& a, const T& b) {
 template<typename T>
 inline static T max(const T& a, const T& b) {
   return a > b ? a : b;
-}
+}*/
 
 #define QER(n,b) ( ((float)n)/(1<<b) )
 
@@ -67,7 +67,7 @@ inline static T max(const T& a, const T& b) {
   (_amt < _low) ? _low : ((_amt > _high) ? _high : _amt); \
 })
 
-static inline int32_t signed_saturate_rshift(int32_t val, int bits, int rshift)
+static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift)
 {
   int32_t out, max;
 

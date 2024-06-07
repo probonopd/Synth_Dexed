@@ -25,21 +25,21 @@ class PitchEnv {
 
     // The rates and levels arrays are calibrated to match the Dx7 parameters
     // (ie, value 0..99).
-    void set(const int rates[4], const int levels[4]);
+    void set(const int32_t rates[4], const int32_t levels[4]);
 
     // Result is in Q24/octave
     int32_t getsample();
     void keydown(bool down);
     void getPosition(char *step);
   private:
-    static int unit_;
-    int rates_[4];
-    int levels_[4];
+    static int32_t unit_;
+    int32_t rates_[4];
+    int32_t levels_[4];
     int32_t level_;
-    int targetlevel_;
+    int32_t targetlevel_;
     bool rising_;
-    int ix_;
-    int inc_;
+    int32_t ix_;
+    int32_t inc_;
 
     bool down_;
 

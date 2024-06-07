@@ -24,12 +24,12 @@
 
 uint32_t Env::sr_multiplier = (1 << 24);
 
-const int levellut[] = {
+const int32_t levellut[] = {
   0, 5, 9, 13, 17, 20, 23, 25, 27, 29, 31, 33, 35, 37, 39, 41, 42, 43, 45, 46
 };
 
 #ifdef ACCURATE_ENVELOPE
-const int statics[] = {
+const int32_t statics[] = {
   1764000, 1764000, 1411200, 1411200, 1190700, 1014300, 992250,
   882000, 705600, 705600, 584325, 507150, 502740, 441000, 418950,
   352800, 308700, 286650, 253575, 220500, 220500, 176400, 145530,
@@ -47,7 +47,7 @@ void Env::init_sr(double sampleRate) {
   sr_multiplier = (44100.0 / sampleRate) * (1 << 24);
 }
 
-void Env::init(const int r[4], const int l[4], int ol, int rate_scaling) {
+void Env::init(const int32_t r[4], const int32_t l[4], int32_t ol, int32_t rate_scaling) {
   for (int i = 0; i < 4; i++) {
     rates_[i] = r[i];
     levels_[i] = l[i];
@@ -75,7 +75,7 @@ int32_t Env::getsample() {
       ;
     }
     else if (rising_) {
-      const int jumptarget = 1716;
+      const int32_t jumptarget = 1716;
       if (level_ < (jumptarget << 16)) {
         level_ = jumptarget << 16;
       }
@@ -105,15 +105,15 @@ void Env::keydown(bool d) {
   }
 }
 
-int Env::scaleoutlevel(int outlevel) {
+int32_t Env::scaleoutlevel(int32_t outlevel) {
   return outlevel >= 20 ? 28 + outlevel : levellut[outlevel];
 }
 
 void Env::advance(int newix) {
   ix_ = newix;
   if (ix_ < 4) {
-    int newlevel = levels_[ix_];
-    int actuallevel = scaleoutlevel(newlevel) >> 1;
+    int32_t newlevel = levels_[ix_];
+    int32_t actuallevel = scaleoutlevel(newlevel) >> 1;
     actuallevel = (actuallevel << 6) + outlevel_ - 4256;
     actuallevel = actuallevel < 16 ? 16 : actuallevel;
     // level here is same as Java impl
@@ -121,18 +121,18 @@ void Env::advance(int newix) {
     rising_ = (targetlevel_ > level_);
 
     // rate
-    int qrate = (rates_[ix_] * 41) >> 6;
+    int32_t qrate = (rates_[ix_] * 41) >> 6;
     qrate += rate_scaling_;
-    qrate = min(qrate, 63);
+    qrate = std::min(int(qrate), 63);
 
 #ifdef ACCURATE_ENVELOPE
     if (targetlevel_ == level_ || (ix_ == 0 && newlevel == 0)) {
       // approximate number of samples at 44.100 kHz to achieve the time
       // empirically gathered using 2 TF1s, could probably use some double-checking
       // and cleanup, but it's pretty close for now.
-      int staticrate = rates_[ix_];
+      int32_t staticrate = rates_[ix_];
       staticrate += rate_scaling_; // needs to be checked, as well, but seems correct
-      staticrate = min(staticrate, 99);
+      staticrate = std::min(int(staticrate), 99);
       staticcount_ = staticrate < 77 ? statics[staticrate] : 20 * (99 - staticrate);
       if (staticrate < 77 && (ix_ == 0 && newlevel == 0)) {
         staticcount_ /= 20; // attack is scaled faster
@@ -149,7 +149,7 @@ void Env::advance(int newix) {
   }
 }
 
-void Env::update(const int r[4], const int l[4], int ol, int rate_scaling) {
+void Env::update(const int32_t r[4], const int32_t l[4], int32_t ol, int32_t rate_scaling) {
   for (int i = 0; i < 4; i++) {
     rates_[i] = r[i];
     levels_[i] = l[i];
@@ -158,8 +158,8 @@ void Env::update(const int r[4], const int l[4], int ol, int rate_scaling) {
   rate_scaling_ = rate_scaling;
   if ( down_ ) {
     // for now we simply reset ourselves at level 3
-    int newlevel = levels_[2];
-    int actuallevel = scaleoutlevel(newlevel) >> 1;
+    int32_t newlevel = levels_[2];
+    int32_t actuallevel = scaleoutlevel(newlevel) >> 1;
     actuallevel = (actuallevel << 6) - 4256;
     actuallevel = actuallevel < 16 ? 16 : actuallevel;
     targetlevel_ = actuallevel << 16;

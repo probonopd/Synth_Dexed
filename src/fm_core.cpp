@@ -57,7 +57,7 @@ const FmAlgorithm FmCore::algorithms[32] = {
 };
 
 int n_out(const FmAlgorithm &alg) {
-  int count = 0;
+  int32_t count = 0;
   for (int i = 0; i < 6; i++) {
     if ((alg.ops[i] & 7) == OUT_BUS_ADD) count++;
   }
@@ -84,7 +84,7 @@ void FmCore::dump() {
     cout << (i + 1) << ":";
     const FmAlgorithm &alg = algorithms[i];
     for (int j = 0; j < 6; j++) {
-      int flags = alg.ops[j];
+      int32_t flags = alg.ops[j];
       cout << " ";
       if (flags & FB_IN) cout << "[";
       cout << (flags & IN_BUS_ONE ? "1" : flags & IN_BUS_TWO ? "2" : "0") << "->";

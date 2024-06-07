@@ -22,15 +22,15 @@
 #include "EngineMsfa.h"
 
 void EngineMsfa::render(int32_t *output, FmOpParams *params, int32_t algorithm, int32_t *fb_buf, int32_t feedback_shift) {
-  const int kLevelThresh = 1120;
+  const int32_t kLevelThresh = 1120;
   const FmAlgorithm alg = algorithms[algorithm];
   bool has_contents[3] = { true, false, false };
-  for (int op = 0; op < 6; op++) {
-    int flags = alg.ops[op];
+  for (uint8_t op = 0; op < 6; op++) {
+    int32_t flags = alg.ops[op];
     bool add = (flags & OUT_BUS_ADD) != 0;
     FmOpParams &param = params[op];
-    int inbus = (flags >> 4) & 3;
-    int outbus = flags & 3;
+    int32_t inbus = (flags >> 4) & 3;
+    int32_t outbus = flags & 3;
     int32_t *outptr = (outbus == 0) ? output : buf_[outbus - 1].get();
     int32_t gain1 = param.gain_out;
     int32_t gain2 = Exp2::lookup(param.level_in - (14 * (1 << 24)));

@@ -25,10 +25,10 @@
 #include "fm_core.h"
 
 // State of MIDI controllers
-const int kControllerPitch = 0;
-const int kControllerPitchRange = 1;
-const int kControllerPitchStep = 2;
-const int kControllerPortamentoGlissando = 3;
+const uint8_t kControllerPitch = 0;
+const uint8_t kControllerPitchRange = 1;
+const uint8_t kControllerPitchStep = 2;
+const uint8_t kControllerPortamentoGlissando = 3;
 
 class FmMod {
   public:
@@ -96,13 +96,13 @@ class Controllers {
       }
 
       if (mod.amp)
-        amp_mod = max(amp_mod, total);
+        amp_mod = std::max(amp_mod, total);
 
       if (mod.pitch)
-        pitch_mod = max(pitch_mod, total);
+        pitch_mod = std::max(pitch_mod, total);
 
       if (mod.eg)
-        eg_mod = max(eg_mod, total);
+        eg_mod = std::max(eg_mod, total);
     }
 
   public:
@@ -117,9 +117,9 @@ class Controllers {
     uint8_t foot_cc;
     uint8_t modwheel_cc;
     bool portamento_enable_cc;
-    int portamento_cc;
+    int32_t portamento_cc;
     bool portamento_gliss_cc;
-    int masterTune;
+    int32_t masterTune;
 
     uint8_t opSwitch;
 

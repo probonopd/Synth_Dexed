@@ -38,7 +38,7 @@
 #include "porta.h"
 #include "compressor.h"
 
-Dexed::Dexed(uint8_t maxnotes, int rate)
+Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
   samplerate = float32_t(rate);
 
@@ -103,19 +103,19 @@ void Dexed::setEngineType(uint8_t engine)
   switch(engine)
   {
     case MSFA:
-      controllers.core = (EngineMkI*)engineMsfa;
+      controllers.core = (FmCore*)engineMsfa;
       engineType=MSFA;
       break;
     case MKI:
-      controllers.core = (EngineMkI*)engineMkI;
+      controllers.core = (FmCore*)engineMkI;
       engineType=MKI;
       break;
     case OPL:
-      controllers.core = (EngineMkI*)engineOpl;
+      controllers.core = (FmCore*)engineOpl;
       engineType=OPL;
       break;
     default:
-      controllers.core = (EngineMkI*)engineMsfa;
+      controllers.core = (FmCore*)engineMsfa;
       engineType=MSFA;
       break;
   }
@@ -135,8 +135,6 @@ FmCore* Dexed::getEngineAddress(void)
 
 void Dexed::setMaxNotes(uint8_t new_max_notes)
 {
-  uint8_t i = 0;
-
   max_notes = constrain(max_notes, 0, _MAX_NOTES);
 
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
@@ -149,7 +147,7 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
   if (voices)
   {
     panic();
-    for (i = 0; i < max_notes; i++)
+    for (uint8_t i = 0; i < max_notes; i++)
     {
       if (voices[i].dx7_note)
         delete voices[i].dx7_note;
@@ -162,7 +160,7 @@ void Dexed::setMaxNotes(uint8_t new_max_notes)
   if (max_notes > 0)
   {
     voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
-    for (i = 0; i < max_notes; i++)
+    for (uint8_t i = 0; i < max_notes; i++)
     {
       voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
       voices[i].keydown = false;
@@ -186,7 +184,7 @@ void Dexed::deactivate(void)
   panic();
 }
 
-void Dexed::getSamples(float32_t* buffer, uint16_t n_samples)
+void Dexed::getSamples(float* buffer, uint16_t n_samples)
 {
   if (refreshVoice)
   {
@@ -238,13 +236,13 @@ void Dexed::getSamples(float32_t* buffer, uint16_t n_samples)
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
-  float32_t tmp[n_samples];
+  float tmp[n_samples];
 
   getSamples(tmp, n_samples);
   arm_float_to_q15(tmp, (q15_t*)buffer, n_samples);
 }
 
-void Dexed::keydown(int16_t pitch, uint8_t velo) {
+void Dexed::keydown(uint8_t pitch, uint8_t velo) {
   if ( velo == 0 ) {
     keyup(pitch);
     return;
@@ -254,10 +252,10 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
 
   pitch += data[144] - TRANSPOSE_FIX;
 
-  int previousKeyDown = lastKeyDown;
+  int32_t previousKeyDown = lastKeyDown;
   lastKeyDown = pitch;
 
-  int porta = -1;
+  int32_t porta = -1;
   if ( controllers.portamento_enable_cc && previousKeyDown >= 0 )
     porta = controllers.portamento_cc;
 
@@ -318,7 +316,7 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
       voices[note].velocity = velo;
       voices[note].sustained = sustain;
       voices[note].keydown = true;
-      int srcnote = (previousKeyDown >= 0) ? previousKeyDown : pitch;
+      int32_t srcnote = (previousKeyDown >= 0) ? previousKeyDown : pitch;
       voices[note].dx7_note->init(data, pitch, velo, srcnote, porta, &controllers);
       if ( data[136] )
         voices[note].dx7_note->oscSync();
@@ -355,7 +353,7 @@ void Dexed::keydown(int16_t pitch, uint8_t velo) {
   voices[note].live = true;
 }
 
-void Dexed::keyup(int16_t pitch) {
+void Dexed::keyup(uint8_t pitch) {
   uint8_t note;
 
   pitch = constrain(pitch, 0, 127);
@@ -377,7 +375,7 @@ void Dexed::keyup(int16_t pitch) {
   }
 
   if ( monoMode ) {
-    int16_t highNote = -1;
+    int8_t highNote = -1;
     uint8_t target = 0;
     for (int8_t i = 0; i < max_notes; i++) {
       if ( voices[i].keydown && voices[i].midi_note > highNote ) {
@@ -1764,52 +1762,52 @@ bool Dexed::getCompressor(void)
   return (use_compressor);
 }
 
-void Dexed::setCompressorPreGain_dB(float32_t pre_gain)
+void Dexed::setCompressorPreGain_dB(float pre_gain)
 {
   compressor->setPreGain_dB(pre_gain);
 }
 
-void Dexed::setCompressorAttack_sec(float32_t attack_sec)
+void Dexed::setCompressorAttack_sec(float attack_sec)
 {
   compressor->setAttack_sec(attack_sec, samplerate);
 }
 
-void Dexed::setCompressorRelease_sec(float32_t release_sec)
+void Dexed::setCompressorRelease_sec(float release_sec)
 {
   compressor->setRelease_sec(release_sec, samplerate);
 }
 
-void Dexed::setCompressorThresh_dBFS(float32_t thresh_dBFS)
+void Dexed::setCompressorThresh_dBFS(float thresh_dBFS)
 {
   compressor->setThresh_dBFS(thresh_dBFS);
 }
 
-void Dexed::setCompressionRatio(float32_t comp_ratio)
+void Dexed::setCompressionRatio(float comp_ratio)
 {
   compressor->setCompressionRatio(comp_ratio);
 }
 
-float32_t Dexed::getCompressorPreGain_dB(void)
+float Dexed::getCompressorPreGain_dB(void)
 {
   return (compressor->getPreGain_dB());
 }
 
-float32_t Dexed::getCompressorAttack_sec(void)
+float Dexed::getCompressorAttack_sec(void)
 {
   return (compressor->getAttack_sec());
 }
 
-float32_t Dexed::getCompressorRelease_sec(void)
+float Dexed::getCompressorRelease_sec(void)
 {
   return (compressor->getRelease_sec());
 }
 
-float32_t Dexed::getCompressorThresh_dBFS(void)
+float Dexed::getCompressorThresh_dBFS(void)
 {
   return (compressor->getThresh_dBFS());
 }
 
-float32_t Dexed::getCompressionRatio(void)
+float Dexed::getCompressionRatio(void)
 {
   return (compressor->getCompressionRatio());
 }

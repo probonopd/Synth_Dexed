@@ -17,7 +17,7 @@
 #include "synth.h"
 #include "pitchenv.h"
 
-int PitchEnv::unit_;
+int32_t PitchEnv::unit_;
 
 void PitchEnv::init(FRAC_NUM sample_rate) {
   unit_ = _N_ * (1 << 24) / (21.3 * sample_rate) + 0.5;
@@ -42,7 +42,7 @@ const int8_t pitchenv_tab[] = {
   82, 92, 103, 115, 127
 };
 
-void PitchEnv::set(const int r[4], const int l[4]) {
+void PitchEnv::set(const int32_t r[4], const int32_t l[4]) {
   for (int i = 0; i < 4; i++) {
     rates_[i] = r[i];
     levels_[i] = l[i];
@@ -81,7 +81,7 @@ void PitchEnv::keydown(bool d) {
 void PitchEnv::advance(int newix) {
   ix_ = newix;
   if (ix_ < 4) {
-    int newlevel = levels_[ix_];
+    int32_t newlevel = levels_[ix_];
     targetlevel_ = pitchenv_tab[newlevel] << 19;
     rising_ = (targetlevel_ > level_);
     inc_ = pitchenv_rate[rates_[ix_]] * unit_;

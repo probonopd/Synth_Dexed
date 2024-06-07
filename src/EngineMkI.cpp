@@ -81,7 +81,7 @@ EngineMkI::EngineMkI() {
     }
     
 #ifdef MKIDEBUG
-    char buffer[4096];
+    uint8_t buffer[4096];
     int32_t pos = 0;
     
     TRACE("****************************************");
@@ -146,7 +146,7 @@ void EngineMkI::compute(int32_t *output, const int32_t *input,
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
 
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = mkiSin((phase+input[i]), gain);
         output[i] = y + adder[i];
@@ -154,14 +154,13 @@ void EngineMkI::compute(int32_t *output, const int32_t *input,
     }
 }
 
-void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
-                             int32_t gain1, int32_t gain2, bool add) {
+void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2, bool add) {
     int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
     int32_t gain = gain1;
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
     
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = mkiSin(phase , gain);
         output[i] = y + adder[i];
@@ -169,9 +168,7 @@ void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
     }
 }
 
-void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
-                           int32_t gain1, int32_t gain2,
-                           int32_t *fb_buf, int32_t fb_shift, bool add) {
+void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq, int32_t gain1, int32_t gain2, int32_t *fb_buf, int32_t fb_shift, bool add) {
     int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
     int32_t gain = gain1;
     int32_t phase = phase0;
@@ -179,7 +176,7 @@ void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
     int32_t y0 = fb_buf[0];
     int32_t y = fb_buf[1];
     
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         y0 = y;
@@ -211,7 +208,7 @@ void EngineMkI::compute_fb2(int32_t *output, FmOpParams *parms, int32_t gain01, 
     dgain[0] = (gain02 - gain01 + (_N_ >> 1)) >> LG_N;
     dgain[1] = (parms[1].gain_out - (parms[1].gain_out == 0 ? (ENV_MAX-1) : parms[1].gain_out));
     
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         
         // op 0
@@ -255,7 +252,7 @@ void EngineMkI::compute_fb3(int32_t *output, FmOpParams *parms, int32_t gain01, 
     dgain[2] = (parms[2].gain_out - (parms[2].gain_out == 0 ? (ENV_MAX-1) : parms[2].gain_out));
     
     
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         
         // op 0
@@ -315,20 +312,20 @@ void EngineMkI::render(int32_t *output, FmOpParams *params, int32_t algorithm, i
                     switch ( algorithm ) {
                         // three operator feedback, process exception for ALGO 4
                         case 3 :
-                            compute_fb3(outptr, params, gain1, gain2, fb_buf, min((feedback_shift+2), (int32_t)16));
+                            compute_fb3(outptr, params, gain1, gain2, fb_buf, std::min((feedback_shift+2), (int32_t)16));
                             params[1].phase += params[1].freq << LG_N; // hack, we already processed op-5 - op-4
                             params[2].phase += params[2].freq << LG_N; // yuk yuk
                             op += 2; // ignore the 2 other operators
                             break;
                         // two operator feedback, process exception for ALGO 6
                         case 5 :
-                            compute_fb2(outptr, params, gain1, gain2, fb_buf, min((feedback_shift+2), (int32_t)16));
+                            compute_fb2(outptr, params, gain1, gain2, fb_buf, std::min((feedback_shift+2), (int32_t)16));
                             params[1].phase += params[1].freq << LG_N;  // yuk, hack, we already processed op-5
                             op++; // ignore next operator;
                             break;
                         case 31 :
                             // one operator feedback, process exception for ALGO 32
-                            compute_fb(outptr, param.phase, param.freq, gain1, gain2, fb_buf, min((feedback_shift+2), (int32_t)16), add);
+                            compute_fb(outptr, param.phase, param.freq, gain1, gain2, fb_buf, std::min((feedback_shift+2), (int32_t)16), add);
                             break;
                         default:
                             // one operator feedback, normal process

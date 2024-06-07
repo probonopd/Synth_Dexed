@@ -16,6 +16,8 @@
 
 // Low frequency oscillator, compatible with DX7
 
+#include <algorithm>
+
 #include "synth.h"
 
 #include "sin.h"
@@ -29,11 +31,11 @@ void Lfo::init(FRAC_NUM sample_rate) {
 }
 
 void Lfo::reset(const uint8_t params[6]) {
-  int rate = params[0];  // 0..99
-  int sr = rate == 0 ? 1 : (165 * rate) >> 6;
+  int32_t rate = params[0];  // 0..99
+  int32_t sr = rate == 0 ? 1 : (165 * rate) >> 6;
   sr *= sr < 160 ? 11 : (11 + ((sr - 160) >> 4));
   delta_ = unit_ * sr;
-  int a = 99 - params[1];  // LFO delay
+  int32_t a = 99 - params[1];  // LFO delay
   if (a == 99) {
     delayinc_ = ~0u;
     delayinc2_ = ~0u;
@@ -41,7 +43,7 @@ void Lfo::reset(const uint8_t params[6]) {
     a = (16 + (a & 15)) << (1 + (a >> 4));
     delayinc_ = unit_ * a;
     a &= 0xff80;
-    a = max(0x80, a);
+    a = std::max(0x80, int(a));
     delayinc2_ = unit_ * a;
   }
   waveform_ = params[5];

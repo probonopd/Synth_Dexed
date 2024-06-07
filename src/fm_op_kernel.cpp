@@ -29,7 +29,7 @@ void neon_fm_kernel(const int32_t *in, const int32_t *busin, int32_t *out, int32
 
 const int32_t __attribute__ ((aligned(16))) const_0_1_2_3_arg[4] = {0, 1, 2, 3};
 const int32_t __attribute__ ((aligned(16))) mask23_arg = 0x7fffff;
-const float32_t __attribute__ ((aligned(16))) coeffs_arg[4] = {
+const float __attribute__ ((aligned(16))) coeffs_arg[4] = {
         -0.01880853017455781, 0.25215252666796095, -1.2333439964934032, 1.0
 };
 const int32_t __attribute__ ((aligned(16))) zeros[_N_] = {0};
@@ -214,7 +214,7 @@ void FmOpKernel::compute_pure(int32_t *output, int32_t phase0, int32_t freq,
 
 void FmOpKernel::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
                             int32_t gain1, int32_t gain2,
-                            int32_t *fb_buf, int fb_shift, bool add) {
+                            int32_t *fb_buf, int32_t fb_shift, bool add) {
   int32_t dgain = (gain2 - gain1 + (_N_ >> 1)) >> LG_N;
   int32_t gain = gain1;
   int32_t phase = phase0;

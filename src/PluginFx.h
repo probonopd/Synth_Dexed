@@ -18,8 +18,9 @@
 
 */
 
-#ifndef PLUGINFX_H_INCLUDED
-#define PLUGINFX_H_INCLUDED
+#pragma once
+
+#include "stdint.h"
 
 class PluginFx {
     float s1, s2, s3, s4;
@@ -33,7 +34,7 @@ class PluginFx {
     // 24 db multimode
     float mm;
     float mmt;
-    int mmch;
+    int32_t mmch;
     inline float NR24(float sample, float g, float lpc);
 
     // preprocess values taken the UI
@@ -51,7 +52,7 @@ class PluginFx {
     inline float NR(float sample, float g);
     bool bandPassSw;
     float rcor, rcorInv;
-    int R;
+    int32_t R;
 
     float dc_id;
     float dc_od;
@@ -65,9 +66,7 @@ class PluginFx {
     float Reso;
     float Gain;
 
-    void init(int sampleRate);
-    void process(float *work, int sampleSize);
+    void init(uint16_t sampleRate);
+    void process(float *work, uint16_t sampleSize);
     float getGain(void);
 };
-
-#endif

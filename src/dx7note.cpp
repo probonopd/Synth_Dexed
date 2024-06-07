@@ -87,14 +87,14 @@ const uint8_t velocity_data[64] = {
 
 // See "velocity" section of notes. Returns velocity delta in microsteps.
 int ScaleVelocity(int velocity, int sensitivity) {
-  int clamped_vel = max(0, min(127, velocity));
+  int clamped_vel = std::max(0, std::min(127, velocity));
   int vel_value = velocity_data[clamped_vel >> 1] - 239;
   int scaled_vel = ((sensitivity * vel_value + 7) >> 3) << 4;
   return scaled_vel;
 }
 
 int ScaleRate(int midinote, int sensitivity) {
-  int x = min(31, max(0, midinote / 3 - 7));
+  int x = std::min(31, std::max(0, midinote / 3 - 7));
   int qratedelta = (sensitivity * x) >> 3;
 #ifdef SUPER_PRECISE
   int rem = x & 7;
@@ -120,7 +120,7 @@ int ScaleCurve(int group, int depth, int curve) {
   } else {
     // exponential
     int n_scale_data = sizeof(exp_scale_data);
-    int raw_exp = exp_scale_data[min(group, n_scale_data - 1)];
+    int raw_exp = exp_scale_data[std::min(group, n_scale_data - 1)];
     scale = (raw_exp * depth * 329) >> 15;
   }
   if (curve < 2) {
@@ -170,10 +170,10 @@ void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int src
     int level_scaling = ScaleLevel(midinote, patch[off + 8], patch[off + 9],
                                    patch[off + 10], patch[off + 11], patch[off + 12]);
     outlevel += level_scaling;
-    outlevel = min(127, outlevel);
+    outlevel = std::min(127, outlevel);
     outlevel = outlevel << 5;
     outlevel += ScaleVelocity(velocity, patch[off + 15]);
-    outlevel = max(0, outlevel);
+    outlevel = std::max(0, outlevel);
     int rate_scaling = ScaleRate(midinote, patch[off + 13]);
     env_[op].init(rates, levels, outlevel, rate_scaling);
 
@@ -213,7 +213,7 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   pmod_1 = abs(pmod_1);
   int32_t pmod_2 = (int32_t)(((int64_t)ctrls->pitch_mod * (int64_t)senslfo) >> 14);
   pmod_2 = abs(pmod_2);
-  int32_t pitch_mod = max(pmod_1, pmod_2);
+  int32_t pitch_mod = std::max(pmod_1, pmod_2);
   pitch_mod = pitchenv_.getsample() + (pitch_mod * (senslfo < 0 ? -1 : 1));
 
   // ---- PITCH BEND ----
@@ -236,11 +236,11 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   uint32_t amod_1 = (uint32_t)(((int64_t) ampmoddepth_ * (int64_t) lfo_delay) >> 8); // Q24 :D
   amod_1 = (uint32_t)(((int64_t) amod_1 * (int64_t) lfo_val) >> 24);
   uint32_t amod_2 = (uint32_t)(((int64_t) ctrls->amp_mod * (int64_t) lfo_val) >> 7); // Q?? :|
-  uint32_t amd_mod = max(amod_1, amod_2);
+  uint32_t amd_mod = std::max(amod_1, amod_2);
 
   // ==== EG AMP MOD ====
   uint32_t amod_3 = (ctrls->eg_mod + 1) << 17;
-  amd_mod = max((1 << 24) - amod_3, amd_mod);
+  amd_mod = std::max((1 << 24) - amod_3, amd_mod);
 
   // ==== OP RENDER ====
   for (int op = 0; op < 6; op++) {
@@ -330,10 +330,10 @@ void Dx7Note::update(const uint8_t patch[156], int midinote, int velocity, int p
     int level_scaling = ScaleLevel(midinote, patch[off + 8], patch[off + 9],
                                    patch[off + 10], patch[off + 11], patch[off + 12]);
     outlevel += level_scaling;
-    outlevel = min(127, outlevel);
+    outlevel = std::min(127, outlevel);
     outlevel = outlevel << 5;
     outlevel += ScaleVelocity(velocity, patch[off + 15]);
-    outlevel = max(0, outlevel);
+    outlevel = std::max(0, outlevel);
     int rate_scaling = ScaleRate(midinote, patch[off + 13]);
     env_[op].update(rates, levels, outlevel, rate_scaling);
   }

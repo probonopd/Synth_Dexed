@@ -60,18 +60,18 @@ void Sin::init() {
 
 #ifndef SIN_INLINE
 int32_t Sin::lookup(int32_t phase) {
-  const int SHIFT = 24 - SIN_LG_N_SAMPLES;
-  int lowbits = phase & ((1 << SHIFT) - 1);
+  const int32_t SHIFT = 24 - SIN_LG_N_SAMPLES;
+  int32_t lowbits = phase & ((1 << SHIFT) - 1);
 #ifdef SIN_DELTA
-  int phase_int = (phase >> (SHIFT - 1)) & ((SIN_N_SAMPLES - 1) << 1);
-  int dy = sintab[phase_int];
-  int y0 = sintab[phase_int + 1];
+  int32_t phase_int = (phase >> (SHIFT - 1)) & ((SIN_N_SAMPLES - 1) << 1);
+  int32_t dy = sintab[phase_int];
+  int32_t y0 = sintab[phase_int + 1];
 
   return y0 + (((int64_t)dy * (int64_t)lowbits) >> SHIFT);
 #else 
-  int phase_int = (phase >> SHIFT) & (SIN_N_SAMPLES - 1);
-  int y0 = sintab[phase_int];
-  int y1 = sintab[phase_int + 1];
+  int32_t phase_int = (phase >> SHIFT) & (SIN_N_SAMPLES - 1);
+  int32_t y0 = sintab[phase_int];
+  int32_t y1 = sintab[phase_int + 1];
 
   return y0 + (((int64_t)(y1 - y0) * (int64_t)lowbits) >> SHIFT);
 #endif

@@ -22,12 +22,12 @@ void Porta::init_sr(double sampleRate)
 {
   // compute portamento for CC 7-bit range
 
-  for (unsigned int i = 0; i < 128; ++i) {
+  for (uint8_t i = 0; i < 128; ++i) {
     // number of semitones travelled
     double sps = 350.0 * pow(2.0, -0.062 * i);  // per second
     double spf = sps / sampleRate;              // per frame
     double spp = spf * _N_;                       // per period
-    const int step = (1 << 24) / 12;
+    const int32_t step = (1 << 24) / 12;
     rates[i] = (int32_t)(0.5f + step * spp);    // to pitch units
   }
 }

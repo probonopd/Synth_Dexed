@@ -34,13 +34,13 @@ extern int32_t exp2tab[EXP2_N_SAMPLES << 1];
 #ifdef EXP2_INLINE
 inline
 int32_t Exp2::lookup(int32_t x) {
-  const int SHIFT = 24 - EXP2_LG_N_SAMPLES;
-  int lowbits = x & ((1 << SHIFT) - 1);
-  int x_int = (x >> (SHIFT - 1)) & ((EXP2_N_SAMPLES - 1) << 1);
-  int dy = exp2tab[x_int];
-  int y0 = exp2tab[x_int + 1];
+  const int32_t SHIFT = 24 - EXP2_LG_N_SAMPLES;
+  int32_t lowbits = x & ((1 << SHIFT) - 1);
+  int32_t x_int = (x >> (SHIFT - 1)) & ((EXP2_N_SAMPLES - 1) << 1);
+  int32_t dy = exp2tab[x_int];
+  int32_t y0 = exp2tab[x_int + 1];
 
-  int y = y0 + (((int64_t)dy * (int64_t)lowbits) >> SHIFT);
+  int32_t y = y0 + (((int64_t)dy * (int64_t)lowbits) >> SHIFT);
   return y >> (6 - (x >> 24));
 }
 #endif
@@ -69,12 +69,12 @@ int32_t Tanh::lookup(int32_t x) {
     int32_t sx = ((int64_t) - 48408812 * (int64_t)x) >> 24;
     return signum ^ ((1 << 24) - 2 * Exp2::lookup(sx));
   } else {
-    const int SHIFT = 26 - TANH_LG_N_SAMPLES;
-    int lowbits = x & ((1 << SHIFT) - 1);
-    int x_int = (x >> (SHIFT - 1)) & ((TANH_N_SAMPLES - 1) << 1);
-    int dy = tanhtab[x_int];
-    int y0 = tanhtab[x_int + 1];
-    int y = y0 + (((int64_t)dy * (int64_t)lowbits) >> SHIFT);
+    const int32_t SHIFT = 26 - TANH_LG_N_SAMPLES;
+    int32_t lowbits = x & ((1 << SHIFT) - 1);
+    int32_t x_int = (x >> (SHIFT - 1)) & ((TANH_N_SAMPLES - 1) << 1);
+    int32_t dy = tanhtab[x_int];
+    int32_t y0 = tanhtab[x_int + 1];
+    int32_t y = y0 + (((int64_t)dy * (int64_t)lowbits) >> SHIFT);
     return y ^ signum;
   }
 }

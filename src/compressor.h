@@ -21,7 +21,7 @@
 #include "synth.h"
 
 /*
-static const float32_t zeroblock_f32[] = {
+static const float zeroblock_f32[] = {
     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
 #if AUDIO_BLOCK_SAMPLES > 16
     0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -55,13 +55,13 @@ class Compressor
   //GUI: inputs:1, outputs:1  //this line used for automatic generation of GUI node
   public:
     //constructor
-    Compressor(const float32_t sample_rate_Hz) {
+    Compressor(const float sample_rate_Hz) {
 	  //setDefaultValues(AUDIO_SAMPLE_RATE);   resetStates();
 	  setDefaultValues(sample_rate_Hz);
           resetStates();
     };
 	
-    void setDefaultValues(const float32_t sample_rate_Hz) {
+    void setDefaultValues(const float sample_rate_Hz) {
       setThresh_dBFS(-20.0f);     //set the default value for the threshold for compression
       setCompressionRatio(5.0f);  //set the default copression ratio
       setAttack_sec(0.005f, sample_rate_Hz);  //default to this value
@@ -71,7 +71,7 @@ class Compressor
 
 
     //here's the method that does all the work
-    void doCompression(float32_t *audio_block, uint16_t len) {
+    void doCompression(float *audio_block, uint16_t len) {
       //Serial.println("AudioEffectGain_F32: updating.");  //for debugging.
       if (!audio_block) {
         printf("No audio_block available for Compressor!\n");
@@ -87,7 +87,7 @@ class Compressor
         arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
 
       //calculate the level of the audio (ie, calculate a smoothed version of the signal power)
-      float32_t* audio_level_dB_block = (float32_t*)malloc(sizeof(float32_t)*len); 
+      float* audio_level_dB_block = (float*)malloc(sizeof(float)*len); 
       if(!audio_level_dB_block)
       {
         printf("Cannot allocate memory for \"audio_level_dB_block\" - stopping\n");
@@ -100,7 +100,7 @@ class Compressor
       	calcAudioLevel_dB(audio_block, audio_level_dB_block, len); //returns through audio_level_dB_block
 
       //compute the desired gain based on the observed audio level
-      float32_t* gain_block=(float32_t*)malloc(sizeof(float32_t)*len); 
+      float* gain_block=(float*)malloc(sizeof(float)*len); 
       if(!gain_block)
       {
         printf("Cannot allocate memory for \"gain_block\" - stopping\n");
@@ -127,10 +127,10 @@ class Compressor
     // Here's the method that estimates the level of the audio (in dB)
     // It squares the signal and low-pass filters to get a time-averaged
     // signal power.  It then 
-    void calcAudioLevel_dB(float32_t *wav_block, float32_t *level_dB_block, uint16_t len) { 
+    void calcAudioLevel_dB(float *wav_block, float *level_dB_block, uint16_t len) { 
     	
       // calculate the instantaneous signal power (square the signal)
-      float32_t* wav_pow_block=(float32_t*)malloc(sizeof(float32_t)*len); 
+      float* wav_pow_block=(float*)malloc(sizeof(float)*len); 
       if(!wav_pow_block)
       {
         printf("Cannot allocate memory for \"wav_pow_block\" - stopping\n");
@@ -142,7 +142,7 @@ class Compressor
       arm_mult_f32(wav_block, wav_block, wav_pow_block, len);
 
       // low-pass filter and convert to dB
-      float32_t c1 = level_lp_const, c2 = 1.0f - c1; //prepare constants
+      float c1 = level_lp_const, c2 = 1.0f - c1; //prepare constants
       for (uint16_t i = 0; i < len; i++) {
         // first-order low-pass filter to get a running estimate of the average power
         wav_pow_block[i] = c1*prev_level_lp_pow + c2*wav_pow_block[i];
@@ -169,10 +169,10 @@ class Compressor
 
     //This method computes the desired gain from the compressor, given an estimate
     //of the signal level (in dB)
-    void calcGain(float32_t *audio_level_dB_block, float32_t *gain_block,uint16_t len) { 
+    void calcGain(float *audio_level_dB_block, float *gain_block,uint16_t len) { 
     
       //first, calculate the instantaneous target gain based on the compression ratio
-      float32_t* inst_targ_gain_dB_block=(float32_t*)malloc(sizeof(float32_t)*len);
+      float* inst_targ_gain_dB_block=(float*)malloc(sizeof(float)*len);
       if(!inst_targ_gain_dB_block)
       {
 	printf("Cannot allocate memory for \"inst_targ_gain_dB_block\" - stopping\n");
@@ -183,7 +183,7 @@ class Compressor
       calcInstantaneousTargetGain(audio_level_dB_block, inst_targ_gain_dB_block,len);
     
       //second, smooth in time (attack and release) by stepping through each sample
-      float32_t *gain_dB_block = (float32_t*)malloc(sizeof(float32_t)*len); 
+      float *gain_dB_block = (float*)malloc(sizeof(float)*len); 
       if(!gain_dB_block)
       {
 	printf("Cannot allocate memory for \"gain_dB_block\" - stopping\n");
@@ -209,10 +209,10 @@ class Compressor
       
     //Compute the instantaneous desired gain, including the compression ratio and
     //threshold for where the comrpession kicks in
-    void calcInstantaneousTargetGain(float32_t *audio_level_dB_block, float32_t *inst_targ_gain_dB_block, uint16_t len) {
+    void calcInstantaneousTargetGain(float *audio_level_dB_block, float *inst_targ_gain_dB_block, uint16_t len) {
       
       // how much are we above the compression threshold?
-      float32_t* above_thresh_dB_block=(float32_t*)malloc(sizeof(float32_t)*len);
+      float* above_thresh_dB_block=(float*)malloc(sizeof(float)*len);
       if(!above_thresh_dB_block)
       {
         printf("Cannot allocate memory for \"above_thresh_dB_block\" - stopping\n");
@@ -252,10 +252,10 @@ class Compressor
 
     //this method applies the "attack" and "release" constants to smooth the
     //target gain level through time.
-    void calcSmoothedGain_dB(float32_t *inst_targ_gain_dB_block, float32_t *gain_dB_block, uint16_t len) {
-      float32_t gain_dB;
-      float32_t one_minus_attack_const = 1.0f - attack_const;
-      float32_t one_minus_release_const = 1.0f - release_const;
+    void calcSmoothedGain_dB(float *inst_targ_gain_dB_block, float *gain_dB_block, uint16_t len) {
+      float gain_dB;
+      float one_minus_attack_const = 1.0f - attack_const;
+      float one_minus_release_const = 1.0f - release_const;
       for (uint16_t i = 0; i < len; i++) {
         gain_dB = inst_targ_gain_dB_block[i];
 
@@ -282,48 +282,48 @@ class Compressor
       //initialize the HP filter.  (This also resets the filter states,)
       arm_biquad_cascade_df1_init_f32(&hp_filt_struct, hp_nstages, hp_coeff, hp_state);
     }
-    void setPreGain(float32_t g) {  pre_gain = g;  }
-    void setPreGain_dB(float32_t gain_dB) { setPreGain(pow(10.0, gain_dB / 20.0));  }
-    void setCompressionRatio(float32_t cr) {
-      comp_ratio = max(0.001f, cr); //limit to positive values
+    void setPreGain(float g) {  pre_gain = g;  }
+    void setPreGain_dB(float gain_dB) { setPreGain(pow(10.0, gain_dB / 20.0));  }
+    void setCompressionRatio(float cr) {
+      comp_ratio = std::max(0.001f, cr); //limit to positive values
       updateThresholdAndCompRatioConstants();
     }
-    void setAttack_sec(float32_t a, float32_t fs_Hz) {
+    void setAttack_sec(float a, float fs_Hz) {
       attack_sec = a;
       attack_const = expf(-1.0f / (attack_sec * fs_Hz)); //expf() is much faster than exp()
 
       //also update the time constant for the envelope extraction
-      setLevelTimeConst_sec(min(attack_sec,release_sec) / 5.0, fs_Hz);  //make the level time-constant one-fifth the gain time constants
+      setLevelTimeConst_sec(std::min(attack_sec,release_sec) / 5.0, fs_Hz);  //make the level time-constant one-fifth the gain time constants
     } 
-    void setRelease_sec(float32_t r, float32_t fs_Hz) {
+    void setRelease_sec(float r, float fs_Hz) {
       release_sec = r;
       release_const = expf(-1.0f / (release_sec * fs_Hz)); //expf() is much faster than exp()
 
       //also update the time constant for the envelope extraction
-      setLevelTimeConst_sec(min(attack_sec,release_sec) / 5.0, fs_Hz);  //make the level time-constant one-fifth the gain time constants
+      setLevelTimeConst_sec(std::min(attack_sec,release_sec) / 5.0, fs_Hz);  //make the level time-constant one-fifth the gain time constants
     }
-    void setLevelTimeConst_sec(float32_t t_sec, float32_t fs_Hz) {
-      const float32_t min_t_sec = 0.002f;  //this is the minimum allowed value
-      level_lp_sec = max(min_t_sec,t_sec);
+    void setLevelTimeConst_sec(float t_sec, float fs_Hz) {
+      const float min_t_sec = 0.002f;  //this is the minimum allowed value
+      level_lp_sec = std::max(min_t_sec,t_sec);
       level_lp_const = expf(-1.0f / (level_lp_sec * fs_Hz)); //expf() is much faster than exp()
     }
-    void setThresh_dBFS(float32_t val) { 
+    void setThresh_dBFS(float val) { 
       thresh_dBFS = val;
       setThreshPow(pow(10.0, thresh_dBFS / 10.0));
     }
     void enableHPFilter(boolean flag) { use_HP_prefilter = flag; };
 
     //methods to return information about this module
-    float32_t getPreGain_dB(void) { return 20.0 * log10f_approx(pre_gain);  }
-    float32_t getAttack_sec(void) {  return attack_sec; }
-    float32_t getRelease_sec(void) {  return release_sec; }
-    float32_t getLevelTimeConst_sec(void) { return level_lp_sec; }
-    float32_t getThresh_dBFS(void) { return thresh_dBFS; }
-    float32_t getCompressionRatio(void) { return comp_ratio; }
-    float32_t getCurrentLevel_dBFS(void) { return 10.0* log10f_approx(prev_level_lp_pow); }
-    float32_t getCurrentGain_dB(void) { return prev_gain_dB; }
+    float getPreGain_dB(void) { return 20.0 * log10f_approx(pre_gain);  }
+    float getAttack_sec(void) {  return attack_sec; }
+    float getRelease_sec(void) {  return release_sec; }
+    float getLevelTimeConst_sec(void) { return level_lp_sec; }
+    float getThresh_dBFS(void) { return thresh_dBFS; }
+    float getCompressionRatio(void) { return comp_ratio; }
+    float getCurrentLevel_dBFS(void) { return 10.0* log10f_approx(prev_level_lp_pow); }
+    float getCurrentGain_dB(void) { return prev_gain_dB; }
 
-    void setHPFilterCoeff_N2IIR_Matlab(float32_t b[], float32_t a[]){
+    void setHPFilterCoeff_N2IIR_Matlab(float b[], float a[]){
       //https://www.keil.com/pack/doc/CMSIS/DSP/html/group__BiquadCascadeDF1.html#ga8e73b69a788e681a61bccc8959d823c5
       //Use matlab to compute the coeff for HP at 20Hz: [b,a]=butter(2,20/(44100/2),'high'); %assumes fs_Hz = 44100
       hp_coeff[0] = b[0];   hp_coeff[1] = b[1];  hp_coeff[2] = b[2]; //here are the matlab "b" coefficients
@@ -332,20 +332,20 @@ class Compressor
     
   private:
     //state-related variables
-    float32_t *inputQueueArray_f32[1]; //memory pointer for the input to this module
-    float32_t prev_level_lp_pow = 1.0;
-    float32_t prev_gain_dB = 0.0; //last gain^2 used
+    float *inputQueueArray_f32[1]; //memory pointer for the input to this module
+    float prev_level_lp_pow = 1.0;
+    float prev_gain_dB = 0.0; //last gain^2 used
 
     //HP filter state-related variables
     arm_biquad_casd_df1_inst_f32 hp_filt_struct;
     static const uint8_t hp_nstages = 1;
-    float32_t hp_coeff[5 * hp_nstages] = {1.0, 0.0, 0.0, 0.0, 0.0}; //no filtering. actual filter coeff set later
-    float32_t hp_state[4 * hp_nstages];
+    float hp_coeff[5 * hp_nstages] = {1.0, 0.0, 0.0, 0.0, 0.0}; //no filtering. actual filter coeff set later
+    float hp_state[4 * hp_nstages];
     void setHPFilterCoeff(void) {
       //https://www.keil.com/pack/doc/CMSIS/DSP/html/group__BiquadCascadeDF1.html#ga8e73b69a788e681a61bccc8959d823c5
       //Use matlab to compute the coeff for HP at 20Hz: [b,a]=butter(2,20/(44100/2),'high'); %assumes fs_Hz = 44100
-      float32_t b[] = {9.979871156751189e-01,    -1.995974231350238e+00, 9.979871156751189e-01};  //from Matlab
-      float32_t a[] = { 1.000000000000000e+00,    -1.995970179642828e+00,    9.959782830576472e-01};  //from Matlab
+      float b[] = {9.979871156751189e-01,    -1.995974231350238e+00, 9.979871156751189e-01};  //from Matlab
+      float a[] = { 1.000000000000000e+00,    -1.995970179642828e+00,    9.959782830576472e-01};  //from Matlab
       setHPFilterCoeff_N2IIR_Matlab(b, a);
       //hp_coeff[0] = b[0];   hp_coeff[1] = b[1];  hp_coeff[2] = b[2]; //here are the matlab "b" coefficients
       //hp_coeff[3] = -a[1];  hp_coeff[4] = -a[2];  //the DSP needs the "a" terms to have opposite sign vs Matlab
@@ -353,34 +353,34 @@ class Compressor
 
 
     //private parameters related to gain calculation
-    float32_t attack_const, release_const, level_lp_const; //used in calcGain().  set by setAttack_sec() and setRelease_sec();
-    float32_t comp_ratio_const, thresh_pow_FS_wCR;  //used in calcGain();  set in updateThresholdAndCompRatioConstants()
+    float attack_const, release_const, level_lp_const; //used in calcGain().  set by setAttack_sec() and setRelease_sec();
+    float comp_ratio_const, thresh_pow_FS_wCR;  //used in calcGain();  set in updateThresholdAndCompRatioConstants()
     void updateThresholdAndCompRatioConstants(void) {
       comp_ratio_const = 1.0f-(1.0f / comp_ratio);
       thresh_pow_FS_wCR = powf(thresh_pow_FS, comp_ratio_const);    
     }
 
     //settings
-    float32_t attack_sec, release_sec, level_lp_sec; 
-    float32_t thresh_dBFS = 0.0;  //threshold for compression, relative to digital full scale
-    float32_t thresh_pow_FS = 1.0f;  //same as above, but not in dB
-    void setThreshPow(float32_t t_pow) { 
+    float attack_sec, release_sec, level_lp_sec; 
+    float thresh_dBFS = 0.0;  //threshold for compression, relative to digital full scale
+    float thresh_pow_FS = 1.0f;  //same as above, but not in dB
+    void setThreshPow(float t_pow) { 
       thresh_pow_FS = t_pow;
       updateThresholdAndCompRatioConstants();
     }
-    float32_t comp_ratio = 1.0;  //compression ratio
-    float32_t pre_gain = -1.0;  //gain to apply before the compression.  negative value disables
+    float comp_ratio = 1.0;  //compression ratio
+    float pre_gain = -1.0;  //gain to apply before the compression.  negative value disables
     boolean use_HP_prefilter;
     
     
     // Accelerate the powf(10.0,x) function
-    static float32_t pow10f(float32_t x) {
+    static float pow10f(float x) {
       //return powf(10.0f,x)   //standard, but slower
       return expf(2.302585092994f*x);  //faster:  exp(log(10.0f)*x)
     }
 
     // Accelerate the log10f(x)  function?
-    static float32_t log10f_approx(float32_t x) {
+    static float log10f_approx(float x) {
       //return log10f(x);   //standard, but slower
       return log2f_approx(x)*0.3010299956639812f; //faster:  log2(x)/log2(10)
     }
@@ -394,12 +394,12 @@ class Compressor
     ** when computing db20() is accurate to 7.984884e-003 dB.
     ** ------------------------------------------------------------------- */
     //https://community.arm.com/tools/f/discussions/4292/cmsis-dsp-new-functionality-proposal/22621#22621
-    //float32_t log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
-    static float32_t log2f_approx(float32_t X) {
-      //float32_t *C = &log2f_approx_coeff[0];
-      float32_t Y;
-      float32_t F;
-      int E;
+    //float log2f_approx_coeff[4] = {1.23149591368684f, -4.11852516267426f, 6.02197014179219f, -3.13396450166353f};
+    static float log2f_approx(float X) {
+      //float *C = &log2f_approx_coeff[0];
+      float Y;
+      float F;
+      int32_t E;
     
       // This is the approximation to log2()
       F = frexpf(fabsf(X), &E);

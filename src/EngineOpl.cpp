@@ -118,7 +118,7 @@ void EngineOpl::compute(int32_t *output, const int32_t *input, int32_t phase0, i
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
 
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = oplSin((phase+input[i]) >> 14, gain);
         output[i] = (y << 14) + adder[i];
@@ -132,7 +132,7 @@ void EngineOpl::compute_pure(int32_t *output, int32_t phase0, int32_t freq, int3
     int32_t phase = phase0;
     const int32_t *adder = add ? output : zeros;
 
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t y = oplSin(phase >> 14, gain);
         output[i] = (y << 14) + adder[i];
@@ -150,7 +150,7 @@ void EngineOpl::compute_fb(int32_t *output, int32_t phase0, int32_t freq,
     int32_t y0 = fb_buf[0];
     int32_t y = fb_buf[1];
     
-    for (int32_t i = 0; i < _N_; i++) {
+    for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         y0 = y;
@@ -168,7 +168,7 @@ void EngineOpl::render(int32_t *output, FmOpParams *params, int32_t algorithm, i
     const int32_t kLevelThresh = 507;  // really ????
     const FmAlgorithm alg = algorithms[algorithm];
     bool has_contents[3] = { true, false, false };
-    for (int32_t op = 0; op < 6; op++) {
+    for (uint8_t op = 0; op < 6; op++) {
         int32_t flags = alg.ops[op];
         bool add = (flags & OUT_BUS_ADD) != 0;
         FmOpParams &param = params[op];
@@ -207,15 +207,3 @@ void EngineOpl::render(int32_t *output, FmOpParams *params, int32_t algorithm, i
         param.phase += param.freq << LG_N;
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
