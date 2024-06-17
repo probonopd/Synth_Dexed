@@ -175,7 +175,7 @@ void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int src
     outlevel += ScaleVelocity(velocity, patch[off + 15]);
     outlevel = std::max(0, outlevel);
     int rate_scaling = ScaleRate(midinote, patch[off + 13]);
-    env_[op].init(rates, levels, outlevel, rate_scaling);
+    env_[op].init((const int32_t*)rates, (const int32_t*)levels, outlevel, rate_scaling);
 
     int mode = patch[off + 17];
     int coarse = patch[off + 18];
@@ -194,7 +194,7 @@ void Dx7Note::init(const uint8_t patch[156], int midinote, int velocity, int src
     rates[i] = patch[126 + i];
     levels[i] = patch[130 + i];
   }
-  pitchenv_.set(rates, levels);
+  pitchenv_.set((const int32_t *)rates, (const int32_t*)levels);
   algorithm_ = patch[134];
   int feedback = patch[135];
   fb_shift_ = feedback != 0 ? FEEDBACK_BITDEPTH - feedback : 16;
@@ -335,7 +335,7 @@ void Dx7Note::update(const uint8_t patch[156], int midinote, int velocity, int p
     outlevel += ScaleVelocity(velocity, patch[off + 15]);
     outlevel = std::max(0, outlevel);
     int rate_scaling = ScaleRate(midinote, patch[off + 13]);
-    env_[op].update(rates, levels, outlevel, rate_scaling);
+    env_[op].update((const int32_t*)rates, (const int32_t*)levels, (int32_t)outlevel, rate_scaling);
   }
   algorithm_ = patch[134];
   int feedback = patch[135];
