@@ -286,7 +286,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
   {
     if (i == max_notes)
     {
-      uint32_t min_timer = 0xffff;
+      uint32_t min_timer = 0xffffffff;
 
       if (monoMode)
         break;
