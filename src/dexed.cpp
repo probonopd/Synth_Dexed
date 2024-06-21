@@ -106,6 +106,7 @@ Dexed::~Dexed()
 
   for (uint8_t note = 0; note < max_notes; note++)
     delete voices[note].dx7_note;
+  delete[] voices;
 }
 
 void Dexed::setEngineType(uint8_t engine)
