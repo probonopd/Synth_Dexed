@@ -87,7 +87,7 @@ class Compressor
         arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
 
       //calculate the level of the audio (ie, calculate a smoothed version of the signal power)
-      float* audio_level_dB_block = float[len]; 
+      float* audio_level_dB_block = new float[len]; 
       if(!audio_level_dB_block)
       {
         printf("Cannot allocate memory for \"audio_level_dB_block\" - stopping\n");

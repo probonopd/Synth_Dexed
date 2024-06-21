@@ -64,6 +64,21 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   voices = NULL;
 
   max_notes=maxnotes;
+  if (max_notes > 0)
+  {
+    voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
+    for (uint8_t i = 0; i < max_notes; i++)
+    {
+      voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
+      voices[i].keydown = false;
+      voices[i].sustained = false;
+      voices[i].live = false;
+      voices[i].key_pressed_timer = 0;
+    }
+  }
+  else
+    voices = NULL;
+
   used_notes=max_notes;
   setMonoMode(false);
   loadInitVoice();
@@ -83,29 +98,14 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   compressor = new Compressor(samplerate);
 #endif
   use_compressor = false;
-
-  /* Init notes */
-  if (max_notes > 0)
-  {
-    voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
-    for (uint8_t i = 0; i < max_notes; i++)
-    {
-      voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
-      voices[i].keydown = false;
-      voices[i].sustained = false;
-      voices[i].live = false;
-      voices[i].key_pressed_timer = 0;
-    }
-  }
-  else
-    voices = NULL;
 }
 
 Dexed::~Dexed()
 {
   currentNote = -1;
 
-  delete[] voices;
+  for (uint8_t note = 0; note < max_notes; note++)
+    delete voices[note].dx7_note;
 }
 
 void Dexed::setEngineType(uint8_t engine)
