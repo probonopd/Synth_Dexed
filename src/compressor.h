@@ -87,7 +87,7 @@ class Compressor
         arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
 
       //calculate the level of the audio (ie, calculate a smoothed version of the signal power)
-      float* audio_level_dB_block = (float*)malloc(sizeof(float)*len); 
+      float* audio_level_dB_block = float[len]; 
       if(!audio_level_dB_block)
       {
         printf("Cannot allocate memory for \"audio_level_dB_block\" - stopping\n");
@@ -100,7 +100,7 @@ class Compressor
       	calcAudioLevel_dB(audio_block, audio_level_dB_block, len); //returns through audio_level_dB_block
 
       //compute the desired gain based on the observed audio level
-      float* gain_block=(float*)malloc(sizeof(float)*len); 
+      float* gain_block=new float[len]; 
       if(!gain_block)
       {
         printf("Cannot allocate memory for \"gain_block\" - stopping\n");
@@ -119,9 +119,9 @@ class Compressor
 
       //release memory
       if(audio_level_dB_block)
-	delete(audio_level_dB_block);
+	delete audio_level_dB_block;
       if(gain_block)
-        delete(gain_block);
+        delete gain_block;
     }
 
     // Here's the method that estimates the level of the audio (in dB)
@@ -130,7 +130,7 @@ class Compressor
     void calcAudioLevel_dB(float *wav_block, float *level_dB_block, uint16_t len) { 
     	
       // calculate the instantaneous signal power (square the signal)
-      float* wav_pow_block=(float*)malloc(sizeof(float)*len); 
+      float* wav_pow_block=new float[len]; 
       if(!wav_pow_block)
       {
         printf("Cannot allocate memory for \"wav_pow_block\" - stopping\n");
@@ -162,7 +162,7 @@ class Compressor
 
       //release memory and return
       if(wav_pow_block)
-        delete(wav_pow_block);
+        delete wav_pow_block;
 
       return; //output is passed through level_dB_block
     }
@@ -172,7 +172,7 @@ class Compressor
     void calcGain(float *audio_level_dB_block, float *gain_block,uint16_t len) { 
     
       //first, calculate the instantaneous target gain based on the compression ratio
-      float* inst_targ_gain_dB_block=(float*)malloc(sizeof(float)*len);
+      float* inst_targ_gain_dB_block=new float[len];
       if(!inst_targ_gain_dB_block)
       {
 	printf("Cannot allocate memory for \"inst_targ_gain_dB_block\" - stopping\n");
@@ -183,7 +183,7 @@ class Compressor
       calcInstantaneousTargetGain(audio_level_dB_block, inst_targ_gain_dB_block,len);
     
       //second, smooth in time (attack and release) by stepping through each sample
-      float *gain_dB_block = (float*)malloc(sizeof(float)*len); 
+      float *gain_dB_block = new float[len]; 
       if(!gain_dB_block)
       {
 	printf("Cannot allocate memory for \"gain_dB_block\" - stopping\n");
@@ -200,9 +200,9 @@ class Compressor
 
       //release memory and return
       if(inst_targ_gain_dB_block)
-        delete(inst_targ_gain_dB_block);
+        delete inst_targ_gain_dB_block;
       if(gain_dB_block)
-        delete(gain_dB_block);
+        delete gain_dB_block;
 
       return;  //output is passed through gain_block
     }
@@ -212,7 +212,7 @@ class Compressor
     void calcInstantaneousTargetGain(float *audio_level_dB_block, float *inst_targ_gain_dB_block, uint16_t len) {
       
       // how much are we above the compression threshold?
-      float* above_thresh_dB_block=(float*)malloc(sizeof(float)*len);
+      float* above_thresh_dB_block=new float[len];
       if(!above_thresh_dB_block)
       {
         printf("Cannot allocate memory for \"above_thresh_dB_block\" - stopping\n");
@@ -245,7 +245,7 @@ class Compressor
 
       // release memory before returning
       if(above_thresh_dB_block)
-        delete(above_thresh_dB_block);
+        delete above_thresh_dB_block;
 
       return;  //output is passed through inst_targ_gain_dB_block
     }

@@ -25,8 +25,6 @@
 #define TRANSPOSE_FIX 24
 #define VOICE_SILENCE_LEVEL 1100
 
-#define _MAX_NOTES 32
-
 #define LG_N 6
 #define _N_ (1 << LG_N)
 

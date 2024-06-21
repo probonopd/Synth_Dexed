@@ -174,7 +174,6 @@ class Dexed
     bool getMonoMode(void);
     void setMonoMode(bool mode);
     void setNoteRefreshMode(bool mode);
-    void setMaxNotes(uint8_t n);
     uint8_t getMaxNotes(void);
     void doRefreshVoice(void);
     void setOPAll(uint8_t ops);
@@ -193,6 +192,7 @@ class Dexed
     void setVelocityScale(uint8_t offset, uint8_t max);
     void getVelocityScale(uint8_t* offset, uint8_t* max);
     void setVelocityScale(uint8_t setup);
+    void setMaxNotes(uint8_t n);
     void setEngineType(uint8_t engine);
     uint8_t getEngineType(void);
     FmCore* getEngineAddress(void);
@@ -358,6 +358,7 @@ class Dexed
     float samplerate;
     uint8_t data[NUM_VOICE_PARAMETERS];
     uint8_t max_notes;
+    uint8_t used_notes;
     PluginFx fx;
     Controllers controllers;
     int32_t lastKeyDown;

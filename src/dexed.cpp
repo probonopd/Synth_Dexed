@@ -53,7 +53,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   Porta::init_sr(rate);
   fx.init(rate);
 
-  max_notes = maxnotes;
   currentNote = 0;
   resetControllers();
   controllers.masterTune = 0;
@@ -64,7 +63,8 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   sustain = false;
   voices = NULL;
 
-  setMaxNotes(max_notes);
+  max_notes=maxnotes;
+  used_notes=max_notes;
   setMonoMode(false);
   loadInitVoice();
 
@@ -83,17 +83,29 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   compressor = new Compressor(samplerate);
 #endif
   use_compressor = false;
+
+  /* Init notes */
+  if (max_notes > 0)
+  {
+    voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
+    for (uint8_t i = 0; i < max_notes; i++)
+    {
+      voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
+      voices[i].keydown = false;
+      voices[i].sustained = false;
+      voices[i].live = false;
+      voices[i].key_pressed_timer = 0;
+    }
+  }
+  else
+    voices = NULL;
 }
 
 Dexed::~Dexed()
 {
   currentNote = -1;
 
-  for (uint8_t note = 0; note < max_notes; note++)
-    delete voices[note].dx7_note;
-
-  for (uint8_t note = 0; note < max_notes; note++)
-    delete &voices[note];
+  delete[] voices;
 }
 
 void Dexed::setEngineType(uint8_t engine)
@@ -135,42 +147,8 @@ FmCore* Dexed::getEngineAddress(void)
 
 void Dexed::setMaxNotes(uint8_t new_max_notes)
 {
-  max_notes = constrain(max_notes, 0, _MAX_NOTES);
-
-#if defined(MICRODEXED_VERSION) && defined(DEBUG)
-  Serial.print("Allocating memory for ");
-  Serial.print(max_notes, DEC);
-  Serial.println(" notes.");
-  Serial.println();
-#endif
-
-  if (voices)
-  {
-    panic();
-    for (uint8_t i = 0; i < max_notes; i++)
-    {
-      if (voices[i].dx7_note)
-        delete voices[i].dx7_note;
-    }
-    delete(voices);
-  }
-
-  max_notes = constrain(new_max_notes, 0, _MAX_NOTES);
-
-  if (max_notes > 0)
-  {
-    voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
-    for (uint8_t i = 0; i < max_notes; i++)
-    {
-      voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
-      voices[i].keydown = false;
-      voices[i].sustained = false;
-      voices[i].live = false;
-      voices[i].key_pressed_timer = 0;
-    }
-  }
-  else
-    voices = NULL;
+  panic();
+  used_notes = constrain(new_max_notes, 0, max_notes);
 }
 
 void Dexed::activate(void)
@@ -188,7 +166,7 @@ void Dexed::getSamples(float* buffer, uint16_t n_samples)
 {
   if (refreshVoice)
   {
-    for (uint8_t i = 0; i < max_notes; i++)
+    for (uint8_t i = 0; i < used_notes; i++)
     {
       if ( voices[i].live )
         voices[i].dx7_note->update(data, voices[i].midi_note, voices[i].velocity, voices[i].porta, &controllers);
@@ -211,7 +189,7 @@ void Dexed::getSamples(float* buffer, uint16_t n_samples)
     int32_t lfovalue = lfo.getsample();
     int32_t lfodelay = lfo.getdelay();
 
-    for (uint8_t note = 0; note < max_notes; note++)
+    for (uint8_t note = 0; note < used_notes; note++)
     {
       if (voices[note].live)
       {
@@ -264,7 +242,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
 
   if (!monoMode && noteRefreshMode)
   {
-    for (uint8_t i = 0; i < max_notes; i++)
+    for (uint8_t i = 0; i < used_notes; i++)
     {
       if (voices[i].midi_note == pitch && voices[i].keydown == false && voices[i].live && voices[i].sustained == true)
       {
@@ -282,9 +260,9 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
     }
   }
 
-  for (uint8_t i = 0; i <= max_notes; i++)
+  for (uint8_t i = 0; i <= used_notes; i++)
   {
-    if (i == max_notes)
+    if (i == used_notes)
     {
       uint32_t min_timer = 0xffffffff;
 
@@ -292,7 +270,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
         break;
 
       // no free sound slot found, so use the oldest note slot
-      for (uint8_t n = 0; n < max_notes; n++)
+      for (uint8_t n = 0; n < used_notes; n++)
       {
         if (voices[n].key_pressed_timer < min_timer)
         {
@@ -309,7 +287,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
 
     if (!voices[note].keydown)
     {
-      currentNote = (note + 1) % max_notes;
+      currentNote = (note + 1) % used_notes;
       //if (keydown_counter == 0) // Original comment: TODO: should only do this if # keys down was 0
         lfo.keydown();
       voices[note].midi_note = pitch;
@@ -328,11 +306,11 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
     {
       keydown_counter++;
     }
-    note = (note + 1) % max_notes;
+    note = (note + 1) % used_notes;
   }
 
   if ( monoMode ) {
-    for (uint8_t i = 0; i < max_notes; i++) {
+    for (uint8_t i = 0; i < used_notes; i++) {
       if ( voices[i].live ) {
         // all keys are up, only transfer signal
         if ( ! voices[i].keydown ) {
@@ -360,7 +338,7 @@ void Dexed::keyup(uint8_t pitch) {
 
   pitch += data[144] - TRANSPOSE_FIX;
 
-  for (note = 0; note < max_notes; note++) {
+  for (note = 0; note < used_notes; note++) {
     if ( voices[note].midi_note == pitch && voices[note].keydown ) {
       voices[note].keydown = false;
       voices[note].key_pressed_timer = 0;
@@ -370,14 +348,14 @@ void Dexed::keyup(uint8_t pitch) {
   }
 
   // note not found ?
-  if ( note >= max_notes ) {
+  if ( note >= used_notes ) {
     return;
   }
 
   if ( monoMode ) {
     int8_t highNote = -1;
     uint8_t target = 0;
-    for (int8_t i = 0; i < max_notes; i++) {
+    for (int8_t i = 0; i < used_notes; i++) {
       if ( voices[i].keydown && voices[i].midi_note > highNote ) {
         target = i;
         highNote = voices[i].midi_note;
@@ -494,7 +472,7 @@ void Dexed::notesOff(void) {
 
 uint8_t Dexed::getMaxNotes(void)
 {
-  return max_notes;
+  return used_notes;
 }
 
 uint8_t Dexed::getNumNotesPlaying(void)
@@ -503,7 +481,7 @@ uint8_t Dexed::getNumNotesPlaying(void)
   uint8_t i;
   uint8_t count_playing_voices = 0;
 
-  for (i = 0; i < max_notes; i++)
+  for (i = 0; i < used_notes; i++)
   {
     if (voices[i].live == true)
     {
