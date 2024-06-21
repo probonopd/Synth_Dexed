@@ -590,7 +590,7 @@ bool Dexed::decodeVoice(uint8_t* new_data, uint8_t* encoded_data)
   panic();
   doRefreshVoice();
 
-  strncpy(dexed_voice_name, (char *)&encoded_data[118], sizeof(dexed_voice_name) - 1);
+  strlcpy(dexed_voice_name, (char *)&encoded_data[118], sizeof(dexed_voice_name) - 1);
   dexed_voice_name[10] = '\0';
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.print(F("Voice ["));
@@ -680,7 +680,7 @@ void Dexed::loadVoiceParameters(uint8_t* new_data)
   memcpy(&data, new_data, 155);
   doRefreshVoice();
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
-  strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
+  strlcpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
   dexed_voice_name[10] = '\0';
 
   Serial.print(F("Voice ["));
@@ -1684,12 +1684,12 @@ uint8_t Dexed::getTranspose(void)
 
 void Dexed::setName(char* name)
 {
-  strncpy(name, (char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], 10);
+  strlcpy(name, (char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], 10);
 }
 
 void Dexed::getName(char* buffer)
 {
-  strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], buffer, 10);
+  strlcpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], buffer, 10);
   buffer[10] = '\0';
 }
 
