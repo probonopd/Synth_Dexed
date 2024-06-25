@@ -119,9 +119,9 @@ class Compressor
 
       //release memory
       if(audio_level_dB_block)
-	delete audio_level_dB_block;
+	delete[] audio_level_dB_block;
       if(gain_block)
-        delete gain_block;
+        delete[] gain_block;
     }
 
     // Here's the method that estimates the level of the audio (in dB)
@@ -162,7 +162,7 @@ class Compressor
 
       //release memory and return
       if(wav_pow_block)
-        delete wav_pow_block;
+        delete[] wav_pow_block;
 
       return; //output is passed through level_dB_block
     }
@@ -200,9 +200,9 @@ class Compressor
 
       //release memory and return
       if(inst_targ_gain_dB_block)
-        delete inst_targ_gain_dB_block;
+        delete[] inst_targ_gain_dB_block;
       if(gain_dB_block)
-        delete gain_dB_block;
+        delete[] gain_dB_block;
 
       return;  //output is passed through gain_block
     }
@@ -245,7 +245,7 @@ class Compressor
 
       // release memory before returning
       if(above_thresh_dB_block)
-        delete above_thresh_dB_block;
+        delete[] above_thresh_dB_block;
 
       return;  //output is passed through inst_targ_gain_dB_block
     }
