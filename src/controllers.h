@@ -59,7 +59,7 @@ class FmMod {
 
     void setTarget(uint8_t assign)
     {
-      assign = assign < 0 && assign > 7 ? 0 : assign;
+      assign = assign < 0 || assign > 7 ? 0 : assign;
       pitch = assign & 1; // PITCH
       amp = assign & 2; // AMP
       eg = assign & 4; // EG
