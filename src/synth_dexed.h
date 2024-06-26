@@ -55,8 +55,6 @@
 #define PORTAMENTO_GLISSANDO_DEFAULT 0
 #define PORTAMENTO_TIME_DEFAULT 0
 
-//#define USE_SIMPLE_COMPRESSOR 1
-
 #if defined(TEENSYDUINO)
 class AudioSynthDexed : public AudioStream, public Dexed
 {

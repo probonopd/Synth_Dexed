@@ -42,8 +42,6 @@
 #include "controllers.h"
 #include "dx7note.h"
 #include "lfo.h"
-#include "PluginFx.h"
-#include "compressor.h"
 #include "EngineMsfa.h"
 #include "EngineMkI.h"
 #include "EngineOpl.h"
@@ -196,20 +194,6 @@ class Dexed
     void setEngineType(uint8_t engine);
     uint8_t getEngineType(void);
     FmCore* getEngineAddress(void);
-#ifndef TEENSYDUINO
-    void setCompressor(bool comp);
-    bool getCompressor(void);
-    void setCompressorPreGain_dB(float pre_gain);
-    void setCompressorAttack_sec(float attack_sec);
-    void setCompressorRelease_sec(float release_sec);
-    void setCompressorThresh_dBFS(float thresh_dBFS);
-    void setCompressionRatio(float comp_ratio);
-    float getCompressorPreGain_dB(void);
-    float getCompressorAttack_sec(void);
-    float getCompressorRelease_sec(void);
-    float getCompressorThresh_dBFS(void);
-    float getCompressionRatio(void);
-#endif
     int16_t checkSystemExclusive(const uint8_t* sysex, const uint16_t len);
 
     // Sound methods
@@ -266,10 +250,6 @@ class Dexed
     uint8_t getAftertouchRange(void);
     void setAftertouchTarget(uint8_t target);
     uint8_t getAftertouchTarget(void);
-    void setFilterCutoff(float cutoff);
-    float getFilterCutoff(void);
-    void setFilterResonance(float resonance);
-    float getFilterResonance(void);
     void setGain(float gain);
     float getGain(void);
 
@@ -359,7 +339,6 @@ class Dexed
     uint8_t data[NUM_VOICE_PARAMETERS];
     uint8_t max_notes;
     uint8_t used_notes;
-    PluginFx fx;
     Controllers controllers;
     int32_t lastKeyDown;
     uint32_t xrun;
@@ -378,14 +357,9 @@ class Dexed
     EngineOpl* engineOpl;
     void getSamples(float* buffer, uint16_t n_samples);
     void getSamples(int16_t* buffer, uint16_t n_samples);
-    void compress(float* wav_in, float* wav_out, uint16_t n, float threshold, float slope, uint16_t sr,  float tla, float twnd, float tatt, float trel);
-    bool use_compressor;
     uint8_t velocity_offset;
     uint8_t velocity_max;
     float velocity_diff;
-#ifndef TEENSYDUINO
-    Compressor* compressor;
-#endif
 };
 
 #endif

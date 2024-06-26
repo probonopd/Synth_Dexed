@@ -34,9 +34,7 @@
 #include "sin.h"
 #include "freqlut.h"
 #include "controllers.h"
-#include "PluginFx.h"
 #include "porta.h"
-#include "compressor.h"
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
@@ -93,11 +91,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   engineMkI = new EngineMkI;
   engineOpl = new EngineOpl;
   setEngineType(MKI);
-
-#ifndef TEENSYDUINO
-  compressor = new Compressor(samplerate);
-#endif
-  use_compressor = false;
 }
 
 Dexed::~Dexed()
@@ -204,13 +197,6 @@ void Dexed::getSamples(float* buffer, uint16_t n_samples)
       }
     }
   }
-
-  fx.process(buffer, n_samples); // Needed for fx.Gain()!!!
-
-#ifndef TEENSYDUINO
-  if (use_compressor == true)
-    compressor->doCompression(buffer, n_samples);
-#endif
 }
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
@@ -1148,34 +1134,14 @@ uint8_t Dexed::getAftertouchTarget(void)
   return (controllers.at.getTarget());
 }
 
-void Dexed::setFilterCutoff(float cutoff)
-{
-  fx.Cutoff = cutoff;
-}
-
-float Dexed::getFilterCutoff(void)
-{
-  return (fx.Cutoff);
-}
-
-void Dexed::setFilterResonance(float resonance)
-{
-  fx.Reso = resonance;
-}
-
-float Dexed::getFilterResonance(void)
-{
-  return (fx.Reso);
-}
-
 void Dexed::setGain(float gain)
 {
-  fx.Gain = gain;
+  //fx.Gain = gain;
 }
 
 float Dexed::getGain(void)
 {
-  return (fx.Gain);
+  //return (fx.Gain);
 }
 
 void Dexed::setOPRateAll(uint8_t rate)
@@ -1726,65 +1692,3 @@ void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
   }
   setVelocityScale(velocity_offset, velocity_max);
 }
-
-#ifndef TEENSYDUINO
-void Dexed::setCompressor(bool enable_compressor)
-{
-  use_compressor = enable_compressor;
-}
-
-bool Dexed::getCompressor(void)
-{
-  return (use_compressor);
-}
-
-void Dexed::setCompressorPreGain_dB(float pre_gain)
-{
-  compressor->setPreGain_dB(pre_gain);
-}
-
-void Dexed::setCompressorAttack_sec(float attack_sec)
-{
-  compressor->setAttack_sec(attack_sec, samplerate);
-}
-
-void Dexed::setCompressorRelease_sec(float release_sec)
-{
-  compressor->setRelease_sec(release_sec, samplerate);
-}
-
-void Dexed::setCompressorThresh_dBFS(float thresh_dBFS)
-{
-  compressor->setThresh_dBFS(thresh_dBFS);
-}
-
-void Dexed::setCompressionRatio(float comp_ratio)
-{
-  compressor->setCompressionRatio(comp_ratio);
-}
-
-float Dexed::getCompressorPreGain_dB(void)
-{
-  return (compressor->getPreGain_dB());
-}
-
-float Dexed::getCompressorAttack_sec(void)
-{
-  return (compressor->getAttack_sec());
-}
-
-float Dexed::getCompressorRelease_sec(void)
-{
-  return (compressor->getRelease_sec());
-}
-
-float Dexed::getCompressorThresh_dBFS(void)
-{
-  return (compressor->getThresh_dBFS());
-}
-
-float Dexed::getCompressionRatio(void)
-{
-  return (compressor->getCompressionRatio());
-}
-#endif
