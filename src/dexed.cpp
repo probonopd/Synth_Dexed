@@ -49,7 +49,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   PitchEnv::init(rate);
   Env::init_sr(rate);
   Porta::init_sr(rate);
-  fx.init(rate);
 
   currentNote = 0;
   resetControllers();
@@ -1136,11 +1135,12 @@ uint8_t Dexed::getAftertouchTarget(void)
 
 void Dexed::setGain(float gain)
 {
-  //fx.Gain = gain;
+ ; //fx.Gain = gain;
 }
 
 float Dexed::getGain(void)
 {
+  return(1.0);
   //return (fx.Gain);
 }
 
