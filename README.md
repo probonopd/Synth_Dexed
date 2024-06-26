@@ -48,18 +48,6 @@ See example sketch.
     uint16_t getRenderTimeMax(void);
     void resetRenderTimeMax(void);
     void ControllersRefresh(void);
-    void setCompressor(bool comp);
-    bool getCompressor(void);
-    void setCompressorPreGain_dB(float32_t pre_gain);
-    void setCompressorAttack_sec(float32_t attack_sec);
-    void setCompressorRelease_sec(float32_t release_sec);
-    void setCompressorThresh_dBFS(float32_t thresh_dBFS);
-    void setCompressionRatio(float32_t comp_ratio);
-    float32_t getCompressorPreGain_dB(void);
-    float32_t getCompressorAttack_sec(void);
-    float32_t getCompressorRelease_sec(void);
-    float32_t getCompressorThresh_dBFS(void);
-    float32_t getCompressionRatio(void);
 
     // Sound methods
     void keyup(int16_t pitch);
@@ -107,9 +95,6 @@ See example sketch.
     uint8_t getAftertouchRange(void);
     void setAftertouchTarget(uint8_t target);
     uint8_t getAftertouchTarget(void);
-    void setFilterCutoff(float cutoff);
-    float getFilterCutoff(void);
-    void setFilterResonance(float resonance);
     float getFilterResonance(void);
     void setGain(float gain);
     float getGain(void);

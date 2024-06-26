@@ -22,7 +22,6 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
-#include <arm_math.h>
 #include <limits.h>
 #include <cstdlib>
 #include <stdint.h>
@@ -35,6 +34,29 @@
 #include "freqlut.h"
 #include "controllers.h"
 #include "porta.h"
+
+//*** Integer math helpers (from https://en.wikipedia.org/wiki/Q_(number_format)) ***
+int16_t sat16(int32_t x)
+{
+	if (x > 0x7FFF) return 0x7FFF;
+	else if (x < -0x8000) return -0x8000;
+	else return (int16_t)x;
+}
+
+int16_t q_mul(int16_t a, int16_t b)
+{
+    int16_t result;
+    int32_t temp;
+
+    temp = (int32_t)a * (int32_t)b; // result type is operand's type
+    // Rounding; mid values are rounded up
+    temp += (1 << 14);
+    // Correct by dividing by base and saturate result
+    result = sat16(temp >> 15);
+
+    return result;
+}
+//***********************************************************************************
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
@@ -79,6 +101,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   used_notes=max_notes;
   setMonoMode(false);
   loadInitVoice();
+  gain=0.0;
 
   xrun = 0;
   render_time_max = 0;
@@ -155,7 +178,7 @@ void Dexed::deactivate(void)
   panic();
 }
 
-void Dexed::getSamples(float* buffer, uint16_t n_samples)
+void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
   if (refreshVoice)
   {
@@ -167,8 +190,6 @@ void Dexed::getSamples(float* buffer, uint16_t n_samples)
     lfo.reset(data + 137);
     refreshVoice = false;
   }
-
-  arm_fill_f32(0.0, buffer, n_samples);
 
   for (uint16_t i = 0; i < n_samples; i += _N_)
   {
@@ -190,20 +211,12 @@ void Dexed::getSamples(float* buffer, uint16_t n_samples)
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
-          buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9) / 32768.0;
+          buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain);
           audiobuf.get()[j] = 0;
         }
       }
     }
   }
-}
-
-void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
-{
-  float tmp[n_samples];
-
-  getSamples(tmp, n_samples);
-  arm_float_to_q15(tmp, (q15_t*)buffer, n_samples);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
@@ -1133,15 +1146,14 @@ uint8_t Dexed::getAftertouchTarget(void)
   return (controllers.at.getTarget());
 }
 
-void Dexed::setGain(float gain)
+void Dexed::setGain(float fgain)
 {
- ; //fx.Gain = gain;
+  gain=fgain*0x7fff;
 }
 
 float Dexed::getGain(void)
 {
-  return(1.0);
-  //return (fx.Gain);
+  return (gain/0x7fff);
 }
 
 void Dexed::setOPRateAll(uint8_t rate)

@@ -30,7 +30,6 @@
 
 #include <stdint.h>
 #include <cstdlib>
-#include <arm_math.h>
 #if defined(TEENSYDUINO)
 #include <Audio.h>
 #endif
@@ -355,11 +354,11 @@ class Dexed
     EngineMsfa* engineMsfa;
     EngineMkI* engineMkI;
     EngineOpl* engineOpl;
-    void getSamples(float* buffer, uint16_t n_samples);
     void getSamples(int16_t* buffer, uint16_t n_samples);
     uint8_t velocity_offset;
     uint8_t velocity_max;
     float velocity_diff;
+    int16_t gain;
 };
 
 #endif
