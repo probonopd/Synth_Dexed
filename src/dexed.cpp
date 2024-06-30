@@ -90,10 +90,11 @@ void Dexed::limiter_init(float attack, float release, int delay, float threshold
 
 void Dexed::limiter_reset(void) {
     limit_delay_index_ = 0;
-    limit_gain_ = 0xffff;
+    limit_gain_ = 0x7fff;
     limit_envelope_ = 0;
 
-    delete[] limit_delay_line_;
+    if(limit_delay_line_!=NULL)
+    	delete[] limit_delay_line_;
     limit_delay_line_=new int16_t[limit_delay];
 
     for(uint16_t i = 0; i < limit_delay; ++i) {
@@ -110,13 +111,13 @@ void Dexed::limiter_apply(int16_t* audio, const size_t num_samples) {
         // calculate an envelope of the signal
         limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release));
 
-        int16_t target_gain = 0x7ff;
+        int16_t target_gain = 0x7fff;
         if (limit_envelope_ > limit_threshold) {
             target_gain = q_div(limit_threshold, limit_envelope_);
         }
 
         // have gain_ go towards a desired limiter gain
-        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack),q_mul(target_gain, q_sub(0x7ff, limit_attack)));
+        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack),q_mul(target_gain, q_sub(0x7fff, limit_attack)));
 
         // limit the delayed signal
         audio[idx] = q_mul(limit_delay_line_[limit_delay_index_],limit_gain_);
@@ -259,6 +260,9 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     refreshVoice = false;
   }
 
+  for (uint16_t i = 0; i < n_samples; i++)
+    buffer[i]=0;
+  
   for (uint16_t i = 0; i < n_samples; i += _N_)
   {
     AlignedBuf<int32_t, _N_> audiobuf;
@@ -279,6 +283,7 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
+          //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
 	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain);
           buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain);
           audiobuf.get()[j] = 0;

@@ -366,7 +366,7 @@ class Dexed
     int16_t limit_release;
     int16_t limit_threshold;
     uint16_t limit_delay;
-    int16_t* limit_delay_line_;
+    int16_t* limit_delay_line_=NULL;
     uint16_t limit_delay_index_;
     int16_t limit_envelope_;
     int16_t limit_gain_;
