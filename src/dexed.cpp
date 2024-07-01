@@ -290,9 +290,8 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
         }
       }
     }
-
-    limiter_apply(buffer, n_samples);
   }
+  limiter_apply(buffer, n_samples);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
