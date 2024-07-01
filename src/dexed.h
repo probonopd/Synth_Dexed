@@ -44,6 +44,7 @@
 #include "EngineMsfa.h"
 #include "EngineMkI.h"
 #include "EngineOpl.h"
+#include "fx.h"
 
 #define NUM_VOICE_PARAMETERS 156
 
@@ -359,17 +360,7 @@ class Dexed
     uint8_t velocity_max;
     float velocity_diff;
     int16_t gain;
-    void limiter_init(float attack, float release, int delay, float threshold);
-    void limiter_apply(int16_t* audio, const size_t num_samples);
-    void limiter_reset(void);
-    int16_t limit_attack;
-    int16_t limit_release;
-    int16_t limit_threshold;
-    uint16_t limit_delay;
-    int16_t* limit_delay_line_=NULL;
-    uint16_t limit_delay_index_;
-    int16_t limit_envelope_;
-    int16_t limit_gain_;
+    Limiter limiter;
 };
 
 #endif

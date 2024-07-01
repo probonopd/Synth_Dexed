@@ -34,96 +34,7 @@
 #include "freqlut.h"
 #include "controllers.h"
 #include "porta.h"
-
-//*** Integer math helpers (from https://en.wikipedia.org/wiki/Q_(number_format)) ***
-int16_t sat16(int32_t x)
-{
-	if (x > 0x7FFF) return 0x7FFF;
-	else if (x < -0x8000) return -0x8000;
-	else return (int16_t)x;
-}
-
-int16_t q_add(int16_t a, int16_t b)
-{
-    return(sat16(a + b));
-}
-
-int16_t q_sub(int16_t a, int16_t b)
-{
-    return(sat16(a - b));
-}
-
-int16_t q_mul(int16_t a, int16_t b)
-{
-    int32_t temp;
-
-    temp = (int32_t)a * (int32_t)b;
-    temp += (1 << 14);
-
-    return(sat16(temp >> 15));
-}
-
-int16_t q_div(int16_t a, int16_t b)
-{
-    int32_t temp = (int32_t)a << 15;
-
-    if ((temp >= 0 && b >= 0) || (temp < 0 && b < 0)) {
-        temp += (b >> 1);
-    } else {
-        temp -= (b >> 1);
-    }
-    return (int16_t)(temp / b);
-}
-
-//***********************************************************************************
-
-//*** Limiter (from https://github.com/pzelasko/cylimiter/blob/master/extensions/limiter.*) ***
-void Dexed::limiter_init(float attack, float release, int delay, float threshold)
-{
-    limit_attack=attack*0x7fff;
-    limit_release=release*0x7fff;
-    limit_delay=delay;
-    limit_threshold=threshold*0x7fff;
-
-    limiter_reset();
-}
-
-void Dexed::limiter_reset(void) {
-    limit_delay_index_ = 0;
-    limit_gain_ = 0x7fff;
-    limit_envelope_ = 0;
-
-    if(limit_delay_line_!=NULL)
-    	delete[] limit_delay_line_;
-    limit_delay_line_=new int16_t[limit_delay];
-
-    for(uint16_t i = 0; i < limit_delay; ++i) {
-        limit_delay_line_[i] = 0;
-    }
-}
-
-void Dexed::limiter_apply(int16_t* audio, const size_t num_samples) {
-    for (size_t idx = 0; idx < num_samples; ++idx) {
-        const int16_t sample = audio[idx];
-        limit_delay_line_[limit_delay_index_] = sample;
-        limit_delay_index_ = (limit_delay_index_ + 1) % limit_delay;
-
-        // calculate an envelope of the signal
-        limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release));
-
-        int16_t target_gain = 0x7fff;
-        if (limit_envelope_ > limit_threshold) {
-            target_gain = q_div(limit_threshold, limit_envelope_);
-        }
-
-        // have gain_ go towards a desired limiter gain
-        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack),q_mul(target_gain, q_sub(0x7fff, limit_attack)));
-
-        // limit the delayed signal
-        audio[idx] = q_mul(limit_delay_line_[limit_delay_index_],limit_gain_);
-    }
-}
-//***********************************************************************************
+#include "int_math.h"
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
@@ -170,7 +81,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   loadInitVoice();
 
   gain=0;
-  limiter_init(0.2,0.5,100,0.9);
+  limiter.set(0.2,0.5,0.9,100);
 
   xrun = 0;
   render_time_max = 0;
@@ -291,7 +202,7 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
       }
     }
   }
-  limiter_apply(buffer, n_samples);
+  limiter.apply(buffer, n_samples);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
