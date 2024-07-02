@@ -112,15 +112,15 @@ void Dexed::limiter_apply(int16_t* audio, const size_t num_samples) {
         limit_delay_index_ = (limit_delay_index_ + 1) % limit_delay;
 
         // calculate an envelope of the signal
-        limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release,11));
+        limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release,limit_q));
 
         int16_t target_gain = ((1<limit_q)-1);
         if (limit_envelope_ > limit_threshold) {
-            target_gain = q_div(limit_threshold, limit_envelope_,11);
+            target_gain = q_div(limit_threshold, limit_envelope_,limit_q);
         }
 
         // have gain_ go towards a desired limiter gain
-        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack,11),q_mul(target_gain, q_sub(((1<limit_q)-1), limit_attack,11),11),11);
+        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack,limit_q),q_mul(target_gain, q_sub(((1<limit_q)-1), limit_attack,limit_q),limit_q),limit_q);
 
         // limit the delayed signal
         audio[idx] = q_mul(limit_delay_line_[limit_delay_index_],(limit_gain_<<(15-limit_q)),15);
