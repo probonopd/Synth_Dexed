@@ -36,61 +36,64 @@
 #include "porta.h"
 
 //*** Integer math helpers (from https://en.wikipedia.org/wiki/Q_(number_format)) ***
-int16_t sat16(int32_t x)
+int16_t sat16(int32_t x, const int8_t q)
 {
-	if (x > 0x7FFF) return 0x7FFF;
-	else if (x < -0x8000) return -0x8000;
+	if (x > (1<<q)-1)
+		return((1<<q)-1);
+	else if (x < -(1<<q))
+		return -(1<<q);
 	else return (int16_t)x;
 }
 
-int16_t q_add(int16_t a, int16_t b)
+int16_t q_add(int16_t a, int16_t b, const int8_t q)
 {
-    return(sat16(a + b));
+    return(sat16(a + b,q));
 }
 
-int16_t q_sub(int16_t a, int16_t b)
+int16_t q_sub(int16_t a, int16_t b, const int8_t q)
 {
-    return(sat16(a - b));
+    return(sat16(a - b,q));
 }
 
-int16_t q_mul(int16_t a, int16_t b)
+int16_t q_mul(int16_t a, int16_t b, const int8_t q)
 {
     int32_t temp;
 
     temp = (int32_t)a * (int32_t)b;
-    temp += (1 << 14);
+    temp += (1 << (q-1));
 
-    return(sat16(temp >> 15));
+    return(sat16(temp >> q,q));
 }
 
-int16_t q_div(int16_t a, int16_t b)
+int16_t q_div(int16_t a, int16_t b, const int8_t q)
 {
-    int32_t temp = (int32_t)a << 15;
+    int32_t temp = (int32_t)a << q;
 
     if ((temp >= 0 && b >= 0) || (temp < 0 && b < 0)) {
         temp += (b >> 1);
     } else {
         temp -= (b >> 1);
     }
-    return (int16_t)(temp / b);
+    return (sat16(temp / b,q));
 }
 
 //***********************************************************************************
 
 //*** Limiter (from https://github.com/pzelasko/cylimiter/blob/master/extensions/limiter.*) ***
-void Dexed::limiter_init(float attack, float release, int delay, float threshold)
+void Dexed::limiter_init(float attack, float release, float threshold, int16_t delay, const uint8_t q)
 {
-    limit_attack=attack*0x7fff;
-    limit_release=release*0x7fff;
+    limit_attack=attack*((1<q)-1);
+    limit_release=release*((1<q)-1);
     limit_delay=delay;
-    limit_threshold=threshold*0x7fff;
+    limit_threshold=threshold*((1<q)-1);
+    limit_q=q;
 
     limiter_reset();
 }
 
 void Dexed::limiter_reset(void) {
     limit_delay_index_ = 0;
-    limit_gain_ = 0x7fff;
+    limit_gain_ = (1<limit_q)-1;
     limit_envelope_ = 0;
 
     if(limit_delay_line_!=NULL)
@@ -109,18 +112,18 @@ void Dexed::limiter_apply(int16_t* audio, const size_t num_samples) {
         limit_delay_index_ = (limit_delay_index_ + 1) % limit_delay;
 
         // calculate an envelope of the signal
-        limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release));
+        limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release,11));
 
-        int16_t target_gain = 0x7fff;
+        int16_t target_gain = ((1<limit_q)-1);
         if (limit_envelope_ > limit_threshold) {
-            target_gain = q_div(limit_threshold, limit_envelope_);
+            target_gain = q_div(limit_threshold, limit_envelope_,11);
         }
 
         // have gain_ go towards a desired limiter gain
-        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack),q_mul(target_gain, q_sub(0x7fff, limit_attack)));
+        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack,11),q_mul(target_gain, q_sub(((1<limit_q)-1), limit_attack,11),11),11);
 
         // limit the delayed signal
-        audio[idx] = q_mul(limit_delay_line_[limit_delay_index_],limit_gain_);
+        audio[idx] = q_mul(limit_delay_line_[limit_delay_index_],(limit_gain_<<(15-limit_q)),15);
     }
 }
 //***********************************************************************************
@@ -170,7 +173,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   loadInitVoice();
 
   gain=0;
-  limiter_init(0.2,0.5,100,0.9);
+  limiter_init(0.2,0.5,0.9,100,11);
 
   xrun = 0;
   render_time_max = 0;
@@ -284,8 +287,8 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
         for (uint8_t j = 0; j < _N_; ++j)
         {
           //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
-	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain);
-          buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain);
+	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain,15);
+          buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain,15);
           audiobuf.get()[j] = 0;
         }
       }

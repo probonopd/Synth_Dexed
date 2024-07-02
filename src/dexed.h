@@ -359,13 +359,14 @@ class Dexed
     uint8_t velocity_max;
     float velocity_diff;
     int16_t gain;
-    void limiter_init(float attack, float release, int delay, float threshold);
+    void limiter_init(float attack, float release, float threshold, int16_t delay, const uint8_t q);
     void limiter_apply(int16_t* audio, const size_t num_samples);
     void limiter_reset(void);
     int16_t limit_attack;
     int16_t limit_release;
     int16_t limit_threshold;
     uint16_t limit_delay;
+    uint8_t limit_q;
     int16_t* limit_delay_line_=NULL;
     uint16_t limit_delay_index_;
     int16_t limit_envelope_;
