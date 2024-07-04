@@ -243,13 +243,26 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
+		/*
+		        int32_t val = audiobuf.get()[j];
+                        val = val >> 4;
+                        int clip_val = val < -(1 << 24) ? 0x8000 : val >= (1 << 24) ? 0x7fff : val >> 9;
+                        float f = ((float) clip_val) / (float) 0x8000;
+                        if( f > 1 ) f = 1;
+                        if( f < -1 ) f = -1;
+                        sumbuf[j] += f;
+                        audiobuf.get()[j] = 0;
+		 */
+
           //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
 	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain,15);
-          buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain,15);
+          //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain,15);
+          buffer[i + j] += audiobuf.get()[j]>>18;
           audiobuf.get()[j] = 0;
         }
       }
     }
+    buffer[i]=q_mul(buffer[i],gain,15);
   }
   limiter_apply(buffer, n_samples);
 }
