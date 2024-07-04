@@ -34,50 +34,7 @@
 #include "freqlut.h"
 #include "controllers.h"
 #include "porta.h"
-
-//*** Integer math helpers (from https://en.wikipedia.org/wiki/Q_(number_format)) ***
-inline int16_t sat16(int32_t x, const int8_t q)
-{
-	if (x > (1<<q)-1)
-		return((1<<q)-1);
-	else if (x < -(1<<q))
-		return -(1<<q);
-	else return (int16_t)x;
-}
-
-inline int16_t q_add(int16_t a, int16_t b, const int8_t q)
-{
-    return(sat16(a + b,q));
-}
-
-inline int16_t q_sub(int16_t a, int16_t b, const int8_t q)
-{
-    return(sat16(a - b,q));
-}
-
-inline int16_t q_mul(int16_t a, int16_t b, const int8_t q)
-{
-    int32_t temp;
-
-    temp = (int32_t)a * (int32_t)b;
-    temp += (1 << (q-1));
-
-    return(sat16(temp >> q,q));
-}
-
-inline int16_t q_div(int16_t a, int16_t b, const int8_t q)
-{
-    int32_t temp = (int32_t)a << q;
-
-    if ((temp >= 0 && b >= 0) || (temp < 0 && b < 0)) {
-        temp += (b >> 1);
-    } else {
-        temp -= (b >> 1);
-    }
-    return (sat16(temp / b,q));
-}
-
-//***********************************************************************************
+#include "int_math.h"
 
 //*** Limiter (from https://github.com/pzelasko/cylimiter/blob/master/extensions/limiter.*) ***
 void Dexed::limiter_init(float attack, float release, float threshold, int16_t delay, const uint8_t q)
