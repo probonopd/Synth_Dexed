@@ -36,7 +36,7 @@
 #include "porta.h"
 
 //*** Integer math helpers (from https://en.wikipedia.org/wiki/Q_(number_format)) ***
-int16_t sat16(int32_t x, const int8_t q)
+inline int16_t sat16(int32_t x, const int8_t q)
 {
 	if (x > (1<<q)-1)
 		return((1<<q)-1);
@@ -45,17 +45,17 @@ int16_t sat16(int32_t x, const int8_t q)
 	else return (int16_t)x;
 }
 
-int16_t q_add(int16_t a, int16_t b, const int8_t q)
+inline int16_t q_add(int16_t a, int16_t b, const int8_t q)
 {
     return(sat16(a + b,q));
 }
 
-int16_t q_sub(int16_t a, int16_t b, const int8_t q)
+inline int16_t q_sub(int16_t a, int16_t b, const int8_t q)
 {
     return(sat16(a - b,q));
 }
 
-int16_t q_mul(int16_t a, int16_t b, const int8_t q)
+inline int16_t q_mul(int16_t a, int16_t b, const int8_t q)
 {
     int32_t temp;
 
@@ -65,7 +65,7 @@ int16_t q_mul(int16_t a, int16_t b, const int8_t q)
     return(sat16(temp >> q,q));
 }
 
-int16_t q_div(int16_t a, int16_t b, const int8_t q)
+inline int16_t q_div(int16_t a, int16_t b, const int8_t q)
 {
     int32_t temp = (int32_t)a << q;
 
