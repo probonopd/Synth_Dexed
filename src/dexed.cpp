@@ -39,12 +39,6 @@
 /*
  *
  */
-void Dexed::comp_setSideChain(uint8_t _sideChain) {
-	if(_sideChain == comp_sideChainSel) return;
-        	if(_sideChain > 1) return;
-        	else comp_sideChainSel = _sideChain;
-}
-        
 void Dexed::comp_setDownSample(uint8_t _downSample) {
         	if(_downSample == comp_downSample) return;
         	if(_downSample > 8) comp_downSample = 8;
@@ -314,13 +308,13 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 
   //comp_disable();
   comp_enable();
-  comp_setDownSample(1);
+  comp_setDownSample(2);
   comp_setAttack(2);
-  comp_setRelease(600);
-  comp_setRatio(4);
-  comp_setThreshold(-9);
+  comp_setRelease(200);
+  comp_setRatio(6);
+  comp_setThreshold(-25);
   comp_setKnee(3);
-  comp_setMakeupGain(0);
+  comp_setMakeupGain(6.0);
   comp_peakDet_prev = comp_release_prev = 0;
 }
 
@@ -437,7 +431,8 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
           //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
 	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain,15);
           //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain,15);
-          buffer[i + j] += audiobuf.get()[j]>>9;
+          buffer[i + j] += audiobuf.get()[j]>>13;
+          //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j], 24, 9);
           audiobuf.get()[j] = 0;
         }
       }
@@ -445,7 +440,9 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     //buffer[i]=q_mul(buffer[i],gain,15);
   }
   // limit here
-  comp_sideChain(buffer,buffer);
+  int16_t tmp_buf[AUDIO_BLOCK_SAMPLES];
+  comp_sideChain(buffer,tmp_buf);
+  memcpy(tmp_buf,buffer,AUDIO_BLOCK_SAMPLES);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {

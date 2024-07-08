@@ -385,7 +385,7 @@ class Dexed
     float comp_release_f;
     float comp_attack_f;
     float comp_makeupGain_f;
-    bool comp_enabled = false;
+    bool comp_enabled = true;
 
 };
 
