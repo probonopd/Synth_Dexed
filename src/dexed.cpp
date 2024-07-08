@@ -36,54 +36,224 @@
 #include "porta.h"
 #include "int_math.h"
 
-//*** Limiter (from https://github.com/pzelasko/cylimiter/blob/master/extensions/limiter.*) ***
-void Dexed::limiter_init(float attack, float release, float threshold, int16_t delay, const uint8_t q)
-{
-    limit_attack=attack*((1<q)-1);
-    limit_release=release*((1<q)-1);
-    limit_delay=delay;
-    limit_threshold=threshold*((1<q)-1);
-    limit_q=q;
-
-    limiter_reset();
+/*
+ *
+ */
+void Dexed::comp_setSideChain(uint8_t _sideChain) {
+	if(_sideChain == comp_sideChainSel) return;
+        	if(_sideChain > 1) return;
+        	else comp_sideChainSel = _sideChain;
 }
-
-void Dexed::limiter_reset(void) {
-    limit_delay_index_ = 0;
-    limit_gain_ = (1<limit_q)-1;
-    limit_envelope_ = 0;
-
-    if(limit_delay_line_!=NULL)
-    	delete[] limit_delay_line_;
-    limit_delay_line_=new int16_t[limit_delay];
-
-    for(uint16_t i = 0; i < limit_delay; ++i) {
-        limit_delay_line_[i] = 0;
-    }
+        
+void Dexed::comp_setDownSample(uint8_t _downSample) {
+        	if(_downSample == comp_downSample) return;
+        	if(_downSample > 8) comp_downSample = 8;
+        	else comp_downSample = _downSample;
 }
-
-void Dexed::limiter_apply(int16_t* audio, const size_t num_samples) {
-    for (size_t idx = 0; idx < num_samples; ++idx) {
-        const int16_t sample = audio[idx];
-        limit_delay_line_[limit_delay_index_] = sample;
-        limit_delay_index_ = (limit_delay_index_ + 1) % limit_delay;
-
-        // calculate an envelope of the signal
-        limit_envelope_ = max(abs(sample), q_mul(limit_envelope_, limit_release,limit_q));
-
-        int16_t target_gain = ((1<limit_q)-1);
-        if (limit_envelope_ > limit_threshold) {
-            target_gain = q_div(limit_threshold, limit_envelope_,limit_q);
-        }
-
-        // have gain_ go towards a desired limiter gain
-        limit_gain_ = q_add(q_mul(limit_gain_,limit_attack,limit_q),q_mul(target_gain, q_sub(((1<limit_q)-1), limit_attack,limit_q),limit_q),limit_q);
-
-        // limit the delayed signal
-        audio[idx] = q_mul(limit_delay_line_[limit_delay_index_],(limit_gain_<<(15-limit_q)),15);
-    }
+        
+void Dexed::comp_setAttack(float _attack) {
+        	// convert attack in mSec into q31 LPF coefficients
+        	float alpha, temp;
+        	int64_t temp2;
+        	
+        	if(_attack == comp_attack_f) return;
+        	if(_attack < 0.1) return;
+        	if(_attack > 2000) return;
+        	comp_attack_f = _attack;
+        	
+        	alpha = exp(-1/(comp_attack_f*44.1));        	
+        	temp = (alpha * 2147483648.0f);
+       		temp += temp > 0.0f ? 0.5f : -0.5f;
+       		temp2 = (int64_t)temp;
+       		comp_alphaAttack = ((int32_t) (temp2 >> 32) != ((int32_t) temp2 >> 31)) ? ((0x7FFFFFFF ^ ((int32_t) (temp2 >> 63)))) : (int32_t) temp2;
+       		alpha = 1 - exp(-1/(comp_attack_f*44.1));        	
+        	temp = (alpha * 2147483648.0f);
+       		temp += temp > 0.0f ? 0.5f : -0.5f;
+       		temp2 = (int64_t)temp;
+       		comp_alphaAttackComp = ((int32_t) (temp2 >> 32) != ((int32_t) temp2 >> 31)) ? ((0x7FFFFFFF ^ ((int32_t) (temp2 >> 63)))) : (int32_t) temp2;
 }
-//***********************************************************************************
+  
+void Dexed::comp_setRelease(float _release) {
+        	// convert release in mSec into q31 LPF coefficients
+        	float alpha, temp;
+        	int64_t temp2;
+        	if(_release == comp_release_f) return;
+        	if(_release < 0.1) return;
+        	if(_release > 2000) return;
+        	
+        	comp_release_f = _release;
+        	
+        	alpha = exp(-1/(comp_release_f*44.1));        	
+        	temp = (alpha * 2147483648.0f);
+       		temp += temp > 0.0f ? 0.5f : -0.5f;
+       		temp2 = (int64_t)temp;
+       		comp_alphaRelease = ((int32_t) (temp2 >> 32) != ((int32_t) temp2 >> 31)) ? ((0x7FFFFFFF ^ ((int32_t) (temp2 >> 63)))) : (int32_t) temp2;
+       		alpha = 1 - exp(-1/(comp_release_f*44.1));        	
+        	temp = (alpha * 2147483648.0f);
+       		temp += temp > 0.0f ? 0.5f : -0.5f;
+       		temp2 = (int64_t)temp;
+       		comp_alphaReleaseComp = ((int32_t) (temp2 >> 32) != ((int32_t) temp2 >> 31)) ? ((0x7FFFFFFF ^ ((int32_t) (temp2 >> 63)))) : (int32_t) temp2;
+}
+      
+void Dexed::comp_setRatio(float _ratio) {
+        	if(_ratio == comp_ratio) return;
+		if(_ratio < 1) return;
+		if(_ratio > 32767) return;
+		comp_ratio = _ratio;
+		
+		comp_ratio_resip = (1 / comp_ratio) - 1;
+}
+        
+void Dexed::comp_setKnee(float _knee) {
+        	if(_knee == comp_knee) return;
+        	if(_knee < 0) return;
+        	if(_knee >= 40) return;
+		comp_knee = _knee;
+		
+		comp_knee_div_2 = comp_knee / 2;
+		comp_knee_x_2 = comp_knee * 2;
+}
+	
+void Dexed::comp_setThreshold(float _thresh) {
+		if(_thresh == comp_thresh) return;
+		if(_thresh <= -40) return;
+		if(_thresh > 0) return;
+		comp_thresh = _thresh;
+}
+	
+void Dexed::comp_setMakeupGain(float _makeupGain) {
+		float voltGain;
+		
+		if(_makeupGain == comp_makeupGain_f) return;
+		if(_makeupGain < 0) return;
+		if(_makeupGain >= 40) return;
+		comp_makeupGain_f = _makeupGain;
+		
+		voltGain = powf(10,comp_makeupGain_f/20);
+		comp_makeupGain = voltGain * 65536;	
+}
+	
+void Dexed::comp_enable() { if(!comp_enabled) comp_enabled = true;}
+	
+void Dexed::comp_disable() { if(comp_enabled) comp_enabled = false;}
+          
+void Dexed::comp_sideChain(const int16_t *in, int16_t *out) { 
+	// The compressor is implemented as feedforward type with Level detection in the linear domain followed by gain computation in the logdomain "Digital Dynamic Range Compressor Design Fig.7 (a)"
+	// Note however that the application of makeup gain is applied within the linear domain using fixed point, instead of within the logdomain as per Fig.7(a).
+	// This avoids the need to have a log_to_lin LUT from log to lenear conversion that extends positvely above 0dB.
+	// Make-up gain is a user user defined variable and the conversion from its log to linear value can be done in none real-time.
+	const int16_t *end = in + AUDIO_BLOCK_SAMPLES;
+	int32_t input, peakDetOutput, peakDetFeedback, release_cur, release_to_input, intermediate;
+    	
+    	uint32_t blockCnt = 1;
+	
+	
+	do {	
+		// In the linear domain we do smoothed decoupled peak detection.
+		// This is running at Fs (44.1K) and is fixed point hence quite efficient.
+		// y1 [n] = max(xL[n], αR*y1[n − 1] + (1 − αR )*L[n])
+		input = (*in) << 16;
+		input = (input > 0) ? input : signed_subtract_16_and_16(0, input); 		// Full wave rectify input signal
+		if(input > comp_release_prev) release_cur = input;					// Maximally fast peak detect
+		else {										// 1st order release
+			release_cur = multiply_32x32_rshift32_rounded(comp_alphaRelease, comp_release_prev);
+			release_cur = signed_saturate_rshift(release_cur, 31,0);
+			release_cur <<= 1;
+			
+			release_to_input = multiply_32x32_rshift32_rounded(comp_alphaReleaseComp, input);
+			release_to_input = signed_saturate_rshift(release_to_input, 31,0);
+			release_to_input <<= 1;
+			release_cur = signed_add_16_and_16(release_cur, release_to_input);
+		}
+		comp_release_prev = release_cur;
+		
+		// yL[n] = αA*yL[n − 1] + (1 − αA )*y1[n]
+		peakDetOutput = multiply_32x32_rshift32_rounded(release_cur, comp_alphaAttackComp);	// 1st order attack
+		peakDetOutput = signed_saturate_rshift(peakDetOutput, 31,0);
+		peakDetOutput <<= 1;
+		peakDetFeedback = multiply_32x32_rshift32_rounded(comp_peakDet_prev, comp_alphaAttack);
+		peakDetFeedback = signed_saturate_rshift(peakDetFeedback, 31,0);
+		peakDetFeedback <<= 1;
+		peakDetOutput = signed_add_16_and_16(peakDetOutput, peakDetFeedback);
+		comp_peakDet_prev = peakDetOutput;
+		
+			
+		
+		
+
+		// We can downsample the logDomain as it is computed using floats and can be quite a hog on fixed point only MCUs.
+		// This determines the rate at which compressor gain adjustments are calculated and applied. 
+		// The stream rate and level detect remain at Fs, but 'comp_downSample' sized blocks all have the same compression gain applied.
+		// Under typical use cases the change between compression gain steps are quite small, therefore even if the
+		// compute runs at at 0.25Fs (comp_downSample = 4) or even 0.125Fs (comp_downSample = 8), it still results in subjectivly acceptable quality audio.
+		// Although perhaps not ideal, it is possible to choose a downsample rate which is not 2^n divisor of Fs.
+		// The result is simply a final comp_atten block with more or less total samples than others within the same AUDIO_BLOCK_SAMPLES. 
+		if((blockCnt == comp_downSample) | (comp_downSample == 1)) {
+			float gain_dB = 0;
+			float IN_dB;
+			float int_part;
+		    	float fract_part;
+		    	float fract_part_scaled;
+		    	uint32_t GAIN_5q11;
+		    	uint32_t GAIN_3q13;
+			
+			
+			// Compute compression:
+			// Where yG = desired output level & xG is input level at the compressor
+			// To calculate gain comp_attenuation (comp_gain_dB)  = xG - yG
+			//     
+			//                      T + (xG − T )/R                         2(xG − T ) > W          (Above Knee)
+			// yG =      xG + (1/R − 1)(xG − T + W/2)^2/(2W)                2/|(xG − T )|/ ≤ W      (In the Knee)
+			//                          xG                                  2(xG − T ) < −W         (Below Knee)
+			
+			
+			IN_dB = LUT_q15_to_dB[signed_saturate_rshift(peakDetOutput, 16, 20)];  // The signed_saturate_rshift using 20 bits takes care of the required >> 4 of a q1.15 into the LUT 
+				
+			
+			if((2*(IN_dB - comp_thresh)) > comp_knee) {
+				gain_dB = -(IN_dB - (comp_thresh + ((IN_dB - comp_thresh) / comp_ratio)));
+			} else if ((2*abs(IN_dB - comp_thresh)) <= comp_knee)  {
+				gain_dB = -(IN_dB - (IN_dB + comp_ratio_resip * ((IN_dB - comp_thresh + comp_knee_div_2) * (IN_dB - comp_thresh + comp_knee_div_2)) / comp_knee_x_2));
+			} else {
+				gain_dB = 0;
+			}
+				
+
+			// Convert from Log domain to Linear domain.
+			// This uses 2 distinct LUTs. 
+			// The first covers the input range from 0 through -8dB and has a higher resolution and uses a q3.13 format.
+			// The second range from -8 through -40 has less resolution and uses a q5.11 format.
+			// The aim here is to reduce overall storage space required to achieve highspeed log2lin conversion.
+			
+			if(gain_dB <= -40) gain_dB = -39.99999;                                 // Restrict range to within LUTs range
+		
+			if(gain_dB == 0) comp_atten = 0x7FFF;
+			else {
+			    fract_part = modff(-gain_dB, &int_part);
+			    if(gain_dB > -8) {
+				fract_part_scaled = 0x1FFF*fract_part;
+				GAIN_3q13 = 0x0 | (uint32_t)fract_part_scaled | ((uint32_t)int_part) << 13;
+				comp_atten = LUT_dB_to_3q13[GAIN_3q13 >> 4];       // Convert the dB gain into the correct q format, then shift right to scale the result into the size (of the LUT array) of the LUT
+			    } else {
+				fract_part_scaled = 0x7FF*fract_part;
+				GAIN_5q11 = 0x0 | (uint32_t)fract_part_scaled | ((uint32_t)(int_part - 8)) << 11;
+				comp_atten = LUT_dB_to_5q11[GAIN_5q11 >> 5];       // Convert the dB gain into the correct q format, then shift right to scale the result into the size (of the LUT array) of the LUT
+			    }
+			}			
+			blockCnt = 1;
+		}
+ 	
+		intermediate = multiply_32x32_rshift32_rounded(comp_makeupGain, (*in) << 16);	// Apply makeup gain to input and generate 32bit intermediate
+		intermediate = multiply_32x32_rshift32_rounded(intermediate, comp_atten << 16);	// Apply compression q1.15 comp_attenuation and generate 32bit intermediate
+		intermediate <<= 1; 
+		*out++ = saturate16(intermediate);
+		in++;
+		++blockCnt;	
+	}  while (in < end);
+}
+/*
+ *
+ */
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
@@ -130,7 +300,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   loadInitVoice();
 
   gain=0;
-  limiter_init(0.2,0.5,0.9,100,11);
 
   xrun = 0;
   render_time_max = 0;
@@ -142,6 +311,17 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   engineMkI = new EngineMkI;
   engineOpl = new EngineOpl;
   setEngineType(MKI);
+
+  //comp_disable();
+  comp_enable();
+  comp_setDownSample(1);
+  comp_setAttack(2);
+  comp_setRelease(600);
+  comp_setRatio(4);
+  comp_setThreshold(-9);
+  comp_setKnee(3);
+  comp_setMakeupGain(0);
+  comp_peakDet_prev = comp_release_prev = 0;
 }
 
 Dexed::~Dexed()
@@ -257,14 +437,15 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
           //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
 	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain,15);
           //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain,15);
-          buffer[i + j] += audiobuf.get()[j]>>18;
+          buffer[i + j] += audiobuf.get()[j]>>9;
           audiobuf.get()[j] = 0;
         }
       }
     }
-    buffer[i]=q_mul(buffer[i],gain,15);
+    //buffer[i]=q_mul(buffer[i],gain,15);
   }
-  limiter_apply(buffer, n_samples);
+  // limit here
+  comp_sideChain(buffer,buffer);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
