@@ -38,8 +38,6 @@ inline static T max(const T& a, const T& b) {
   return a > b ? a : b;
 }*/
 
-#define QER(n,b) ( ((float)n)/(1<<b) )
-
 #define FRAC_NUM float
 #define SIN_FUNC sinf
 // #define SIN_FUNC arm_sin_f32  // very fast but not as accurate

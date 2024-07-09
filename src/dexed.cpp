@@ -716,10 +716,15 @@ uint8_t Dexed::getNumNotesPlaying(void)
         {
           // this voice is a carrier!
           op_carrier_num++;
-          if (voiceStatus.amp[op] <= VOICE_SILENCE_LEVEL && voiceStatus.ampStep[op] == 4)
-          {
-            // this voice produces no audio output
-            op_amp++;
+          //if (voiceStatus.amp[op] <= VOICE_SILENCE_LEVEL && voiceStatus.ampStep[op] == 4)
+          if (voiceStatus.ampStep[op] == 4)
+	  {
+            //if (voiceStatus.amp[op] <= VOICE_SILENCE_LEVEL)
+            if (!(voiceStatus.amp[op]>>11))
+            {
+              // this voice produces no audio output
+              op_amp++;
+	    }
           }
         }
       }

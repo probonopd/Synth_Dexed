@@ -1,10 +1,13 @@
 #include <stdint.h>
 
+#define QER(n,b) ( ((float)n)/(1<<b) )
+
 //
 // Integer math helpers (from https://en.wikipedia.org/wiki/Q_(number_format)) ***
 //
 // See also:
 // https://chummersone.github.io/qformat.html
+
 
 int16_t f_to_q(float f, const int8_t q)
 {
