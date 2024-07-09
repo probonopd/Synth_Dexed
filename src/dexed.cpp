@@ -37,7 +37,7 @@
 #include "int_math.h"
 
 /*
- *
+ * Compressor code from https://forum.pjrc.com/index.php?threads/dynamic-range-compressor-new-class-library-i-wish-to-share.73281/
  */
 void Dexed::comp_setDownSample(uint8_t _downSample) {
         	if(_downSample == comp_downSample) return;
@@ -170,10 +170,6 @@ void Dexed::comp_sideChain(const int16_t *in, int16_t *out) {
 		peakDetFeedback <<= 1;
 		peakDetOutput = signed_add_16_and_16(peakDetOutput, peakDetFeedback);
 		comp_peakDet_prev = peakDetOutput;
-		
-			
-		
-		
 
 		// We can downsample the logDomain as it is computed using floats and can be quite a hog on fixed point only MCUs.
 		// This determines the rate at which compressor gain adjustments are calculated and applied. 
@@ -190,7 +186,6 @@ void Dexed::comp_sideChain(const int16_t *in, int16_t *out) {
 		    	float fract_part_scaled;
 		    	uint32_t GAIN_5q11;
 		    	uint32_t GAIN_3q13;
-			
 			
 			// Compute compression:
 			// Where yG = desired output level & xG is input level at the compressor
@@ -306,14 +301,13 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   engineOpl = new EngineOpl;
   setEngineType(MKI);
 
-  //comp_disable();
   comp_enable();
   comp_setDownSample(2);
-  comp_setAttack(2);
-  comp_setRelease(200);
-  comp_setRatio(6);
-  comp_setThreshold(-25);
-  comp_setKnee(3);
+  comp_setAttack(2.0);
+  comp_setRelease(200.0);
+  comp_setRatio(6.0);
+  comp_setThreshold(-25.0);
+  comp_setKnee(3.0);
   comp_setMakeupGain(6.0);
   comp_peakDet_prev = comp_release_prev = 0;
 }
@@ -440,9 +434,9 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     //buffer[i]=q_mul(buffer[i],gain,15);
   }
   // limit here
-  int16_t tmp_buf[AUDIO_BLOCK_SAMPLES];
-  comp_sideChain(buffer,tmp_buf);
-  memcpy(tmp_buf,buffer,AUDIO_BLOCK_SAMPLES);
+  //int16_t tmp_buf[n_samples];
+  //memcpy(buffer,tmp_buf,n_samples);
+  comp_sideChain(buffer,buffer);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
