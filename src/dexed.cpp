@@ -305,10 +305,10 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   comp_setDownSample(2);
   comp_setAttack(2.0);
   comp_setRelease(200.0);
-  comp_setRatio(6.0);
-  comp_setThreshold(-25.0);
-  comp_setKnee(3.0);
-  comp_setMakeupGain(6.0);
+  comp_setRatio(3.0);
+  comp_setThreshold(-20.0);
+  comp_setKnee(2.0);
+  comp_setMakeupGain(16.0);
   comp_peakDet_prev = comp_release_prev = 0;
 }
 
