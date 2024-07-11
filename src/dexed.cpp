@@ -36,6 +36,23 @@
 #include "porta.h"
 #include "int_math.h"
 
+static inline int32_t Dexed::signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift)
+{
+  int32_t out, max;
+
+  out = val >> rshift;
+  max = 1 << (bits - 1);
+  if (out >= 0)
+  {
+    if (out > max - 1) out = max - 1;
+  }
+  else
+  {
+    if (out < -max) out = -max;
+  }
+  return out;
+}
+
 /*
  * Compressor code from https://forum.pjrc.com/index.php?threads/dynamic-range-compressor-new-class-library-i-wish-to-share.73281/
  */
@@ -159,12 +176,12 @@ void Dexed::setCompEnable(bool _enable) {
 	comp_enabled = _enable;
 }
           
-void Dexed::comp_sideChain(const int16_t *in, int16_t *out) { 
+void Dexed::CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples) { 
 	// The compressor is implemented as feedforward type with Level detection in the linear domain followed by gain computation in the logdomain "Digital Dynamic Range Compressor Design Fig.7 (a)"
 	// Note however that the application of makeup gain is applied within the linear domain using fixed point, instead of within the logdomain as per Fig.7(a).
 	// This avoids the need to have a log_to_lin LUT from log to lenear conversion that extends positvely above 0dB.
 	// Make-up gain is a user user defined variable and the conversion from its log to linear value can be done in none real-time.
-	const int16_t *end = in + AUDIO_BLOCK_SAMPLES;
+	const int16_t *end = in + numSamples;
 	int32_t input, peakDetOutput, peakDetFeedback, release_cur, release_to_input, intermediate;
     	
     	uint32_t blockCnt = 1;
@@ -275,22 +292,28 @@ void Dexed::comp_sideChain(const int16_t *in, int16_t *out) {
  */
 
 /*
- * Filter code from:
+ * Filter code from: https://www.musicdsp.org/en/latest/Filters/240-karlsen-fast-ladder.html
  */
+
+void Dexed::initFilter(void) {
+	for(uint8_t n=0;n<6;n++)
+		filter_buf[n]=0;
+}
+
 void Dexed::setFilterCutoff(float cutoff) {
-	filter_cutoff=cutoff;
+	filter_cutoff=f_to_q(2*M_PI*cutoff/samplerate,14);
 }
 
 float Dexed::getFilterCutoff(void) {
-	return(filter_cutoff);
+	return(q_to_f(filter_cutoff*samplerate/(2*M_PI),14));
 }
 
 void Dexed::setFilterResonance(float resonance) {
-	filter_resonance=resonance;
+	filter_resonance=f_to_q(resonance,14);
 }
 
 float Dexed::getFilterResonance(void) {
-	return(filter_resonance);
+	return(q_to_f(filter_resonance,14));
 }
 
 void Dexed::setFilterEnable(bool enable) {
@@ -299,6 +322,38 @@ void Dexed::setFilterEnable(bool enable) {
 
 bool Dexed::getFilterEnable(void) {
 	return(filter_enabled);
+}
+
+void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
+// From: https://www.musicdsp.org/en/latest/Filters/240-karlsen-fast-ladder.html
+//
+// The parameters are:
+// cut - cutoff freq
+// res - resonance
+// in - input
+// 
+// Cutoff is normalized frequency in rads (2*pi*cutoff/samplerate). Stability limit for cut is around 0.7-0.8.
+// 
+// resoclip = buf4; if (resoclip > 1) resoclip = 1;
+// in = in - (resoclip * res);
+// buf1 = ((in - buf1) * cut) + buf1;
+// buf2 = ((buf1 - buf2) * cut) + buf2;
+// buf3 = ((buf2 - buf3) * cut) + buf3;
+// buf4 = ((buf3 - buf4) * cut) + buf4;
+// lpout = buf4;
+
+	if(filter_enabled==false)
+		return;
+
+	for(uint16_t i=0;i<numSamples;i++) {
+		filter_buf[5]=sat16(filter_buf[4],14);
+		if(filter_buf[5] > ((1<<14)-1))
+			filter_buf[5]=((1<<14)-1);
+		filter_buf[0]=q_sub(filter_buf[0],(filter_buf[5]*filter_resonance),14);
+		for(uint8_t n=1;n<5;n++)
+			filter_buf[n]=q_add((q_mul(q_sub(filter_buf[n-1],filter_buf[n],14),filter_cutoff,14)),filter_buf[n],14);
+		buffer[i]=filter_buf[4];
+	}
 }
 
 /*
@@ -324,7 +379,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   controllers.masterTune = 0;
   controllers.opSwitch = 0x3f; // enable all operators
   lastKeyDown = -1;
-  vuSignal = 0.0;
   lfo.reset(data + 137);
   sustain = false;
   voices = NULL;
@@ -371,6 +425,8 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setCompKnee(2.0);
   setCompMakeupGain(MAX_MAKEUP_GAIN);
   comp_peakDet_prev = comp_release_prev = 0;
+
+  initFilter();
 }
 
 Dexed::~Dexed()
@@ -497,7 +553,8 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
   // limit here
   //int16_t tmp_buf[n_samples];
   //memcpy(buffer,tmp_buf,n_samples);
-  comp_sideChain(buffer,buffer);
+  CompSideChain(buffer,buffer,n_samples);
+  Filter(buffer,n_samples);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {

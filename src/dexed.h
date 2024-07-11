@@ -369,7 +369,6 @@ class Dexed
     uint16_t render_time_max;
     int16_t currentNote;
     bool sustain;
-    float vuSignal;
     bool monoMode;
     bool noteRefreshMode;
     bool refreshVoice;
@@ -384,7 +383,7 @@ class Dexed
     uint8_t velocity_max;
     float velocity_diff;
     int16_t gain;
-    void comp_sideChain(const int16_t *in, int16_t *out);
+    void CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples);
     uint8_t comp_sideChainSel, comp_downSample;
     uint8_t comp_gainMakeup_exp;
     int32_t comp_release_prev, comp_peakDet_prev;
@@ -400,9 +399,13 @@ class Dexed
     float comp_attack_f;
     float comp_makeupGain_f;
     bool comp_enabled = true;
-    float filter_cutoff;
-    float filter_resonance;
+    void initFilter(void);
+    void Filter(int16_t *buffer, uint16_t numSamples);
+    int16_t filter_buf[6];
+    int16_t filter_cutoff;
+    int16_t filter_resonance;
     bool filter_enabled;
+    static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift);
 };
 
 static PROGMEM constexpr float LUT_q15_to_dB[2048] = {
