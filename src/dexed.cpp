@@ -169,7 +169,9 @@ void Dexed::comp_sideChain(const int16_t *in, int16_t *out) {
     	
     	uint32_t blockCnt = 1;
 	
-	
+	if(comp_enabled==false)
+		return;
+
 	do {	
 		// In the linear domain we do smoothed decoupled peak detection.
 		// This is running at Fs (44.1K) and is fixed point hence quite efficient.
@@ -269,7 +271,38 @@ void Dexed::comp_sideChain(const int16_t *in, int16_t *out) {
 	}  while (in < end);
 }
 /*
- *
+ * End Compressor code
+ */
+
+/*
+ * Filter code from:
+ */
+void Dexed::setFilterCutoff(float cutoff) {
+	filter_cutoff=cutoff;
+}
+
+float Dexed::getFilterCutoff(void) {
+	return(filter_cutoff);
+}
+
+void Dexed::setFilterResonance(float resonance) {
+	filter_resonance=resonance;
+}
+
+float Dexed::getFilterResonance(void) {
+	return(filter_resonance);
+}
+
+void Dexed::setFilterEnable(bool enable) {
+	filter_enabled=enable;
+}
+
+bool Dexed::getFilterEnable(void) {
+	return(filter_enabled);
+}
+
+/*
+ * End Filter code
  */
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)

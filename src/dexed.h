@@ -249,6 +249,7 @@ class Dexed
     uint8_t getAftertouchRange(void);
     void setAftertouchTarget(uint8_t target);
     uint8_t getAftertouchTarget(void);
+
     void setGain(float gain);
     float getGain(void);
 
@@ -268,6 +269,13 @@ class Dexed
     float getCompMakeupGain(void);
     void setCompEnable(bool _enable);
     bool getCompEnable(void);
+
+    void setFilterCutoff(float cutoff);
+    float getFilterCutoff(void);
+    void setFilterResonance(float resonance);
+    float getFilterResonance(void);
+    void setFilterEnable(bool enable);
+    bool getFilterEnable(void);
 
     // Voice configuration methods
     void setOPRateAll(uint8_t rate);
@@ -392,7 +400,9 @@ class Dexed
     float comp_attack_f;
     float comp_makeupGain_f;
     bool comp_enabled = true;
-
+    float filter_cutoff;
+    float filter_resonance;
+    bool filter_enabled;
 };
 
 static PROGMEM constexpr float LUT_q15_to_dB[2048] = {
