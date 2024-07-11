@@ -23,7 +23,8 @@
 
 #define MIDI_CONTROLLER_MODE_MAX 2
 #define TRANSPOSE_FIX 24
-#define VOICE_SILENCE_LEVEL 1100
+//#define VOICE_SILENCE_LEVEL 1100
+#define MAX_MAKEUP_GAIN 16.0
 
 #define LG_N 6
 #define _N_ (1 << LG_N)
@@ -47,6 +48,13 @@ inline static T max(const T& a, const T& b) {
 #define EXP_FUNC expf
 #define SQRT_FUNC sqrtf
 // #define ARM_SQRT_FUNC arm_sqrt_f32 // fast but not as accurate
+
+#ifndef _MAPFLOAT
+#define _MAPFLOAT
+inline float mapfloat(float val, float in_min, float in_max, float out_min, float out_max) {
+  return (val - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+#endif
 
 #if defined(__circle__)
 

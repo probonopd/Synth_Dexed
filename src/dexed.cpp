@@ -336,7 +336,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setCompRatio(3.0);
   setCompThreshold(-20.0);
   setCompKnee(2.0);
-  setCompMakeupGain(16.0);
+  setCompMakeupGain(MAX_MAKEUP_GAIN);
   comp_peakDet_prev = comp_release_prev = 0;
 }
 
@@ -1401,12 +1401,14 @@ uint8_t Dexed::getAftertouchTarget(void)
 
 void Dexed::setGain(float fgain)
 {
-  gain=fgain*0x7fff;
+  //gain=fgain*0x7fff;
+  mapfloat(fgain, 0.0, 1.0, 0.0, MAX_MAKEUP_GAIN);
 }
 
 float Dexed::getGain(void)
 {
-  return (gain/0x7fff);
+  //return (gain/0x7fff);
+  return(mapfloat(getCompMakeupGain(), 0.0, MAX_MAKEUP_GAIN, 0.0, 1.0));
 }
 
 void Dexed::setOPRateAll(uint8_t rate)
