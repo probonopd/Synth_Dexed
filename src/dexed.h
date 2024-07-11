@@ -252,16 +252,22 @@ class Dexed
     void setGain(float gain);
     float getGain(void);
 
-    void comp_setSideChain(uint8_t _sideChain);
-    void comp_setDownSample(uint8_t _downSample);
-    void comp_setAttack(float _attack);
-    void comp_setRelease(float _release);
-    void comp_setRatio(float _ratio);
-    void comp_setKnee(float _knee);
-    void comp_setThreshold(float _thresh);
-    void comp_setMakeupGain(float _makeupGain);
-    void comp_enable();
-    void comp_disable();
+    void setCompDownsample(uint8_t _downSample);
+    uint8_t getCompDownsample(void);
+    void setCompAttack(float _attack);
+    float getCompAttack(void);
+    void setCompRelease(float _release);
+    float getCompRelease(void);
+    void setCompRatio(float _ratio);
+    float getCompRatio(void);
+    void setCompKnee(float _knee);
+    float getCompKnee(void);
+    void setCompThreshold(float _thresh);
+    float getCompThreshold(void);
+    void setCompMakeupGain(float _makeupGain);
+    float getCompMakeupGain(void);
+    void setCompEnable(bool _enable);
+    bool getCompEnable(void);
 
     // Voice configuration methods
     void setOPRateAll(uint8_t rate);

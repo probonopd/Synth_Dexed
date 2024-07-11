@@ -29,13 +29,12 @@ See example sketch.
     // Global methods
     void activate(void);
     void deactivate(void);
-    void setMonoMode(bool mode);
     bool getMonoMode(void);
-    void setRefreshMode(bool mode);
-    bool getRefreshMode(void);
-    void setMaxNotes(uint8_t n);
+    void setMonoMode(bool mode);
+    void setNoteRefreshMode(bool mode);
     uint8_t getMaxNotes(void);
     void doRefreshVoice(void);
+    void setOPAll(uint8_t ops);
     bool decodeVoice(uint8_t* data, uint8_t* encoded_data);
     bool encodeVoice(uint8_t* encoded_data);
     bool getVoiceData(uint8_t* data_copy);
@@ -48,10 +47,18 @@ See example sketch.
     uint16_t getRenderTimeMax(void);
     void resetRenderTimeMax(void);
     void ControllersRefresh(void);
+    void setVelocityScale(uint8_t offset, uint8_t max);
+    void getVelocityScale(uint8_t* offset, uint8_t* max);
+    void setVelocityScale(uint8_t setup);
+    void setMaxNotes(uint8_t n);
+    void setEngineType(uint8_t engine);
+    uint8_t getEngineType(void);
+    FmCore* getEngineAddress(void);
+    int16_t checkSystemExclusive(const uint8_t* sysex, const uint16_t len);
 
     // Sound methods
-    void keyup(int16_t pitch);
-    void keydown(int16_t pitch, uint8_t velo);
+    void keyup(uint8_t pitch);
+    void keydown(uint8_t pitch, uint8_t velo);
     void setSustain(bool sustain);
     bool getSustain(void);
     void panic(void);
@@ -59,7 +66,13 @@ See example sketch.
     void resetControllers(void);
     void setMasterTune(int8_t mastertune);
     int8_t getMasterTune(void);
-    void setPortamentoMode(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
+    void setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);
+    void setPortamentoMode(uint8_t portamento_mode);
+    uint8_t getPortamentoMode(void);
+    void setPortamentoGlissando(uint8_t portamento_glissando);
+    uint8_t getPortamentoGlissando(void);
+    void setPortamentoTime(uint8_t portamento_time);
+    uint8_t getPortamentoTime(void);
     void setPBController(uint8_t pb_range, uint8_t pb_step);
     void setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode);
     void setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode);
@@ -73,7 +86,9 @@ See example sketch.
     uint8_t getFootController(void);
     void setAftertouch(uint8_t value);
     uint8_t getAftertouch(void);
+    void setPitchbend(uint8_t value1, uint8_t value2);
     void setPitchbend(int16_t value);
+    void setPitchbend(uint16_t value);
     int16_t getPitchbend(void);
     void setPitchbendRange(uint8_t range);
     uint8_t getPitchbendRange(void);
@@ -95,14 +110,28 @@ See example sketch.
     uint8_t getAftertouchRange(void);
     void setAftertouchTarget(uint8_t target);
     uint8_t getAftertouchTarget(void);
-    float getFilterResonance(void);
     void setGain(float gain);
     float getGain(void);
 
+    void setCompDownsample(uint8_t _downSample);
+    uint8_t getCompDownsample(void);
+    float getCompAttack(void);
+    void setCompAttack(float _attack);
+    float getCompAttack(void);
+    void setCompRelease(float _release);
+    float getCompRelease(void);
+    void setCompRatio(float _ratio);
+    float getCompRatio(void);
+    void setCompKnee(float _knee);
+    float getCompKnee(void);
+    void setCompThreshold(float _thresh);
+    float getCompThreshold(void);
+    void setCompMakeupGain(float _makeupGain);
+    float getCompMakeupGain(void);
+    void setCompEnable(bool _enable);
+    bool getCompEnable(void);
+
     // Voice configuration methods
-    void setOPAll(uint8_t ops);
-    void setOP(uint8_t op, bool state);
-    bool getOP(uint8_t op);
     void setOPRateAll(uint8_t rate);
     void setOPLevelAll(uint8_t level);
     void setOPRateAllCarrier(uint8_t step, uint8_t rate);
@@ -155,8 +184,6 @@ See example sketch.
     uint8_t getLFODelay(void);
     void setLFOPitchModulationDepth(uint8_t depth);
     uint8_t getLFOPitchModulationDepth(void);
-    void setLFOAmpModulationDepth(uint8_t delay);
-    uint8_t getLFOAmpModulationDepth(void);
     void setLFOSync(bool sync);
     bool getLFOSync(void);
     void setLFOWaveform(uint8_t waveform);

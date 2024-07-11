@@ -39,13 +39,17 @@
 /*
  * Compressor code from https://forum.pjrc.com/index.php?threads/dynamic-range-compressor-new-class-library-i-wish-to-share.73281/
  */
-void Dexed::comp_setDownSample(uint8_t _downSample) {
+void Dexed::setCompDownsample(uint8_t _downSample) {
         	if(_downSample == comp_downSample) return;
         	if(_downSample > 8) comp_downSample = 8;
         	else comp_downSample = _downSample;
 }
         
-void Dexed::comp_setAttack(float _attack) {
+uint8_t Dexed::getCompDownsample(void) {
+	return(comp_downSample);
+}
+
+void Dexed::setCompAttack(float _attack) {
         	// convert attack in mSec into q31 LPF coefficients
         	float alpha, temp;
         	int64_t temp2;
@@ -67,7 +71,11 @@ void Dexed::comp_setAttack(float _attack) {
        		comp_alphaAttackComp = ((int32_t) (temp2 >> 32) != ((int32_t) temp2 >> 31)) ? ((0x7FFFFFFF ^ ((int32_t) (temp2 >> 63)))) : (int32_t) temp2;
 }
   
-void Dexed::comp_setRelease(float _release) {
+float Dexed::getCompAttack(void) {
+	return(comp_attack_f);
+}
+
+void Dexed::setCompRelease(float _release) {
         	// convert release in mSec into q31 LPF coefficients
         	float alpha, temp;
         	int64_t temp2;
@@ -89,7 +97,11 @@ void Dexed::comp_setRelease(float _release) {
        		comp_alphaReleaseComp = ((int32_t) (temp2 >> 32) != ((int32_t) temp2 >> 31)) ? ((0x7FFFFFFF ^ ((int32_t) (temp2 >> 63)))) : (int32_t) temp2;
 }
       
-void Dexed::comp_setRatio(float _ratio) {
+float Dexed::getCompRelease(void) {
+	return(comp_release_f);
+}
+
+void Dexed::setCompRatio(float _ratio) {
         	if(_ratio == comp_ratio) return;
 		if(_ratio < 1) return;
 		if(_ratio > 32767) return;
@@ -97,8 +109,12 @@ void Dexed::comp_setRatio(float _ratio) {
 		
 		comp_ratio_resip = (1 / comp_ratio) - 1;
 }
-        
-void Dexed::comp_setKnee(float _knee) {
+
+float Dexed::getCompRatio(void) {
+	return(comp_ratio);
+}
+
+void Dexed::setCompKnee(float _knee) {
         	if(_knee == comp_knee) return;
         	if(_knee < 0) return;
         	if(_knee >= 40) return;
@@ -108,14 +124,22 @@ void Dexed::comp_setKnee(float _knee) {
 		comp_knee_x_2 = comp_knee * 2;
 }
 	
-void Dexed::comp_setThreshold(float _thresh) {
+float Dexed::getCompKnee(void) {
+	return(comp_knee);
+}
+
+void Dexed::setCompThreshold(float _thresh) {
 		if(_thresh == comp_thresh) return;
 		if(_thresh <= -40) return;
 		if(_thresh > 0) return;
 		comp_thresh = _thresh;
 }
 	
-void Dexed::comp_setMakeupGain(float _makeupGain) {
+float Dexed::getCompThreshold(void) {
+	return(comp_thresh);
+}
+
+void Dexed::setCompMakeupGain(float _makeupGain) {
 		float voltGain;
 		
 		if(_makeupGain == comp_makeupGain_f) return;
@@ -126,10 +150,14 @@ void Dexed::comp_setMakeupGain(float _makeupGain) {
 		voltGain = powf(10,comp_makeupGain_f/20);
 		comp_makeupGain = voltGain * 65536;	
 }
-	
-void Dexed::comp_enable() { if(!comp_enabled) comp_enabled = true;}
-	
-void Dexed::comp_disable() { if(comp_enabled) comp_enabled = false;}
+
+float Dexed::getCompMakeupGain(void) {
+	return(comp_makeupGain_f);
+}
+
+void Dexed::setCompEnable(bool _enable) {
+	comp_enabled = _enable;
+}
           
 void Dexed::comp_sideChain(const int16_t *in, int16_t *out) { 
 	// The compressor is implemented as feedforward type with Level detection in the linear domain followed by gain computation in the logdomain "Digital Dynamic Range Compressor Design Fig.7 (a)"
@@ -301,14 +329,14 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   engineOpl = new EngineOpl;
   setEngineType(MKI);
 
-  comp_enable();
-  comp_setDownSample(2);
-  comp_setAttack(2.0);
-  comp_setRelease(200.0);
-  comp_setRatio(3.0);
-  comp_setThreshold(-20.0);
-  comp_setKnee(2.0);
-  comp_setMakeupGain(16.0);
+  setCompEnable(true);
+  setCompDownsample(2);
+  setCompAttack(2.0);
+  setCompRelease(200.0);
+  setCompRatio(3.0);
+  setCompThreshold(-20.0);
+  setCompKnee(2.0);
+  setCompMakeupGain(16.0);
   comp_peakDet_prev = comp_release_prev = 0;
 }
 
