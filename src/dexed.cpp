@@ -298,15 +298,17 @@ void Dexed::CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples) {
 void Dexed::initFilter(void) {
 	for(uint8_t n=0;n<6;n++)
 		filter_buf[n]=0;
-	filter_enabled=true;
+	setFilterEnable(true);
+	setFilterCutoff(0.1);
+	setFilterResonance(0.4);
 }
 
 void Dexed::setFilterCutoff(float cutoff) {
-	filter_cutoff=f_to_q(2*M_PI*cutoff/samplerate,14);
+	filter_cutoff=f_to_q(M_PI*cutoff*40000.0/float(samplerate),14);
 }
 
 float Dexed::getFilterCutoff(void) {
-	return(q_to_f(filter_cutoff*samplerate/(2*M_PI),14));
+	return(q_to_f(filter_cutoff*samplerate/(40000.0*M_PI),14));
 }
 
 void Dexed::setFilterResonance(float resonance) {
@@ -348,9 +350,7 @@ void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
 
 	for(uint16_t i=0;i<numSamples;i++) {
 		filter_buf[5]=sat16(filter_buf[4],14);
-		if(filter_buf[5] > ((1<<14)-1))
-			filter_buf[5]=((1<<14)-1);
-		filter_buf[0]=q_add(q_mul(q_sub(buffer[i],filter_buf[0],14),filter_resonance,14),filter_buf[0],14);
+		filter_buf[0]=q_sub(buffer[i],q_mul(filter_buf[5],filter_resonance,14),14);
 		for(uint8_t n=1;n<5;n++)
 			filter_buf[n]=q_add((q_mul(q_sub(filter_buf[n-1],filter_buf[n],14),filter_cutoff,14)),filter_buf[n],14);
 		buffer[i]=filter_buf[4];
