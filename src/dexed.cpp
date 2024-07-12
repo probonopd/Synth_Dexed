@@ -298,6 +298,7 @@ void Dexed::CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples) {
 void Dexed::initFilter(void) {
 	for(uint8_t n=0;n<6;n++)
 		filter_buf[n]=0;
+	filter_enabled=true;
 }
 
 void Dexed::setFilterCutoff(float cutoff) {
@@ -349,7 +350,7 @@ void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
 		filter_buf[5]=sat16(filter_buf[4],14);
 		if(filter_buf[5] > ((1<<14)-1))
 			filter_buf[5]=((1<<14)-1);
-		filter_buf[0]=q_sub(filter_buf[0],(filter_buf[5]*filter_resonance),14);
+		filter_buf[0]=q_add(q_mul(q_sub(buffer[i],filter_buf[0],14),filter_resonance,14),filter_buf[0],14);
 		for(uint8_t n=1;n<5;n++)
 			filter_buf[n]=q_add((q_mul(q_sub(filter_buf[n-1],filter_buf[n],14),filter_cutoff,14)),filter_buf[n],14);
 		buffer[i]=filter_buf[4];
