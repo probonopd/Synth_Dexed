@@ -24,7 +24,7 @@
 #define MIDI_CONTROLLER_MODE_MAX 2
 #define TRANSPOSE_FIX 24
 //#define VOICE_SILENCE_LEVEL 1100
-#define MAX_MAKEUP_GAIN 16.0
+#define MAX_MAKEUP_GAIN 10.0
 
 #define LG_N 6
 #define _N_ (1 << LG_N)

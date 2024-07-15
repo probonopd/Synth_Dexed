@@ -299,7 +299,7 @@ void Dexed::initFilter(void) {
 	for(uint8_t n=0;n<6;n++)
 		filter_buf[n]=0;
 	setFilterEnable(true);
-	setFilterCutoff(0.1);
+	setFilterCutoff(0.15);
 	setFilterResonance(0.4);
 }
 
@@ -312,11 +312,11 @@ float Dexed::getFilterCutoff(void) {
 }
 
 void Dexed::setFilterResonance(float resonance) {
-	filter_resonance=f_to_q(resonance,14);
+	filter_resonance=f_to_q(resonance,12);
 }
 
 float Dexed::getFilterResonance(void) {
-	return(q_to_f(filter_resonance,14));
+	return(q_to_f(filter_resonance,12));
 }
 
 void Dexed::setFilterEnable(bool enable) {
@@ -345,12 +345,20 @@ void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
 // buf4 = ((buf3 - buf4) * cut) + buf4;
 // lpout = buf4;
 
+	int16_t vnc;
+	int16_t sat=f_to_q(0.984,14);
+
 	if(filter_enabled==false)
 		return;
 
 	for(uint16_t i=0;i<numSamples;i++) {
-		filter_buf[5]=sat16(filter_buf[4],14);
+		filter_buf[5]=q_sub(filter_buf[4],buffer[i],14);
 		filter_buf[0]=q_sub(buffer[i],q_mul(filter_buf[5],filter_resonance,14),14);
+
+		vnc=filter_buf[0];
+		filter_buf[0]=sat16(filter_buf[0],14);
+		filter_buf[0]=q_add(vnc,q_mul(q_sub(filter_buf[0],vnc,14),sat,14),14);
+
 		for(uint8_t n=1;n<5;n++)
 			filter_buf[n]=q_add((q_mul(q_sub(filter_buf[n-1],filter_buf[n],14),filter_cutoff,14)),filter_buf[n],14);
 		buffer[i]=filter_buf[4];
@@ -422,7 +430,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setCompAttack(2.0);
   setCompRelease(200.0);
   setCompRatio(3.0);
-  setCompThreshold(-20.0);
+  setCompThreshold(-10.0);
   setCompKnee(2.0);
   setCompMakeupGain(MAX_MAKEUP_GAIN);
   comp_peakDet_prev = comp_release_prev = 0;
