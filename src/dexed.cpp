@@ -412,7 +412,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setMonoMode(false);
   loadInitVoice();
 
-  gain=0;
+  gain=f_to_q(1.0,15);
 
   xrun = 0;
   render_time_max = 0;
@@ -537,31 +537,14 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
-		/*
-		        int32_t val = audiobuf.get()[j];
-                        val = val >> 4;
-                        int clip_val = val < -(1 << 24) ? 0x8000 : val >= (1 << 24) ? 0x7fff : val >> 9;
-                        float f = ((float) clip_val) / (float) 0x8000;
-                        if( f > 1 ) f = 1;
-                        if( f < -1 ) f = -1;
-                        sumbuf[j] += f;
-                        audiobuf.get()[j] = 0;
-		 */
-
           //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
-	  //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9),gain,15);
-          //buffer[i + j] += q_mul(signed_saturate_rshift(audiobuf.get()[j], 24, 9),gain,15);
           buffer[i + j] += audiobuf.get()[j]>>13;
-          //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j], 24, 9);
           audiobuf.get()[j] = 0;
         }
       }
     }
-    //buffer[i]=q_mul(buffer[i],gain,15);
+    buffer[i]=q_mul(buffer[i],gain,15);
   }
-  // limit here
-  //int16_t tmp_buf[n_samples];
-  //memcpy(buffer,tmp_buf,n_samples);
   CompSideChain(buffer,buffer,n_samples);
   Filter(buffer,n_samples);
 }
@@ -1500,14 +1483,12 @@ uint8_t Dexed::getAftertouchTarget(void)
 
 void Dexed::setGain(float fgain)
 {
-  //gain=fgain*0x7fff;
-  mapfloat(fgain, 0.0, 1.0, 0.0, MAX_MAKEUP_GAIN);
+  gain=f_to_q(fgain,15);
 }
 
 float Dexed::getGain(void)
 {
-  //return (gain/0x7fff);
-  return(mapfloat(getCompMakeupGain(), 0.0, MAX_MAKEUP_GAIN, 0.0, 1.0));
+  return(q_to_f(gain,15));
 }
 
 void Dexed::setOPRateAll(uint8_t rate)
