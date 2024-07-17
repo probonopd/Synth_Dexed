@@ -340,31 +340,48 @@ void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
 // 
 // Cutoff is normalized frequency in rads (2*pi*cutoff/samplerate). Stability limit for cut is around 0.7-0.8.
 // 
-// resoclip = buf4; if (resoclip > 1) resoclip = 1;
-// in = in - (resoclip * res);
-// buf1 = ((in - buf1) * cut) + buf1;
-// buf2 = ((buf1 - buf2) * cut) + buf2;
-// buf3 = ((buf2 - buf3) * cut) + buf3;
-// buf4 = ((buf3 - buf4) * cut) + buf4;
-// lpout = buf4;
+// //          // for nice low sat, or sharper type low deemphasis saturation, one can use a onepole shelf before the filter.
+// //          b_lf = b_lf + ((-b_lf + in) * b_lfcut); // b_lfcut 0..1
+// //          double b_lfhp = in - b_lf;
+// //          in = b_lf + (b_lf1hp * ((b_lfgain*0.5)+1));
+//
+//            double resonance = b_aflt4 - in; // no attenuation with rez, makes a stabler filter.
+//            in = in - (resonance*b_fres); // b_fres = resonance amount. 0..4 typical "to selfoscillation", 0.6 covers a more saturated range.
+//
+//            double innc = in; // clip, and adding back some nonclipped, to get a dynamic like analog.
+//            if (in > 1) {in = 1;} else if (in < -1) {in = -1;}
+//            in = innc + ((-innc + in) * 0.9840);
+//
+//            b_aflt1 = b_aflt1 + ((-b_aflt1 + in) * b_fenv); // straightforward 4 pole filter, (4 normalized feedback paths in series)
+//            b_aflt2 = b_aflt2 + ((-b_aflt2 + b_aflt1) * b_fenv);
+//            b_aflt3 = b_aflt3 + ((-b_aflt3 + b_aflt2) * b_fenv);
+//            b_aflt4 = b_aflt4 + ((-b_aflt4 + b_aflt3) * b_fenv);
+//            in = b_aflt4;
 
-	int16_t vnc;
-	int16_t sat=f_to_q(0.984,14);
 
 	if(filter_enabled==false)
 		return;
 
+	const int16_t sat=f_to_q(0.984,14);
+	const uint8_t Q_FILTER=14;
+
 	for(uint16_t i=0;i<numSamples;i++) {
-		filter_buf[5]=q_sub(filter_buf[4],buffer[i],14);
-		filter_buf[0]=q_sub(buffer[i],q_mul(filter_buf[5],filter_resonance,14),14);
+		int16_t in=buffer[i]>>1;
 
-		vnc=filter_buf[0];
-		filter_buf[0]=sat16(filter_buf[0],14);
-		filter_buf[0]=q_add(vnc,q_mul(q_sub(filter_buf[0],vnc,14),sat,14),14);
+		filter_buf[4]=q_sub(filter_buf[3],in,Q_FILTER);
+		in=q_sub(in,q_mul(filter_buf[4],filter_resonance,Q_FILTER),Q_FILTER);
 
-		for(uint8_t n=1;n<5;n++)
-			filter_buf[n]=q_add((q_mul(q_sub(filter_buf[n-1],filter_buf[n],14),filter_cutoff,14)),filter_buf[n],14);
-		buffer[i]=filter_buf[4];
+		filter_buf[5]=in;
+		in=sat16(in,Q_FILTER);
+		in=q_add(filter_buf[5],q_mul(q_sub(in,filter_buf[5],Q_FILTER),sat,Q_FILTER),Q_FILTER);
+
+		filter_buf[0]=q_add(q_mul(q_sub(buffer[0],filter_buf[0],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[0],Q_FILTER);
+		filter_buf[1]=q_add(q_mul(q_sub(filter_buf[0],filter_buf[1],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[1],Q_FILTER);
+		filter_buf[2]=q_add(q_mul(q_sub(filter_buf[1],filter_buf[2],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[2],Q_FILTER);
+		filter_buf[3]=q_add(q_mul(q_sub(filter_buf[2],filter_buf[3],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[3],Q_FILTER);
+		in=filter_buf[3];
+
+		buffer[i]=in<<1;
 	}
 }
 
