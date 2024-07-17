@@ -253,6 +253,7 @@ class Dexed
     void setGain(float gain);
     float getGain(void);
 
+#ifdef USE_COMPRESSOR
     void setCompDownsample(uint8_t _downSample);
     uint8_t getCompDownsample(void);
     void setCompAttack(float _attack);
@@ -269,13 +270,16 @@ class Dexed
     float getCompMakeupGain(void);
     void setCompEnable(bool _enable);
     bool getCompEnable(void);
+#endif
 
+#ifdef USE_FILTER
+    void setFilterEnable(bool enable);
+    bool getFilterEnable(void);
+#endif
     void setFilterCutoff(float cutoff);
     float getFilterCutoff(void);
     void setFilterResonance(float resonance);
     float getFilterResonance(void);
-    void setFilterEnable(bool enable);
-    bool getFilterEnable(void);
 
     // Voice configuration methods
     void setOPRateAll(uint8_t rate);
@@ -383,6 +387,7 @@ class Dexed
     uint8_t velocity_max;
     float velocity_diff;
     int16_t gain;
+#ifdef USE_COMPRESSOR
     void CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples);
     uint8_t comp_sideChainSel, comp_downSample;
     uint8_t comp_gainMakeup_exp;
@@ -399,13 +404,16 @@ class Dexed
     float comp_attack_f;
     float comp_makeupGain_f;
     bool comp_enabled = true;
+    static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift);
+#endif
+#ifdef USE_FILTER
     void initFilter(void);
     void Filter(int16_t *buffer, uint16_t numSamples);
     int16_t filter_buf[6];
     int16_t filter_cutoff;
     int16_t filter_resonance;
     bool filter_enabled;
-    static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift);
+#endif
 };
 
 static PROGMEM constexpr float LUT_q15_to_dB[2048] = {

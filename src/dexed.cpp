@@ -36,6 +36,7 @@
 #include "porta.h"
 #include "int_math.h"
 
+#ifdef USE_COMPRESSOR
 static inline int32_t Dexed::signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift)
 {
   int32_t out, max;
@@ -290,7 +291,9 @@ void Dexed::CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples) {
 /*
  * End Compressor code
  */
+#endif
 
+#ifdef USE_FILTER
 /*
  * Filter code from: https://www.musicdsp.org/en/latest/Filters/240-karlsen-fast-ladder.html
  */
@@ -368,6 +371,23 @@ void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
 /*
  * End Filter code
  */
+#else
+void Dexed::setFilterCutoff(float cutoff) {
+	;
+}
+
+float Dexed::getFilterCutoff(void) {
+	return(0.0);
+}
+
+void Dexed::setFilterResonance(float resonance) {
+	;
+}
+
+float Dexed::getFilterResonance(void) {
+	return(0.0);
+}
+#endif
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
@@ -425,6 +445,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   engineOpl = new EngineOpl;
   setEngineType(MKI);
 
+#ifdef USE_COMPRESSOR
   setCompEnable(true);
   setCompDownsample(2);
   setCompAttack(2.0);
@@ -434,8 +455,11 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setCompKnee(2.0);
   setCompMakeupGain(MAX_MAKEUP_GAIN);
   comp_peakDet_prev = comp_release_prev = 0;
+#endif
 
+#ifdef USE_FILTER
   initFilter();
+#endif
 }
 
 Dexed::~Dexed()
@@ -545,8 +569,12 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     }
     buffer[i]=q_mul(buffer[i],gain,15);
   }
+#ifdef USE_COMPRESSOR
   CompSideChain(buffer,buffer,n_samples);
+#endif
+#ifdef USE_FILTER
   Filter(buffer,n_samples);
+#endif
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {

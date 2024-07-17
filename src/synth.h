@@ -17,9 +17,12 @@
 #ifndef SYNTH_H
 #define SYNTH_H
 
+#include <stdint.h>
+
 //#define SUPER_PRECISE
 
-#include <stdint.h>
+//#define USE_FILTER
+//#define USE_COMPRESSOR
 
 #define MIDI_CONTROLLER_MODE_MAX 2
 #define TRANSPOSE_FIX 24
