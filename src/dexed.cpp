@@ -2084,3 +2084,102 @@ void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
   }
   setVelocityScale(velocity_offset, velocity_max);
 }
+
+bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
+{
+	// check for MIDI channel
+	if((midiData[0] & 0x0f) != midiChannel)
+		return(false);
+
+	bool ret=false;
+
+	if(len==3)
+	{
+		switch((midiData[0] & 0x70) >> 4)
+		{
+			case 8: // Note On
+				keydown(midiData[1], midiData[2]);
+				ret=true;
+				break;
+			case 9: // Note Off
+				keyup(midiData[1]);
+				ret=true;
+				break;
+			case 11: // Control Change
+	      			switch(midiData[1])
+				{
+        				case 0: // BankSelect MSB
+						break;
+        				case 1: // Modulation wheel
+          					setModWheel(midiData[2]);
+          					ControllersRefresh();
+						ret=true;
+          					break;
+        				case 2: // Breath controller
+          					setBreathController(midiData[2]);
+          					ControllersRefresh();
+						ret=true;
+          					break;
+        				case 4:	// Foot controller
+          					setFootController(midiData[2]);
+          					ControllersRefresh();
+						ret=true;
+          					break;
+        				case 5:  // Portamento time
+          					setPortamentoTime(midiData[2]);
+						ret=true;
+          					break;
+        				case 7:  // Volume
+          					setGain(midiData[2]/127.0+0.5);
+						ret=true;
+          					break;
+        				case 10: // Pan
+          					break;
+        				case 32: // Bank select LSB
+          					break;
+        				case 64: // Sustain
+          					setSustain(inValue > 63);
+						ret=true;
+          					break;
+        				case 65: // Portamento mode
+          					setPortamentoMode(midiData[2]);
+						ret=true;
+          					break;
+        				case 94: // Tune
+          					setMasterTune(midiData[2]); TODO
+          					doRefreshVoice();
+						ret=true;
+          					break;
+        				case 120: // Panic
+          					panic();
+						ret=true;
+          					break;
+        				case 121: // Reset all controllers
+          					resetControllers();
+						ret=true;
+          					break;
+        				case 123: // All notes off
+          					notesOff();
+						ret=true;
+          					break;
+        				case 126:
+            					setMonoMode(true);
+						ret=true;
+        				case 127:
+            					setMonoMode(false);
+						ret=true;
+          					break;
+				}
+				break;
+		}
+	}
+	// System Exclusive
+	else
+	{
+		if(checkSystemExclusive()>=0)
+			ret=true;
+		else
+			ret=false;
+	}
+	return(ret);
+}

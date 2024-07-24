@@ -347,6 +347,8 @@ class Dexed
     void setName(char* name);
     void getName(char* buffer);
 
+    bool midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len);
+
     ProcessorVoice* voices;
 
   protected:
