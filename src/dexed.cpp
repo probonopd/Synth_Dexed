@@ -2130,7 +2130,7 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 						ret=true;
           					break;
         				case 7:  // Volume
-          					setGain(midiData[2]/127.0+0.5);
+          					setGain(float(midiData[2])/127.0);
 						ret=true;
           					break;
         				case 10: // Pan
@@ -2138,7 +2138,7 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
         				case 32: // Bank select LSB
           					break;
         				case 64: // Sustain
-          					setSustain(inValue > 63);
+          					setSustain(midiData[2] > 63);
 						ret=true;
           					break;
         				case 65: // Portamento mode
@@ -2146,8 +2146,8 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 						ret=true;
           					break;
         				case 94: // Tune
-          					setMasterTune(midiData[2]); TODO
-          					doRefreshVoice();
+          					//setMasterTune(midiData[2]); TODO
+          					//doRefreshVoice();
 						ret=true;
           					break;
         				case 120: // Panic
@@ -2176,7 +2176,8 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 	// System Exclusive
 	else
 	{
-		if(checkSystemExclusive()>=0)
+		uint16_t sysex_ret=checkSystemExclusive(midiData,len);
+		if((sysex_ret>=0 && sysex_ret <=100) || (sysex_ret>=300 && sysex_ret <=455))
 			ret=true;
 		else
 			ret=false;
