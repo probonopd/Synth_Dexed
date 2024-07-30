@@ -47,6 +47,23 @@
 
 #define NUM_VOICE_PARAMETERS 156
 
+#ifdef USE_FILTER
+typedef struct {
+    int16_t a0, a1, a2;
+    int16_t b1, b2;
+    int16_t x1, x2;
+    int16_t y1, y2;
+    float f0;
+    float Q;
+    float sampleRate;
+} LowPassFilter;
+
+typedef struct {
+    LowPassFilter stage1;
+    LowPassFilter stage2;
+} FourPoleLowPassFilter;
+#endif
+
 struct ProcessorVoice {
   uint8_t midi_note;
   uint8_t velocity;
@@ -409,11 +426,13 @@ class Dexed
     static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift);
 #endif
 #ifdef USE_FILTER
-    void initFilter(void);
+    FourPoleLowPassFilter filter;
+    void initFilter(float f0, float Q);
+    void init_lowpass_filter(LowPassFilter* filter, float f0, float Q);
+    void init_four_pole_lowpass_filter(FourPoleLowPassFilter* filter, float f0, float Q);
+    int16_t lowpass_filter(LowPassFilter* filter, int16_t input);
+    int16_t four_pole_lowpass_filter(FourPoleLowPassFilter* filter, int16_t input);
     void Filter(int16_t *buffer, uint16_t numSamples);
-    int16_t filter_buf[6];
-    int16_t filter_cutoff;
-    int16_t filter_resonance;
     bool filter_enabled;
 #endif
 };

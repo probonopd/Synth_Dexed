@@ -294,32 +294,76 @@ void Dexed::CompSideChain(const int16_t *in, int16_t *out, int16_t numSamples) {
 #endif
 
 #ifdef USE_FILTER
-/*
- * Filter code from: https://www.musicdsp.org/en/latest/Filters/240-karlsen-fast-ladder.html
- */
-
-void Dexed::initFilter(void) {
-	for(uint8_t n=0;n<6;n++)
-		filter_buf[n]=0;
-	setFilterEnable(true);
-	setFilterCutoff(0.15);
-	setFilterResonance(0.4);
+void initFilter(float f0, float Q) {
+    init_four_pole_lowpass_filter(&filter, f0, Q);
 }
 
-void Dexed::setFilterCutoff(float cutoff) {
-	filter_cutoff=f_to_q(M_PI*cutoff*40000.0/float(samplerate),14);
+void Dexed::init_lowpass_filter(LowPassFilter* filter, float f0, float Q) {
+    filter->f0 = f0;
+    filter->Q = Q;
+    filter->sampleRate = sampleRate;
+    filter->x1 = 0;
+    filter->x2 = 0;
+    filter->y1 = 0;
+    filter->y2 = 0;
+
+    float omega = 2.0f * M_PI * f0 / sampleRate;
+    float alpha = sin(omega) / (2.0f * Q);
+
+    float a0 = 1.0f + alpha;
+    float a1 = -2.0f * cos(omega);
+    float a2 = 1.0f - alpha;
+    float b0 = (1.0f - cos(omega)) / 2.0f;
+    float b1 = 1.0f - cos(omega);
+    float b2 = (1.0f - cos(omega)) / 2.0f;
+
+    filter->a0 = float_to_q15(b0 / a0);
+    filter->a1 = float_to_q15(b1 / a0);
+    filter->a2 = float_to_q15(b2 / a0);
+    filter->b1 = float_to_q15(a1 / a0);
+    filter->b2 = float_to_q15(a2 / a0);
+}
+
+void Dexed::init_four_pole_lowpass_filter(FourPoleLowPassFilter* filter, float f0, float Q) {
+    float Q_stage = sqrtf(Q);
+    init_lowpass_filter(&filter->stage1, f0, Q_stage, sampleRate);
+    init_lowpass_filter(&filter->stage2, f0, Q_stage, sampleRate);
+}
+
+int16_t Dexed::lowpass_filter(Filter* filter, int16_t input) {
+    int16_t output;
+
+    output = q15_multiply(filter->a0, input) + filter->x1;
+    filter->x1 = q15_multiply(filter->a1, input) + filter->x2 - q15_multiply(filter->b1, output);
+    filter->x2 = q15_multiply(filter->a2, input) - q15_multiply(filter->b2, output);
+
+    return output;
+}
+
+void Dexed::setFilterCutoff(float f0) {
+    filter->stage1.f0 = f0;
+    filter->stage2.f0 = f0;
+    init_four_pole_lowpass_filter(filter, f0, filter->stage1.Q * filter->stage1.Q, filter->stage1.sampleRate);
 }
 
 float Dexed::getFilterCutoff(void) {
-	return(q_to_f(filter_cutoff*samplerate/(40000.0*M_PI),14));
+	return(filter->stage1.f0);
 }
 
-void Dexed::setFilterResonance(float resonance) {
-	filter_resonance=f_to_q(resonance,12);
+void Dexed::setFilterResonance(float Q) {
+    float Q_stage = sqrtf(mapfloat(Q,0.0,1.0,0.0,10.0));
+    filter->stage1.Q = Q_stage;
+    filter->stage2.Q = Q_stage;
+    init_four_pole_lowpass_filter(filter, filter->stage1.f0, Q, filter->stage1.sampleRate);
 }
 
 float Dexed::getFilterResonance(void) {
-	return(q_to_f(filter_resonance,12));
+	return(pow(filter->stage1.Q,2));
+}
+
+int16_t Dexed::four_pole_lowpass_filter(FourPoleLowPassFilter* filter, int16_t input) {
+    int16_t temp = lowpass_filter(&filter->stage1, input);
+    return lowpass_filter(&filter->stage2, temp);
 }
 
 void Dexed::setFilterEnable(bool enable) {
@@ -331,58 +375,9 @@ bool Dexed::getFilterEnable(void) {
 }
 
 void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
-// From: https://www.musicdsp.org/en/latest/Filters/240-karlsen-fast-ladder.html
-//
-// The parameters are:
-// cut - cutoff freq
-// res - resonance
-// in - input
-// 
-// Cutoff is normalized frequency in rads (2*pi*cutoff/samplerate). Stability limit for cut is around 0.7-0.8.
-// 
-// //          // for nice low sat, or sharper type low deemphasis saturation, one can use a onepole shelf before the filter.
-// //          b_lf = b_lf + ((-b_lf + in) * b_lfcut); // b_lfcut 0..1
-// //          double b_lfhp = in - b_lf;
-// //          in = b_lf + (b_lf1hp * ((b_lfgain*0.5)+1));
-//
-//            double resonance = b_aflt4 - in; // no attenuation with rez, makes a stabler filter.
-//            in = in - (resonance*b_fres); // b_fres = resonance amount. 0..4 typical "to selfoscillation", 0.6 covers a more saturated range.
-//
-//            double innc = in; // clip, and adding back some nonclipped, to get a dynamic like analog.
-//            if (in > 1) {in = 1;} else if (in < -1) {in = -1;}
-//            in = innc + ((-innc + in) * 0.9840);
-//
-//            b_aflt1 = b_aflt1 + ((-b_aflt1 + in) * b_fenv); // straightforward 4 pole filter, (4 normalized feedback paths in series)
-//            b_aflt2 = b_aflt2 + ((-b_aflt2 + b_aflt1) * b_fenv);
-//            b_aflt3 = b_aflt3 + ((-b_aflt3 + b_aflt2) * b_fenv);
-//            b_aflt4 = b_aflt4 + ((-b_aflt4 + b_aflt3) * b_fenv);
-//            in = b_aflt4;
-
-
-	if(filter_enabled==false)
-		return;
-
-	const int16_t sat=f_to_q(0.984,14);
-	const uint8_t Q_FILTER=14;
-
-	for(uint16_t i=0;i<numSamples;i++) {
-		int16_t in=buffer[i]>>1;
-
-		filter_buf[4]=q_sub(filter_buf[3],in,Q_FILTER);
-		in=q_sub(in,q_mul(filter_buf[4],filter_resonance,Q_FILTER),Q_FILTER);
-
-		filter_buf[5]=in;
-		in=sat16(in,Q_FILTER);
-		in=q_add(filter_buf[5],q_mul(q_sub(in,filter_buf[5],Q_FILTER),sat,Q_FILTER),Q_FILTER);
-
-		filter_buf[0]=q_add(q_mul(q_sub(buffer[0],filter_buf[0],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[0],Q_FILTER);
-		filter_buf[1]=q_add(q_mul(q_sub(filter_buf[0],filter_buf[1],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[1],Q_FILTER);
-		filter_buf[2]=q_add(q_mul(q_sub(filter_buf[1],filter_buf[2],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[2],Q_FILTER);
-		filter_buf[3]=q_add(q_mul(q_sub(filter_buf[2],filter_buf[3],Q_FILTER),filter_cutoff,Q_FILTER),filter_buf[3],Q_FILTER);
-		in=filter_buf[3];
-
-		buffer[i]=in<<1;
-	}
+    for (uint32_t i = 0; i < numSamples; i++) {
+        buffer[i] = four_pole_lowpass_filter(filter, buffer[i]);
+    }
 }
 
 /*
@@ -449,7 +444,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setMonoMode(false);
   loadInitVoice();
 
-  gain=f_to_q(1.0,15);
+  gain=float_to_q15(1.0);
 
   xrun = 0;
   render_time_max = 0;
@@ -475,7 +470,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 #endif
 
 #ifdef USE_FILTER
-  initFilter();
+  initFilter(20000.0,1.0);
 #endif
 }
 
@@ -584,7 +579,7 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
         }
       }
     }
-    buffer[i]=q_mul(buffer[i],gain,15);
+    buffer[i]=q15_multiply(buffer[i],gain);
   }
 #ifdef USE_COMPRESSOR
   CompSideChain(buffer,buffer,n_samples);
@@ -1528,12 +1523,12 @@ uint8_t Dexed::getAftertouchTarget(void)
 
 void Dexed::setGain(float fgain)
 {
-  gain=f_to_q(fgain,15);
+  gain=float_to_q15(fgain);
 }
 
 float Dexed::getGain(void)
 {
-  return(q_to_f(gain,15));
+  return(q15_to_float(gain));
 }
 
 void Dexed::setOPRateAll(uint8_t rate)
