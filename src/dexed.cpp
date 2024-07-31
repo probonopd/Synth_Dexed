@@ -341,6 +341,7 @@ int16_t Dexed::lowpass_filter(Filter* filter, int16_t input) {
 }
 
 void Dexed::setFilterCutoff(float f0) {
+    f0=mapfloat(pow(f0,0.25),0.0,1.0,0.0,20000.0);
     filter->stage1.f0 = f0;
     filter->stage2.f0 = f0;
     init_four_pole_lowpass_filter(filter, f0, filter->stage1.Q * filter->stage1.Q, filter->stage1.sampleRate);
