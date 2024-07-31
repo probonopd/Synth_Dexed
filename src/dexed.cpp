@@ -376,8 +376,10 @@ bool Dexed::getFilterEnable(void) {
 }
 
 void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
-    for (uint32_t i = 0; i < numSamples; i++) {
-        buffer[i] = four_pole_lowpass_filter(filter, buffer[i]);
+    if(filter_enabled) {
+    	for (uint32_t i = 0; i < numSamples; i++) {
+        	buffer[i] = four_pole_lowpass_filter(filter, buffer[i]);
+    	}
     }
 }
 
