@@ -39,22 +39,24 @@
 
 #ifdef USE_COMPRESSOR
 void Dexed::initCompressor(float threshold, float ratio, float attack, float release, float gain) {
-    comp_threshold=float_to_q15(pow(10.0f, threshold / 20.0f));
+    comp_threshold=float_to_q15(threshold);
+    comp_threshold_=pow(10.0f, comp_threshold / 20.0f);
     comp_ratio=float_to_q15(ratio);
     comp_attack=float_to_q15(attack);
     comp_release=float_to_q15(release);
-    comp_gain=float_to_q15(pow(10.0f, gain / 20.0f));
+    comp_gain=float_to_q15(gain);
+    comp_gain_=pow(10.0f, gain / 20.0f);
 }
 
 int32_t Dexed::linear_to_db(int32_t linear) {
-    int index = (linear * (LOG_TABLE_SIZE - 1)) >> Q15_SHIFT;
+    int32_t index = (linear * (LOG_TABLE_SIZE - 1)) >> Q15_SHIFT;
     if (index < 0) index = 0;
     if (index >= LOG_TABLE_SIZE) index = LOG_TABLE_SIZE - 1;
     return linear_to_db_table[index];
 }
 
 int32_t Dexed::db_to_linear(int32_t db) {
-    int index = (db * (LOG_TABLE_SIZE - 1)) >> ( Q15_SHIFT * 2); // db Bereich von 0 bis 2 dB
+    int32_t index = (db * (LOG_TABLE_SIZE - 1)) >> ( Q15_SHIFT * 2); // db Bereich von 0 bis 2 dB
     if (index < 0) index = 0;
     if (index >= LOG_TABLE_SIZE) index = LOG_TABLE_SIZE - 1;
     return db_to_linear_table[index];
@@ -86,6 +88,7 @@ float Dexed::getCompRatio(void) {
 
 void Dexed::setCompThreshold(float thresh) {
     comp_threshold=float_to_q15(thresh);
+    comp_threshold_=pow(10.0f, comp_threshold / 20.0f);
 }
 	
 float Dexed::getCompThreshold(void) {
@@ -94,6 +97,7 @@ float Dexed::getCompThreshold(void) {
 
 void Dexed::setCompMakeupGain(float makeupGain) {
     comp_gain=float_to_q15(makeupGain);
+    comp_gain_=pow(10.0f, gain / 20.0f);
 }
 
 float Dexed::getCompMakeupGain(void) {
@@ -119,15 +123,14 @@ void Dexed::Compress(const int16_t *in, int16_t *out, int16_t numSamples) {
         }
 
         int32_t gain_reduction = 0;
-        if(env > comp_threshold) {
+        if(env > comp_threshold_) {
             int32_t db_env=linear_to_db(env);
-            int32_t db_threshold=linear_to_db(comp_threshold);
+            int32_t db_threshold=linear_to_db(comp_threshold_);
             int32_t db_reduction=q15_division((db_env - db_threshold), comp_ratio);
             gain_reduction=db_to_linear(db_reduction);
         }
 
-        int32_t gain=comp_gain - gain_reduction;
-        out[i]=q15_multiply(in[i], gain);
+        out[i]=q15_multiply(in[i], comp_gain_ - gain_reduction);
     }
 }
 /*

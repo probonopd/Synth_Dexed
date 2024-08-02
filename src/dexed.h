@@ -406,10 +406,12 @@ class Dexed
     int32_t linear_to_db(int32_t linear);
     int32_t db_to_linear(int32_t db);
     int32_t comp_threshold;
+    int32_t comp_threshold_;
     int32_t comp_ratio;
     int32_t comp_attack;
     int32_t comp_release;
     int32_t comp_gain;
+    int32_t comp_gain_;
     bool comp_enabled = true;
     static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift);
 #endif
