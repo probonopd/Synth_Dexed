@@ -1,11 +1,12 @@
 /*
-   MicroDexed
+   synth_dexed
 
-   MicroDexed is a port of the Dexed sound engine
-   (https://github.com/asb2m10/dexed) for the Teensy-3.5/3.6/4.x with audio shield.
+   synth_dexed is a port of the Dexed sound engine (https://github.com/asb2m10/dexed)
+   for microcontrollers.
    Dexed ist heavily based on https://github.com/google/music-synthesizer-for-android
 
-   (c)2018-2021 H. Wirtz <wirtz@parasitstudio.de>
+   Copyright (c) 2013-2018 Pascal Gauthier.
+   (c)2018-2024 H. Wirtz <wirtz@parasitstudio.de>
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
