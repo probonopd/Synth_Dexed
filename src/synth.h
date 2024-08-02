@@ -29,6 +29,10 @@
 //#define VOICE_SILENCE_LEVEL 1100
 #define MAX_MAKEUP_GAIN 10.0
 
+#if defined(USE_COMPRESSOR)
+#define LOG_TABLE_SIZE 1024
+#endif
+
 #define LG_N 6
 #define _N_ (1 << LG_N)
 

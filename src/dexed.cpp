@@ -37,35 +37,25 @@
 #include "int_math.h"
 
 #ifdef USE_COMPRESSOR
-#define TABLE_SIZE 1024
-int32_t linear_to_db_table[TABLE_SIZE];
-int32_t db_to_linear_table[TABLE_SIZE];
-
-void Dexed::initComp(float threshold, float ratio, float attack, float release, float gain) {
+void Dexed::initCompressor(float threshold, float ratio, float attack, float release, float gain) {
     comp_threshold=float_to_q15(pow(10.0f, threshold / 20.0f));
     comp_ratio=float_to_q15(ratio);
     comp_attack=float_to_q15(attack);
     comp_release=float_to_q15(release);
     comp_gain=float_to_q15(pow(10.0f, gain / 20.0f));
-
-    for(uint16_t i=0; i<TABLE_SIZE; i++) { // TODO: write to PROGMEM
-        float linear_value=(float)i/(TABLE_SIZE-1);
-        linear_to_db_table[i]=float_to_q15(20.0f * log10f(linear_value + 1e-9f));
-        db_to_linear_table[i]=float_to_q15(powf(10.0f, (float)i/(TABLE_SIZE-1)*2.0f));
-    }
 }
 
 int32_t Dexed::linear_to_db(int32_t linear) {
-    int index = (linear * (TABLE_SIZE - 1)) >> Q15_SHIFT;
+    int index = (linear * (LOG_TABLE_SIZE - 1)) >> Q15_SHIFT;
     if (index < 0) index = 0;
-    if (index >= TABLE_SIZE) index = TABLE_SIZE - 1;
+    if (index >= LOG_TABLE_SIZE) index = LOG_TABLE_SIZE - 1;
     return linear_to_db_table[index];
 }
 
 int32_t Dexed::db_to_linear(int32_t db) {
-    int index = (db * (TABLE_SIZE - 1)) >> ( Q15_SHIFT * 2); // db Bereich von 0 bis 2 dB
+    int index = (db * (LOG_TABLE_SIZE - 1)) >> ( Q15_SHIFT * 2); // db Bereich von 0 bis 2 dB
     if (index < 0) index = 0;
-    if (index >= TABLE_SIZE) index = TABLE_SIZE - 1;
+    if (index >= LOG_TABLE_SIZE) index = LOG_TABLE_SIZE - 1;
     return db_to_linear_table[index];
 }
 
@@ -310,12 +300,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setEngineType(MKI);
 
 #ifdef USE_COMPRESSOR
-  setCompEnable(true);
-  setCompAttack(2.0);
-  setCompRelease(200.0);
-  setCompRatio(3.0);
-  setCompThreshold(-10.0);
-  setCompMakeupGain(MAX_MAKEUP_GAIN);
+  initCompressor(10.0, 3.0, 5.0, 200.0, MAX_MAKEUP_GAIN);
 #endif
 
 #ifdef USE_FILTER
