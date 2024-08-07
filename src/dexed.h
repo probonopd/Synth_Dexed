@@ -53,7 +53,6 @@ typedef struct {
     int16_t y1, y2;
     float f0;
     float Q;
-    float sampleRate;
 } LowPassFilter;
 
 typedef struct {

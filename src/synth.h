@@ -22,7 +22,7 @@
 //#define SUPER_PRECISE
 
 #define USE_FILTER
-#define USE_COMPRESSOR
+//#define USE_COMPRESSOR
 
 #define MIDI_CONTROLLER_MODE_MAX 2
 #define TRANSPOSE_FIX 24
