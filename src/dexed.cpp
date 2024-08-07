@@ -185,7 +185,7 @@ int16_t Dexed::lowpass_filter(LowPassFilter* filter, int16_t input) {
 }
 
 void Dexed::setFilterCutoff(float f0) {
-    f0=mapfloat(pow(f0,4.0),0.0,1.0,0.0,20000.0);
+    f0=mapfloat(pow(f0,4.0),0.0,1.0,20.0,20000.0);
     filter.stage1.f0 = f0;
     filter.stage2.f0 = f0;
     init_four_pole_lowpass_filter(&filter, f0, filter.stage1.Q * filter.stage1.Q);
@@ -196,7 +196,7 @@ float Dexed::getFilterCutoff(void) {
 }
 
 void Dexed::setFilterResonance(float Q) {
-    float Q_stage = sqrtf(mapfloat(Q,0.0,1.0,0.0,10.0));
+    float Q_stage = sqrtf(mapfloat(Q,0.0,1.0,0.1,10.0));
     filter.stage1.Q = Q_stage;
     filter.stage2.Q = Q_stage;
     init_four_pole_lowpass_filter(&filter, filter.stage1.f0, Q);
