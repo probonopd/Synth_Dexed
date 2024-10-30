@@ -20,4 +20,9 @@ inline int16_t q15_division(int16_t a, int16_t b) {
     return (int16_t)((a<<Q15_SHIFT)/b);
 }
 
-
+inline int16_t q15_division_round(int16_t a, int16_t b) {
+    if(a%b>(a/(2*b)))
+    	return (int16_t)((a<<Q15_SHIFT)/b++);
+    else
+    	return (int16_t)((a<<Q15_SHIFT)/b);
+}
