@@ -61,6 +61,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   vuSignal = 0.0;
   lfo.reset(data + 137);
   sustain = false;
+  sostenuto = false;
   voices = NULL;
 
   max_notes=maxnotes;
@@ -72,6 +73,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
       voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
       voices[i].keydown = false;
       voices[i].sustained = false;
+      voices[i].sostenuted = false;
       voices[i].live = false;
       voices[i].key_pressed_timer = 0;
     }
@@ -245,7 +247,8 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
   {
     for (uint8_t i = 0; i < used_notes; i++)
     {
-      if (voices[i].midi_note == pitch && voices[i].keydown == false && voices[i].live && voices[i].sustained == true)
+      if (voices[i].midi_note == pitch && voices[i].keydown == false && voices[i].live &&
+         (voices[i].sustained == true || voices[i].sostenuted == true))
       {
         // retrigger or refresh note?
         voices[i].dx7_note->keyup();
@@ -253,6 +256,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
         voices[i].velocity = velo;
         voices[i].keydown = true;
         voices[i].sustained = sustain;
+        voices[i].sostenuted = sostenuto;
         voices[i].live = true;
         voices[i].dx7_note->init(data, pitch, velo, pitch, porta, &controllers);
         voices[i].key_pressed_timer = millis();
@@ -281,6 +285,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
       }
       voices[note].keydown = false;
       voices[note].sustained = false;
+      voices[note].sostenuted = false;
       voices[note].live = false;
       voices[note].key_pressed_timer = 0;
       keydown_counter--;
@@ -288,12 +293,36 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
 
     if (!voices[note].keydown)
     {
+      if ( sostenuto )
+      {
+        bool sostenuted_key_down = false;
+        for (uint8_t i = 0; i < getMaxNotes(); i++)
+        {
+          if ( voices[i].keydown && voices[i].sostenuted )
+          {
+            sostenuted_key_down = true;
+            break;
+          }
+        }
+        if ( !sostenuted_key_down )
+        {
+          for (uint8_t i = 0; i < getMaxNotes(); i++)
+          {
+            if (voices[i].sostenuted)
+            {
+              voices[i].dx7_note->keyup();
+              voices[i].sostenuted = false;
+            }
+          }
+        }
+      }
       currentNote = (note + 1) % used_notes;
       //if (keydown_counter == 0) // Original comment: TODO: should only do this if # keys down was 0
         lfo.keydown();
       voices[note].midi_note = pitch;
       voices[note].velocity = velo;
       voices[note].sustained = sustain;
+      voices[note].sostenuted = sostenuto;
       voices[note].keydown = true;
       int32_t srcnote = (previousKeyDown >= 0) ? previousKeyDown : pitch;
       voices[note].dx7_note->init(data, pitch, velo, srcnote, porta, &controllers);
@@ -373,6 +402,8 @@ void Dexed::keyup(uint8_t pitch) {
 
   if ( sustain ) {
     voices[note].sustained = true;
+  } else if ( sostenuto ) {
+    voices[note].sostenuted = true;
   } else {
     voices[note].dx7_note->keyup();
   }
@@ -429,6 +460,31 @@ bool Dexed::getSustain(void)
   return sustain;
 }
 
+void Dexed::setSostenuto(bool s)
+{
+  if (sostenuto == s)
+    return;
+
+  sostenuto = s;
+
+  if (!getSostenuto())
+  {
+    for (uint8_t note = 0; note < getMaxNotes(); note++)
+    {
+      if (voices[note].sostenuted)
+      {
+        voices[note].dx7_note->keyup();
+        voices[note].sostenuted = false;
+      }
+    }
+  }
+}
+
+bool Dexed::getSostenuto(void)
+{
+  return sostenuto;
+}
+
 void Dexed::panic(void)
 {
   for (uint8_t i = 0; i < max_notes; i++)
@@ -437,6 +493,7 @@ void Dexed::panic(void)
       voices[i].keydown = false;
       voices[i].live = false;
       voices[i].sustained = false;
+      voices[i].sostenuted = false;
       voices[i].key_pressed_timer = 0;
       if ( voices[i].dx7_note != NULL ) {
         voices[i].dx7_note->oscSync();
@@ -511,6 +568,7 @@ uint8_t Dexed::getNumNotesPlaying(void)
         // all carrier-operators are silent -> disable the voice
         voices[i].live = false;
         voices[i].sustained = false;
+        voices[i].sostenuted = false;
         voices[i].keydown = false;
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
         Serial.print(F("Shutdown voice: "));

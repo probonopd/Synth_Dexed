@@ -66,6 +66,8 @@ See example sketch.
     void keydown(int16_t pitch, uint8_t velo);
     void setSustain(bool sustain);
     bool getSustain(void);
+    void setSostenuto(bool sostenuto);
+    bool getSostenuto(void);
     void panic(void);
     void notesOff(void);
     void resetControllers(void);
