@@ -58,7 +58,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   controllers.masterTune = 0;
   controllers.opSwitch = 0x3f; // enable all operators
   lastKeyDown = -1;
-  vuSignal = 0.0;
   lfo.reset(data + 137);
   sustain = false;
   sostenuto = false;

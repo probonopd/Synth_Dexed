@@ -17,6 +17,7 @@
 
 #ifndef TEENSYDUINO
 
+#include <algorithm>
 #include <arm_math.h> //ARM DSP extensions.  https://www.keil.com/pack/doc/CMSIS/DSP/html/index.html
 #include "synth.h"
 
