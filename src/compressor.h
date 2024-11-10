@@ -400,7 +400,7 @@ class Compressor
       //float *C = &log2f_approx_coeff[0];
       float Y;
       float F;
-      int32_t E;
+      int E;
     
       // This is the approximation to log2()
       F = frexpf(fabsf(X), &E);
