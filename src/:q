@@ -185,20 +185,14 @@ int16_t Dexed::lowpass_filter(LowPassFilter* filter, int16_t input) {
     return output;
 }
 
-void Dexed::setFilterCutoff(float v) {
-    if(v>0.0 || v<1.0) {
-    	float f0=mapfloat(pow(v,4.0),0.0,1.0,20.0,20000.0);
-    	setFilterCutoff(f0);
-    }
+void Dexed::setFilterCutoff(float f0) {
+    f0=mapfloat(pow(f0,4.0),0.0,1.0,20.0,20000.0);
+    filter.stage1.f0 = f0;
+    filter.stage2.f0 = f0;
+    init_four_pole_lowpass_filter(&filter, f0, filter.stage1.Q * filter.stage1.Q);
 }
 
-void Dexed::setFilterCutoffFrequency(float f0) {
-    if(f0 >20.0 || f0 <20000.0) {
-    	init_four_pole_lowpass_filter(&filter, f0, filter.stage1.Q * filter.stage1.Q);
-    }
-}
-
-float Dexed::getFilterCutoffFrequency(void) {
+float Dexed::getFilterCutoff(void) {
 	return(filter.stage1.f0);
 }
 
@@ -317,7 +311,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 #endif
 
 #ifdef USE_FILTER
-  initFilter(20000.0,0.5);
+  initFilter(20000.0,1.0);
 #endif
 }
 
@@ -1991,32 +1985,30 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midi
 	m[1]=midiData1;
 	m[2]=midiData2;
 
-	return(midiDataHandler(midiChannel, m, 3));
+	midiDataHandler(midiChannel, m, 3);
 }
 
 bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 {
 	// check for MIDI channel
-	if((midiData[0] & 0x0f) != midiChannel-1)
+	if((midiData[0] & 0x0f) != midiChannel)
 		return(false);
 
 	bool ret=false;
 
 	if(len==3)
 	{
-		switch(midiData[0] & 0xf0)
+		switch((midiData[0] & 0x70) >> 4)
 		{
-			case 0x80: // Note Off
-				Serial.printf(">NOTE OFF D1: %d\n", midiData[1]);
-				keyup(midiData[1]);
-				ret=true;
-				break;
-			case 0x90: // Note On
-				Serial.printf(">NOTE ON D1: %d %d\n", midiData[1],midiData[2]);
+			case 8: // Note On
 				keydown(midiData[1], midiData[2]);
 				ret=true;
 				break;
-			case 0xB0: // Control Change
+			case 9: // Note Off
+				keyup(midiData[1]);
+				ret=true;
+				break;
+			case 11: // Control Change
 	      			switch(midiData[1])
 				{
         				case 0: // BankSelect MSB

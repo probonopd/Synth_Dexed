@@ -1,8 +1,7 @@
 #define MIDI_CHANNEL 1
-#define MIDI_DEVICE_DIN Serial1
 //#define  USB_AUDIO_INTERFACE
-#define MIDI_BUFFER_SIZE 255
 
+#include <USBHost_t36.h>
 #include <Audio.h>
 #include "synth_dexed.h"
 
@@ -16,8 +15,13 @@ AudioOutputUSB usb1;
 AudioConnection patchCord3(dexed, 0, usb1, 0);
 AudioConnection patchCord4(dexed, 0, usb1, 1);
 #endif
+USBHost usb_host;
+MIDIDevice midi_usb(usb_host);
 
 void setup() {
+
+  Serial.begin(115200);
+
   AudioMemory(16);
 
   sgtl5000_1.enable();
@@ -28,45 +32,70 @@ void setup() {
   sgtl5000_1.unmuteLineout();
   sgtl5000_1.volume(0.8, 0.8);  // Headphone volume
 
-  MIDI_DEVICE_DIN.begin(31250);
+  midi_usb.setHandleNoteOn(NoteOn);
+  midi_usb.setHandleNoteOff(NoteOff);
 
-  dexed.setFilterCutoff(5000.0);
-  dexed.setFilterResonance(0.3);
+  midi_usb.begin();
+
+  dexed.setFilterCutoffFrequency(2500.0);
+  //dexed.setFilterResonance(0.3);
+
+  Serial.println("<START>");
+  Serial.printf("Res: %f, Cut: %f\n", dexed.getFilterResonance(), dexed.getFilterCutoffFrequency());
+
+  dexed.keydown(48, 100);
+  delay(1000);
+  dexed.keyup(48);
 }
 
 void loop() {
   static bool c_sign;
   static bool r_sign;
-  uint8_t midi_buffer[MIDI_BUFFER_SIZE];
-  uint8_t midi_len=0;
+  static uint32_t timer=0;
 
-  if (dexed.getFilterCutoff() >= 15000.0)
+  usb_host.Task();
+  midi_usb.read();
+
+  if (dexed.getFilterCutoffFrequency() >= 15000.0)
     c_sign = false;
-  else if (dexed.getFilterCutoff() <= 0.0)
+  else if (dexed.getFilterCutoffFrequency() <= 0.0)
     c_sign = true;
-    
-  if (dexed.getFilterResonance() >= 1.0)
+
+  /*if (dexed.getFilterResonance() >= 1.0)
     r_sign = false;
   else if (dexed.getFilterResonance() <= 0.0)
-    r_sign = true;
+    r_sign = true;*/
 
   if (c_sign)
-    dexed.setFilterCutoff(dexed.getFilterCutoff() + 10.0);
+    dexed.setFilterCutoffFrequency(dexed.getFilterCutoffFrequency() + 10.0);
   else
-    dexed.setFilterCutoff(dexed.getFilterCutoff() - 10.0);
+    dexed.setFilterCutoffFrequency(dexed.getFilterCutoffFrequency() - 10. + 0);
 
-  if (r_sign)
+  /*if (r_sign)
     dexed.setFilterResonance(dexed.getFilterResonance() + 0.001);
   else
-    dexed.setFilterResonance(dexed.getFilterResonance() - 0.001);
+    dexed.setFilterResonance(dexed.getFilterResonance() - 0.001);*/
 
-  while(MIDI_DEVICE_DIN.available()) {
-    if(midi_len<MIDI_BUFFER_SIZE)
-    	midi_buffer[midi_len++]=MIDI_DEVICE_DIN.read();
-    else
-        Serial.println("MIDI input buffer overflow!");
+  if (millis() - timer > 1000) {
+    timer = millis();
+    Serial.printf("Res: %f, Cut: %f\n", dexed.getFilterResonance(), dexed.getFilterCutoffFrequency());
   }
+}
 
-  if(midi_len > 0)
-      dexed.midiDataHandler(MIDI_CHANNEL, midi_buffer, midi_len);
+void NoteOn(byte channel, byte note, byte velocity) {
+  bool b;
+
+  Serial.println("NOTE ON");
+  b = dexed.midiDataHandler(MIDI_CHANNEL, 0x90 | (channel - 1), note, velocity);
+
+  Serial.printf("b=%d\n", b);
+}
+
+void NoteOff(byte channel, byte note, byte velocity) {
+  bool b;
+
+  Serial.println("NOTE OFF");
+  b = dexed.midiDataHandler(MIDI_CHANNEL, 0x80 | (channel - 1), note, velocity);
+
+  Serial.printf("b=%d\n", b);
 }

@@ -18,6 +18,7 @@
 //using namespace std;
 
 #include <math.h>
+#include <algorithm>
 
 #include "synth.h"
 #include "env.h"

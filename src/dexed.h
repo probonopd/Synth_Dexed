@@ -289,8 +289,9 @@ class Dexed
     void setFilterEnable(bool enable);
     bool getFilterEnable(void);
 #endif
-    void setFilterCutoff(float cutoff);
-    float getFilterCutoff(void);
+    void setFilterCutoff(float v);
+    void setFilterCutoffFrequency(float cutoff);
+    float getFilterCutoffFrequency(void);
     void setFilterResonance(float resonance);
     float getFilterResonance(void);
 
@@ -360,6 +361,7 @@ class Dexed
     void setName(char* name);
     void getName(char* buffer);
 
+    bool midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midiData1, uint8_t midiData2);
     bool midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len);
 
     ProcessorVoice* voices;
