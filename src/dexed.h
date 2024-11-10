@@ -56,6 +56,7 @@ struct ProcessorVoice {
   int16_t porta;
   bool keydown;
   bool sustained;
+  bool sostenuted;
   bool held;
   bool live;
   uint32_t key_pressed_timer;
@@ -218,6 +219,8 @@ class Dexed
     void keydown(uint8_t pitch, uint8_t velo);
     void setSustain(bool sustain);
     bool getSustain(void);
+    void setSostenuto(bool sostenuto);
+    bool getSostenuto(void);
     void setHold(bool hold);
     bool getHold(void);
     void panic(void);
@@ -369,6 +372,7 @@ class Dexed
     uint16_t render_time_max;
     int16_t currentNote;
     bool sustain;
+    bool sostenuto;
     bool hold;
     bool monoMode;
     bool noteRefreshMode;
