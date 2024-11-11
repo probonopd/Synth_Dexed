@@ -61,6 +61,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   lfo.reset(data + 137);
   sustain = false;
   sostenuto = false;
+  hold = false;
   voices = NULL;
 
   max_notes=maxnotes;
@@ -73,6 +74,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
       voices[i].keydown = false;
       voices[i].sustained = false;
       voices[i].sostenuted = false;
+      voices[i].held = false;
       voices[i].live = false;
       voices[i].key_pressed_timer = 0;
     }
@@ -247,7 +249,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
     for (uint8_t i = 0; i < used_notes; i++)
     {
       if (voices[i].midi_note == pitch && voices[i].keydown == false && voices[i].live &&
-         (voices[i].sustained == true || voices[i].sostenuted == true))
+         (voices[i].sustained == true || voices[i].held == true))
       {
         // retrigger or refresh note?
         voices[i].dx7_note->keyup();
@@ -255,7 +257,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
         voices[i].velocity = velo;
         voices[i].keydown = true;
         voices[i].sustained = sustain;
-        voices[i].sostenuted = sostenuto;
+        voices[i].held = hold;
         voices[i].live = true;
         voices[i].dx7_note->init(data, pitch, velo, pitch, porta, &controllers);
         voices[i].key_pressed_timer = millis();
@@ -285,32 +287,33 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
       voices[note].keydown = false;
       voices[note].sustained = false;
       voices[note].sostenuted = false;
+      voices[note].held = false;
       voices[note].live = false;
       voices[note].key_pressed_timer = 0;
       keydown_counter--;
     }
 
-    if (!voices[note].keydown)
+    if (!voices[note].keydown && !voices[note].sostenuted)
     {
-      if ( sostenuto )
+      if ( hold )
       {
-        bool sostenuted_key_down = false;
+        bool held_key_down = false;
         for (uint8_t i = 0; i < getMaxNotes(); i++)
         {
-          if ( voices[i].keydown && voices[i].sostenuted )
+          if ( voices[i].keydown && voices[i].held )
           {
-            sostenuted_key_down = true;
+            held_key_down = true;
             break;
           }
         }
-        if ( !sostenuted_key_down )
+        if ( !held_key_down )
         {
           for (uint8_t i = 0; i < getMaxNotes(); i++)
           {
-            if (voices[i].sostenuted)
+            if (voices[i].held)
             {
               voices[i].dx7_note->keyup();
-              voices[i].sostenuted = false;
+              voices[i].held = false;
             }
           }
         }
@@ -321,7 +324,8 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
       voices[note].midi_note = pitch;
       voices[note].velocity = velo;
       voices[note].sustained = sustain;
-      voices[note].sostenuted = sostenuto;
+      voices[note].sostenuted = false;
+      voices[note].held = hold;
       voices[note].keydown = true;
       int32_t srcnote = (previousKeyDown >= 0) ? previousKeyDown : pitch;
       voices[note].dx7_note->init(data, pitch, velo, srcnote, porta, &controllers);
@@ -399,10 +403,13 @@ void Dexed::keyup(uint8_t pitch) {
     }
   }
 
+  if ( voices[note].sostenuted )
+    return;
+
   if ( sustain ) {
     voices[note].sustained = true;
-  } else if ( sostenuto ) {
-    voices[note].sostenuted = true;
+  } else if ( hold ) {
+    voices[note].held = true;
   } else {
     voices[note].dx7_note->keyup();
   }
@@ -466,7 +473,17 @@ void Dexed::setSostenuto(bool s)
 
   sostenuto = s;
 
-  if (!getSostenuto())
+  if (sostenuto)
+  {
+    for (uint8_t note = 0; note < getMaxNotes(); note++)
+    {
+      if (voices[note].keydown)
+      {
+        voices[note].sostenuted = true;
+      }
+    }
+  }
+  else
   {
     for (uint8_t note = 0; note < getMaxNotes(); note++)
     {
@@ -484,6 +501,31 @@ bool Dexed::getSostenuto(void)
   return sostenuto;
 }
 
+void Dexed::setHold(bool h)
+{
+  if (hold == h)
+    return;
+
+  hold = h;
+
+  if (!getHold())
+  {
+    for (uint8_t note = 0; note < getMaxNotes(); note++)
+    {
+      if (voices[note].held)
+      {
+        voices[note].dx7_note->keyup();
+        voices[note].held = false;
+      }
+    }
+  }
+}
+
+bool Dexed::getHold(void)
+{
+  return hold;
+}
+
 void Dexed::panic(void)
 {
   for (uint8_t i = 0; i < max_notes; i++)
@@ -493,6 +535,7 @@ void Dexed::panic(void)
       voices[i].live = false;
       voices[i].sustained = false;
       voices[i].sostenuted = false;
+      voices[i].held = false;
       voices[i].key_pressed_timer = 0;
       if ( voices[i].dx7_note != NULL ) {
         voices[i].dx7_note->oscSync();
@@ -568,6 +611,7 @@ uint8_t Dexed::getNumNotesPlaying(void)
         voices[i].live = false;
         voices[i].sustained = false;
         voices[i].sostenuted = false;
+        voices[i].held = false;
         voices[i].keydown = false;
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
         Serial.print(F("Shutdown voice: "));

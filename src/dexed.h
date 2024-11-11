@@ -57,6 +57,7 @@ struct ProcessorVoice {
   bool keydown;
   bool sustained;
   bool sostenuted;
+  bool held;
   bool live;
   uint32_t key_pressed_timer;
   Dx7Note *dx7_note;
@@ -220,6 +221,8 @@ class Dexed
     bool getSustain(void);
     void setSostenuto(bool sostenuto);
     bool getSostenuto(void);
+    void setHold(bool hold);
+    bool getHold(void);
     void panic(void);
     void notesOff(void);
     void resetControllers(void);
@@ -370,6 +373,7 @@ class Dexed
     int16_t currentNote;
     bool sustain;
     bool sostenuto;
+    bool hold;
     bool monoMode;
     bool noteRefreshMode;
     bool refreshVoice;
