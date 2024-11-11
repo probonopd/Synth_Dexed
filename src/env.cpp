@@ -17,6 +17,7 @@
 
 //using namespace std;
 
+#include <algorithm>
 #include <math.h>
 #include <algorithm>
 

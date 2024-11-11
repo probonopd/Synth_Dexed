@@ -17,6 +17,7 @@
 #ifndef __CONTROLLERS_H
 #define __CONTROLLERS_H
 
+#include <algorithm>
 #include <stdint.h>
 #include "synth.h"
 #include <stdio.h>
