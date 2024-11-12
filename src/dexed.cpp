@@ -509,25 +509,6 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
 
     if (!voices[note].keydown && !voices[note].sostenuted)
     {
-      if ( sostenuto )
-      {
-        bool sostenuted_key_down = false;
-        for (uint8_t i = 0; i < getMaxNotes(); i++)
-        {
-          if ( voices[i].keydown && voices[i].sostenuted )
-          {
-            sostenuted_key_down = true;
-            break;
-          }
-        }
-        if ( !sostenuted_key_down )
-        {
-          for (uint8_t i = 0; i < getMaxNotes(); i++)
-          {
-            if (voices[i].sostenuted)
-            {
-              voices[i].dx7_note->keyup();
-              voices[i].sostenuted = false;
       if ( hold )
       {
         bool held_key_down = false;

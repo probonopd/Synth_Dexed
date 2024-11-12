@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <math.h>
 
-#define Q15_SHIFT 14
+#define Q15_SHIFT 15
 #define Q15_SCALE (1 << Q15_SHIFT)
 
 inline int16_t float_to_q15(float x) {
