@@ -23,7 +23,7 @@
    Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
 
 */
-#include <limits.h>
+#include <limits>
 #include <cstdlib>
 #include <stdint.h>
 #include <unistd.h>
@@ -37,6 +37,18 @@
 #include "controllers.h"
 #include "porta.h"
 #include "int_math.h"
+
+int16_t q24_8_to_q1_15_with_saturation(int32_t q24_8_value) {
+    int32_t q1_15_value = q24_8_value >> 9;
+
+    if (q1_15_value > std::numeric_limits<int16_t>::max()) {
+        q1_15_value = std::numeric_limits<int16_t>::max();
+    } else if (q1_15_value < std::numeric_limits<int16_t>::min()) {
+        q1_15_value = std::numeric_limits<int16_t>::min();
+    }
+
+    return static_cast<int16_t>(q1_15_value);
+}
 
 #ifdef USE_COMPRESSOR
 void Dexed::initCompressor(float threshold, float ratio, float attack, float release, float gain) {
@@ -187,15 +199,23 @@ int16_t Dexed::lowpass_filter(LowPassFilter* filter, int16_t input) {
 
 void Dexed::setFilterCutoff(float v) {
     if(v>0.0 || v<1.0) {
-    	float f0=mapfloat(pow(v,4.0),0.0,1.0,20.0,20000.0);
-    	setFilterCutoff(f0);
+    	float f0=mapfloat(powf(v,4.0),0.0,1.0,20.0,20000.0);
+    	setFilterCutoffFrequency(f0);
     }
 }
 
 void Dexed::setFilterCutoffFrequency(float f0) {
-    if(f0 >20.0 || f0 <20000.0) {
-    	init_four_pole_lowpass_filter(&filter, f0, filter.stage1.Q * filter.stage1.Q);
-    }
+    if(f0 < 20.0)
+	f0=20.0;
+    if(f0 > 20000.0)
+	f0=20000;
+
+    init_four_pole_lowpass_filter(&filter, f0, filter.stage1.Q * filter.stage1.Q);
+}
+
+float Dexed::getFilterCutoff(void) {
+    	float v=exp(mapfloat(filter.stage1.f0,20.0,20000.0,0.0,1.0)/4.0);
+	return(v);
 }
 
 float Dexed::getFilterCutoffFrequency(void) {
@@ -241,7 +261,15 @@ void Dexed::setFilterCutoff(float cutoff) {
 	;
 }
 
+void Dexed::setFilterCutoffFrequency(float cutoff) {
+	;
+}
+
 float Dexed::getFilterCutoff(void) {
+	return(0.0);
+}
+
+float Dexed::getFilterCutoffFrequency(void) {
 	return(0.0);
 }
 
@@ -422,8 +450,12 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
-          //buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
-          buffer[i + j] += audiobuf.get()[j]>>13;
+#if defined(TEENSYDUINO)
+          buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
+#else
+          buffer[i + j] += q24_8_to_q1_15_with_saturation(audiobuf.get()[j] >> 4);
+#endif
+          //buffer[i + j] += audiobuf.get()[j]>>13;
           audiobuf.get()[j] = 0;
         }
       }

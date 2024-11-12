@@ -294,6 +294,7 @@ class Dexed
 #endif
     void setFilterCutoff(float v);
     void setFilterCutoffFrequency(float cutoff);
+    float getFilterCutoff(void);
     float getFilterCutoffFrequency(void);
     void setFilterResonance(float resonance);
     float getFilterResonance(void);
