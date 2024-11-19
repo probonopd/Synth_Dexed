@@ -2114,6 +2114,10 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
           					setPortamentoMode(midiData[2]);
 						ret=true;
           					break;
+        				case 66: // Sostenuto
+          					setSostenuto(midiData[2] > 63);
+						ret=true;
+          					break;
         				case 94: // Tune
           					//setMasterTune(midiData[2]); TODO
           					//doRefreshVoice();
