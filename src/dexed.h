@@ -46,19 +46,18 @@
 #define NUM_VOICE_PARAMETERS 156
 
 #ifdef USE_FILTER
+#define FILTER_POLES 4
 typedef struct {
-    int16_t a0, a1, a2;
-    int16_t b1, b2;
-    int16_t x1, x2;
-    int16_t y1, y2;
-    float f0;
-    float Q;
-} LowPassFilter;
-
-typedef struct {
-    LowPassFilter stage1;
-    LowPassFilter stage2;
-} FourPoleLowPassFilter;
+    float cutoff;
+    float resonance;
+    int32_t a0;
+    int32_t a1;
+    int32_t a2;
+    int32_t b0;
+    int32_t b1;
+    int32_t b2;
+    int32_t filterState[FILTER_POLES * 4];
+} Filter;
 #endif
 
 struct ProcessorVoice {
@@ -426,13 +425,10 @@ class Dexed
     static inline int32_t signed_saturate_rshift(int32_t val, int32_t bits, int32_t rshift);
 #endif
 #ifdef USE_FILTER
-    FourPoleLowPassFilter filter;
-    void initFilter(float f0, float Q);
-    void init_lowpass_filter(LowPassFilter* filter, float f0, float Q);
-    void init_four_pole_lowpass_filter(FourPoleLowPassFilter* filter, float f0, float Q);
-    int16_t lowpass_filter(LowPassFilter* filter, int16_t input);
-    int16_t four_pole_lowpass_filter(FourPoleLowPassFilter* filter, int16_t input);
-    void Filter(int16_t *buffer, uint16_t numSamples);
+    Filter filter;
+    void initFilter(float cutoff, float resonance);
+    void updateCoefficients(void);
+    int32_t lowpassFilter(int32_t val);
     bool filter_enabled = true;
 #endif
 };

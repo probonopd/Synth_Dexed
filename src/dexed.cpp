@@ -38,83 +38,71 @@
 #include "porta.h"
 #include "int_math.h"
 
-int16_t q24_8_to_q1_15_with_saturation(int32_t q24_8_value) {
-    int32_t q1_15_value = q24_8_value >> 9;
-
-    if (q1_15_value > std::numeric_limits<int16_t>::max()) {
-        q1_15_value = std::numeric_limits<int16_t>::max();
-    } else if (q1_15_value < std::numeric_limits<int16_t>::min()) {
-        q1_15_value = std::numeric_limits<int16_t>::min();
-    }
-
-    return static_cast<int16_t>(q1_15_value);
-}
-
 #ifdef USE_COMPRESSOR
 void Dexed::initCompressor(float threshold, float ratio, float attack, float release, float gain) {
-    comp_threshold=float_to_q15(threshold);
+    comp_threshold=float_to_q0_15(threshold);
     comp_threshold_=pow(10.0f, comp_threshold / 20.0f);
-    comp_ratio=float_to_q15(ratio);
-    comp_attack=float_to_q15(attack);
-    comp_release=float_to_q15(release);
-    comp_gain=float_to_q15(gain);
+    comp_ratio=float_to_q0_15(ratio);
+    comp_attack=float_to_q0_15(attack);
+    comp_release=float_to_q0_15(release);
+    comp_gain=float_to_q0_15(gain);
     comp_gain_=pow(10.0f, gain / 20.0f);
 }
 
 int32_t Dexed::linear_to_db(int32_t linear) {
-    int32_t index = (linear * (LOG_TABLE_SIZE - 1)) >> Q15_SHIFT;
+    int32_t index = (linear * (LOG_TABLE_SIZE - 1)) >> Q0_15_SHIFT;
     if (index < 0) index = 0;
     if (index >= LOG_TABLE_SIZE) index = LOG_TABLE_SIZE - 1;
     return linear_to_db_table[index];
 }
 
 int32_t Dexed::db_to_linear(int32_t db) {
-    int32_t index = (db * (LOG_TABLE_SIZE - 1)) >> ( Q15_SHIFT * 2); // db Bereich von 0 bis 2 dB
+    int32_t index = (db * (LOG_TABLE_SIZE - 1)) >> ( Q0_15_SHIFT * 2); // db Bereich von 0 bis 2 dB
     if (index < 0) index = 0;
     if (index >= LOG_TABLE_SIZE) index = LOG_TABLE_SIZE - 1;
     return db_to_linear_table[index];
 }
 
 void Dexed::setCompAttack(float attack) {
-    comp_attack=float_to_q15(attack);
+    comp_attack=float_to_q0_15(attack);
 }
   
 float Dexed::getCompAttack(void) {
-    return(q15_to_float(comp_attack));
+    return(q0_15_to_float(comp_attack));
 }
 
 void Dexed::setCompRelease(float release) {
-    comp_release=float_to_q15(release);
+    comp_release=float_to_q0_15(release);
 }
       
 float Dexed::getCompRelease(void) {
-	return(q15_to_float(comp_release));
+	return(q0_15_to_float(comp_release));
 }
 
 void Dexed::setCompRatio(float ratio) {
-    comp_ratio=float_to_q15(ratio);
+    comp_ratio=float_to_q0_15(ratio);
 }
 
 float Dexed::getCompRatio(void) {
-	return(q15_to_float(comp_ratio));
+	return(q0_15_to_float(comp_ratio));
 }
 
 void Dexed::setCompThreshold(float thresh) {
-    comp_threshold=float_to_q15(thresh);
+    comp_threshold=float_to_q0_15(thresh);
     comp_threshold_=pow(10.0f, comp_threshold / 20.0f);
 }
 	
 float Dexed::getCompThreshold(void) {
-	return(q15_to_float(comp_threshold));
+	return(q0_15_to_float(comp_threshold));
 }
 
 void Dexed::setCompMakeupGain(float makeupGain) {
-    comp_gain=float_to_q15(makeupGain);
+    comp_gain=float_to_q0_15(makeupGain);
     comp_gain_=pow(10.0f, gain / 20.0f);
 }
 
 float Dexed::getCompMakeupGain(void) {
-	return(q15_to_float(comp_gain));
+	return(q0_15_to_float(comp_gain));
 }
 
 void Dexed::setCompEnable(bool enable) {
@@ -130,20 +118,20 @@ void Dexed::Compress(const int16_t *in, int16_t *out, int16_t numSamples) {
     for (int16_t i = 0; i < numSamples; i++) {
         int32_t abs_in = abs(in[i]);
         if(abs_in > env) {
-            env = env + q15_multiply(comp_attack, (abs_in - env));
+            env = env + q0_15_multiply(comp_attack, (abs_in - env));
         } else {
-            env = env + q15_multiply(comp_release, (abs_in - env));
+            env = env + q0_15_multiply(comp_release, (abs_in - env));
         }
 
         int32_t gain_reduction = 0;
         if(env > comp_threshold_) {
             int32_t db_env=linear_to_db(env);
             int32_t db_threshold=linear_to_db(comp_threshold_);
-            int32_t db_reduction=q15_division((db_env - db_threshold), comp_ratio);
+            int32_t db_reduction=q0_15_division((db_env - db_threshold), comp_ratio);
             gain_reduction=db_to_linear(db_reduction);
         }
 
-        out[i]=q15_multiply(in[i], comp_gain_ - gain_reduction);
+        out[i]=q0_15_multiply(in[i], comp_gain_ - gain_reduction);
     }
 }
 /*
@@ -152,106 +140,99 @@ void Dexed::Compress(const int16_t *in, int16_t *out, int16_t numSamples) {
 #endif
 
 #ifdef USE_FILTER
-void Dexed::initFilter(float f0, float Q) {
-    init_four_pole_lowpass_filter(&filter, f0, Q);
+void Dexed::initFilter(float cutoff, float resonance) {
+    filter.cutoff=cutoff;
+    filter.resonance=resonance;
+
+    updateCoefficients();
 }
 
-void Dexed::init_lowpass_filter(LowPassFilter* filter, float f0, float Q) {
-    filter->f0 = f0;
-    filter->Q = Q;
-    filter->x1 = 0;
-    filter->x2 = 0;
-    filter->y1 = 0;
-    filter->y2 = 0;
+void Dexed::updateCoefficients(void) {
+  float w0 = 2.0f * M_PI * filter.cutoff / samplerate;
+  float alpha = sinf(w0) * sinhf(logf(2.0f) / 2.0f * filter.resonance * w0 / sinf(w0));
+  float a0 = 1.0f + alpha;
+  float a1 = -2.0f * cosf(w0) / a0;
+  float a2 = (1.0f - alpha) / a0;
+  float b0 = (1.0f - cosf(w0)) / (2.0f * a0);
+  float b1 = (1.0f - cosf(w0)) / a0;
+  float b2 = (1.0f - cosf(w0)) / (2.0f * a0);
 
-    float omega = 2.0f * M_PI * f0 / samplerate;
-    float alpha = sin(omega) / (2.0f * Q);
+  filter.a0 = float_to_q23_8(a0);
+  filter.a1 = float_to_q23_8(a1);
+  filter.a2 = float_to_q23_8(a2);
+  filter.b0 = float_to_q23_8(b0);
+  filter.b1 = float_to_q23_8(b1);
+  filter.b2 = float_to_q23_8(b2);
 
-    float a0 = 1.0f + alpha;
-    float a1 = -2.0f * cos(omega);
-    float a2 = 1.0f - alpha;
-    float b0 = (1.0f - cos(omega)) / 2.0f;
-    float b1 = 1.0f - cos(omega);
-    float b2 = (1.0f - cos(omega)) / 2.0f;
-
-    filter->a0 = float_to_q15(b0 / a0);
-    filter->a1 = float_to_q15(b1 / a0);
-    filter->a2 = float_to_q15(b2 / a0);
-    filter->b1 = float_to_q15(a1 / a0);
-    filter->b2 = float_to_q15(a2 / a0);
+  for (uint8_t i = 0; i < FILTER_POLES * 4; i++)
+    filter.filterState[i] = 0;
 }
 
-void Dexed::init_four_pole_lowpass_filter(FourPoleLowPassFilter* filter, float f0, float Q) {
-    float Q_stage = sqrtf(Q);
-    init_lowpass_filter(&filter->stage1, f0, Q_stage);
-    init_lowpass_filter(&filter->stage2, f0, Q_stage);
-}
+int32_t Dexed::lowpassFilter(int32_t val) {
+  int32_t xn = val;
+  int32_t yn = 0;
 
-int16_t Dexed::lowpass_filter(LowPassFilter* filter, int16_t input) {
-    int16_t output;
+  for (uint8_t i = 0; i < FILTER_POLES; i++) {
+    int32_t xn_1 = filter.filterState[i * 2];
+    int32_t xn_2 = filter.filterState[i * 2 + 1];
+    int32_t yn_1 = filter.filterState[i * 2 + 2];
+    int32_t yn_2 = filter.filterState[i * 2 + 3];
 
-    output = q15_multiply(filter->a0, input) + filter->x1;
-    filter->x1 = q15_multiply(filter->a1, input) + filter->x2 - q15_multiply(filter->b1, output);
-    filter->x2 = q15_multiply(filter->a2, input) - q15_multiply(filter->b2, output);
+    // yn = (coeffs.b0 * xn + coeffs.b1 * xn_1 + coeffs.b2 * xn_2 - coeffs.a1 * yn_1 - coeffs.a2 * yn_2) >> 8;
 
-    return output;
+    yn=(q23_8_multiply(filter.b0, xn) + q23_8_multiply(filter.b1, xn_1) + q23_8_multiply(filter.b2, xn_2) - q23_8_multiply(filter.a1, yn_1) - q23_8_multiply(filter.a2, yn_2)) >> 8;
+
+    //int64_t temp1 = (int64_t)filter.b0 * xn + (int64_t)filter.b1 * xn_1 + (int64_t)filter.b2 * xn_2;
+    //int64_t temp2 = (int64_t)filter.a1 * yn_1 + (int64_t)filter.a2 * yn_2;
+    //yn = (int32_t)((temp1 - temp2) >> 8);
+
+    filter.filterState[i * 2] = xn;
+    filter.filterState[i * 2 + 1] = xn_1;
+    filter.filterState[i * 2 + 2] = yn;
+    filter.filterState[i * 2 + 3] = yn_1;
+
+    xn = yn;
+  }
+
+  return(yn);
 }
 
 void Dexed::setFilterCutoff(float v) {
-    if(v>0.0 || v<1.0) {
-    	float f0=mapfloat(powf(v,4.0),0.0,1.0,20.0,20000.0);
-    	setFilterCutoffFrequency(f0);
-    }
+  float cutoff=mapfloat(powf(v,4.0),0.0,1.0,20.0,20000.0);
+
+  setFilterCutoffFrequency(cutoff);
 }
 
-void Dexed::setFilterCutoffFrequency(float f0) {
-    if(f0 < 20.0)
-	f0=20.0;
-    if(f0 > 20000.0)
-	f0=20000;
+void Dexed::setFilterCutoffFrequency(float cutoff) {
+  filter.cutoff=cutoff;
 
-    init_four_pole_lowpass_filter(&filter, f0, filter.stage1.Q * filter.stage1.Q);
+  updateCoefficients();
 }
 
 float Dexed::getFilterCutoff(void) {
-    	float v=exp(mapfloat(filter.stage1.f0,20.0,20000.0,0.0,1.0)/4.0);
-	return(v);
+  return(exp(mapfloat(filter.cutoff,20.0,20000.0,0.0,1.0)/4.0));
 }
 
 float Dexed::getFilterCutoffFrequency(void) {
-	return(filter.stage1.f0);
+  return(filter.cutoff);
 }
 
-void Dexed::setFilterResonance(float Q) {
-    float Q_stage = sqrtf(mapfloat(Q,0.0,1.0,0.1,10.0));
-    filter.stage1.Q = Q_stage;
-    filter.stage2.Q = Q_stage;
-    init_four_pole_lowpass_filter(&filter, filter.stage1.f0, Q);
+void Dexed::setFilterResonance(float resonance) {
+  filter.resonance=resonance;
+
+  updateCoefficients();
 }
 
 float Dexed::getFilterResonance(void) {
-	return(pow(filter.stage1.Q,2.0));
-}
-
-int16_t Dexed::four_pole_lowpass_filter(FourPoleLowPassFilter* filter, int16_t input) {
-    int16_t temp = lowpass_filter(&filter->stage1, input);
-    return lowpass_filter(&filter->stage2, temp);
+  return(filter.resonance);
 }
 
 void Dexed::setFilterEnable(bool enable) {
-	filter_enabled=enable;
+  filter_enabled=enable;
 }
 
 bool Dexed::getFilterEnable(void) {
-	return(filter_enabled);
-}
-
-void Dexed::Filter(int16_t *buffer, uint16_t numSamples) {
-    if(filter_enabled) {
-    	for (uint32_t i = 0; i < numSamples; i++) {
-        	buffer[i] = four_pole_lowpass_filter(&filter, buffer[i]);
-    	}
-    }
+  return(filter_enabled);
 }
 /*
  * End Filter code
@@ -329,7 +310,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   setMonoMode(false);
   loadInitVoice();
 
-  gain=float_to_q15(1.0);
+  gain=float_to_q0_15(1.0);
 
   xrun = 0;
   render_time_max = 0;
@@ -347,7 +328,7 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 #endif
 
 #ifdef USE_FILTER
-  initFilter(20000.0,0.5);
+  initFilter(5000.0,0.5);
 #endif
 }
 
@@ -416,6 +397,8 @@ void Dexed::deactivate(void)
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
+  int32_t q23_8_buffer[AUDIO_BLOCK_SAMPLES];
+
   if (refreshVoice)
   {
     for (uint8_t i = 0; i < used_notes; i++)
@@ -427,8 +410,10 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     refreshVoice = false;
   }
 
-  for (uint16_t i = 0; i < n_samples; i++)
+  for (uint16_t i = 0; i < n_samples; i++) {
     buffer[i]=0;
+    q23_8_buffer[i]=0;
+  }
   
   for (uint16_t i = 0; i < n_samples; i += _N_)
   {
@@ -450,24 +435,21 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
-#if defined(TEENSYDUINO)
-          buffer[i + j] += signed_saturate_rshift(audiobuf.get()[j] >> 4, 24, 9);
+#ifdef USE_FILTER
+          q23_8_buffer[i + j] += lowpassFilter(audiobuf.get()[j]);
 #else
-          buffer[i + j] += q24_8_to_q1_15_with_saturation(audiobuf.get()[j] >> 4);
+          q23_8_buffer[i + j] += audiobuf.get()[j];
 #endif
-          //buffer[i + j] += audiobuf.get()[j]>>13;
           audiobuf.get()[j] = 0;
         }
       }
     }
-    buffer[i]=q15_multiply(buffer[i],gain);
   }
 #ifdef USE_COMPRESSOR
-  Compress(buffer,buffer,n_samples);
+  //Compress(buffer,buffer,n_samples);
 #endif
-#ifdef USE_FILTER
-  Filter(buffer,n_samples);
-#endif
+  for (uint16_t i = 0; i < n_samples; i += _N_)
+    buffer[i]=q0_15_multiply(q23_8_to_q0_15_with_saturation(q23_8_buffer[i]),gain);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
@@ -1502,12 +1484,12 @@ uint8_t Dexed::getAftertouchTarget(void)
 
 void Dexed::setGain(float fgain)
 {
-  gain=float_to_q15(fgain);
+  gain=float_to_q0_15(fgain);
 }
 
 float Dexed::getGain(void)
 {
-  return(q15_to_float(gain));
+  return(q0_15_to_float(gain));
 }
 
 void Dexed::setOPRateAll(uint8_t rate)
