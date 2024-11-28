@@ -883,7 +883,7 @@ void Dexed::setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando,
   portamento_time = constrain(portamento_time, 0, 99);
 
   controllers.portamento_cc = portamento_time;
-  controllers.portamento_enable_cc = portamento_mode > 63;
+  controllers.portamento_enable_cc = portamento_mode > 0;
 
   if (portamento_time > 0)
     controllers.portamento_enable_cc = true;
@@ -898,7 +898,7 @@ void Dexed::setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando,
 void Dexed::setPortamentoMode(uint8_t portamento_mode)
 {
   portamento_mode = constrain(portamento_mode, 0, 1);
-  controllers.portamento_enable_cc = portamento_mode > 63;
+  controllers.portamento_enable_cc = portamento_mode > 0;
 
   controllers.refresh();
 }
