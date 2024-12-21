@@ -1781,14 +1781,15 @@ uint8_t Dexed::getTranspose(void)
   return (data[DEXED_VOICE_OFFSET + DEXED_TRANSPOSE]);
 }
 
-void Dexed::setName(char* name)
+void Dexed::setName(char name[11])
 {
-  strncpy(name, (char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], 10);
+  strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], name, 10);
 }
 
-void Dexed::getName(char* buffer)
+void Dexed::getName(char buffer[11])
 {
-  strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], buffer, 10);
+  strncpy(buffer, (char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], 10);
+  buffer[10] = 0;
 }
 
 void Dexed::setVelocityScale(uint8_t offset, uint8_t max)
