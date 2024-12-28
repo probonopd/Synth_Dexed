@@ -69,7 +69,7 @@ class FmMod {
 
     uint8_t getTarget(void)
     {
-      return (pitch & amp & eg);
+      return (pitch | amp << 1 | eg << 2);
     }
 
     void setMode(uint8_t m)
