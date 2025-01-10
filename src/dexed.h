@@ -342,8 +342,8 @@ class Dexed
     uint8_t getLFOPitchModulationSensitivity(void);
     void setTranspose(uint8_t transpose);
     uint8_t getTranspose(void);
-    void setName(char* name);
-    void getName(char* buffer);
+    void setName(char name[11]);
+    void getName(char buffer[11]);
 
     ProcessorVoice* voices;
 
