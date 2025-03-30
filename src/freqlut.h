@@ -19,5 +19,6 @@
 class Freqlut {
   public:
     static void init(FRAC_NUM sample_rate);
+    static bool initDone;
     static int32_t lookup(int32_t logfreq);
 };

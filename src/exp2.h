@@ -19,6 +19,7 @@ class Exp2 {
     Exp2();
 
     static void init();
+    static bool initDone;
 
     // Q24 in, Q24 out
     static int32_t lookup(int32_t x);
@@ -47,7 +48,9 @@ int32_t Exp2::lookup(int32_t x) {
 
 class Tanh {
   public:
+    Tanh();
     static void init();
+    static bool initDone;
 
     // Q24 in, Q24 out
     static int32_t lookup(int32_t x);

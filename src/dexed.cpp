@@ -38,31 +38,37 @@
 #include "porta.h"
 #include "compressor.h"
 
+extern void setTimestamp(int n);
+
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
  : voices{nullptr},
   samplerate{float32_t(rate)},
    max_notes{maxnotes},
    engineMsfa{nullptr}, engineMkI{nullptr}, engineOpl{nullptr}
 {
-Serial.print("Dexed instance ..."); Serial.flush();
-
+// Serial.print("Dexed instance ..."); Serial.flush();
+setTimestamp(0);
   Exp2::init();
   Tanh::init();
   Sin::init();
-Serial.print(" maths ..."); Serial.flush();
+// Serial.print(" maths ..."); Serial.flush();
+setTimestamp(1);
 
   Freqlut::init(rate);
   Lfo::init(rate);
   PitchEnv::init(rate);
   Env::init_sr(rate);
   Porta::init_sr(rate);
-Serial.print(" control ..."); Serial.flush();
+setTimestamp(2);
+  // Serial.print(" control ..."); Serial.flush();
   fx.init(rate);
-Serial.print(" fx ..."); Serial.flush();
+// Serial.print(" fx ..."); Serial.flush();
+setTimestamp(3);
 
   currentNote = 0;
   resetControllers();
-Serial.print(" reset ..."); Serial.flush();
+// Serial.print(" reset ..."); Serial.flush();
+setTimestamp(4);
   controllers.masterTune = 0;
   controllers.opSwitch = 0x3f; // enable all operators
   lastKeyDown = -1;
@@ -76,6 +82,7 @@ Serial.print(" reset ..."); Serial.flush();
   if (max_notes > 0)
   {
     voices = new ProcessorVoice[max_notes]; // sizeof(ProcessorVoice) = 20
+setTimestamp(5);
     for (uint8_t i = 0; i < max_notes; i++)
     {
       voices[i].dx7_note = new Dx7Note; // sizeof(Dx7Note) = 692
@@ -89,12 +96,14 @@ Serial.print(" reset ..."); Serial.flush();
   }
   else
     voices = NULL;
-Serial.print(" voices ..."); Serial.flush();
+// Serial.print(" voices ..."); Serial.flush();
+setTimestamp(6);
 
   used_notes=max_notes;
   setMonoMode(false);
   loadInitVoice();
-Serial.print(" voice init ..."); Serial.flush();
+// Serial.print(" voice init ..."); Serial.flush();
+setTimestamp(7);
 
   xrun = 0;
   render_time_max = 0;
@@ -103,11 +112,14 @@ Serial.print(" voice init ..."); Serial.flush();
   setNoteRefreshMode(false);
 
   engineMsfa = new EngineMsfa;
+setTimestamp(8);
   engineMkI = new EngineMkI;
+setTimestamp(9);
   engineOpl = new EngineOpl;
-Serial.print(" create engines ..."); Serial.flush();
+// Serial.print(" create engines ..."); Serial.flush();
+setTimestamp(10);
   setEngineType(MKI);
-Serial.println(" created"); Serial.flush();
+// Serial.println(" created"); Serial.flush();
 #ifndef TEENSYDUINO
   compressor = new Compressor(samplerate);
 #endif
@@ -124,7 +136,7 @@ Dexed::~Dexed()
   delete engineMsfa;
   delete engineMkI;
   delete engineOpl;
-Serial.println("Dexed instance destroyed");
+// Serial.println("Dexed instance destroyed");
 }
 
 void Dexed::setEngineType(uint8_t engine)
