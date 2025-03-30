@@ -129,7 +129,9 @@ class Controllers {
     FmMod breath;
     FmMod at;
 
-    Controllers() {
+    Controllers() 
+      : core{nullptr}
+    {
       amp_mod = 0;
       pitch_mod = 0;
       eg_mod = 0;
