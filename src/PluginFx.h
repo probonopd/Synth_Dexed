@@ -21,6 +21,7 @@
 #pragma once
 
 #include "stdint.h"
+#include "synth.h"
 
 class PluginFx {
     float s1, s2, s3, s4;
@@ -66,7 +67,7 @@ class PluginFx {
     float Reso;
     float Gain;
 
-    void init(uint16_t sampleRate);
+    void init(FRAC_NUM sampleRate);
     void process(float *work, uint16_t sampleSize);
     float getGain(void);
 };

@@ -18,10 +18,11 @@
 #define SYNTH_PORTA_H_
 
 #include <stdint.h>
+#include "synth.h"
 
 struct Porta {
   public:
-    static void init_sr(double sampleRate);
+    static void init_sr(FRAC_NUM sampleRate);
     static bool initDone;
     static int32_t rates[128];
 };

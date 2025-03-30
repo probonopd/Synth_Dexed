@@ -40,7 +40,7 @@
 
 extern void setTimestamp(int n);
 
-Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
+Dexed::Dexed(uint8_t maxnotes, uint32_t rate)
  : voices{nullptr},
   samplerate{float32_t(rate)},
    max_notes{maxnotes},
@@ -54,14 +54,14 @@ setTimestamp(0);
 // Serial.print(" maths ..."); Serial.flush();
 setTimestamp(1);
 
-  Freqlut::init(rate);
-  Lfo::init(rate);
-  PitchEnv::init(rate);
-  Env::init_sr(rate);
-  Porta::init_sr(rate);
+  Freqlut::init(samplerate);
+  Lfo::init(samplerate);
+  PitchEnv::init(samplerate);
+  Env::init_sr(samplerate);
+  Porta::init_sr(samplerate);
 setTimestamp(2);
   // Serial.print(" control ..."); Serial.flush();
-  fx.init(rate);
+  fx.init(samplerate);
 // Serial.print(" fx ..."); Serial.flush();
 setTimestamp(3);
 

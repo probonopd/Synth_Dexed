@@ -19,7 +19,7 @@
 #include "synth.h"
 
 bool Porta::initDone = false;
-void Porta::init_sr(double sampleRate)
+void Porta::init_sr(FRAC_NUM sampleRate)
 {
   if (initDone)
     return;
