@@ -49,7 +49,7 @@ static const uint16_t SINEXP_TABLESIZE = 1<<SINEXP_BITDEPTH;
 TABLE_MEM static uint16_t sinExpTable[SINEXP_TABLESIZE];
 
 const uint16_t ENV_MAX = 1<<ENV_BITDEPTH;
-static bool EngineMkI::initDone = false;
+bool EngineMkI::initDone = false;
 
 static inline uint16_t sinLog(uint16_t phi) {
     const uint16_t SINLOG_TABLEFILTER = SINLOG_TABLESIZE-1;
