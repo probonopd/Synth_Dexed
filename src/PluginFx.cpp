@@ -58,7 +58,7 @@ PluginFx::PluginFx() {
   Gain = 1.0;
 }
 
-void PluginFx::init(uint16_t sr) {
+void PluginFx::init(FRAC_NUM sr) {
   mm = 0;
   s1 = s2 = s3 = s4 = c = d = 0;
   R24 = 0;

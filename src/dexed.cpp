@@ -38,20 +38,26 @@
 #include "porta.h"
 #include "compressor.h"
 
-Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
-{
-  samplerate = float32_t(rate);
 
+Dexed::Dexed(uint8_t maxnotes, uint32_t rate)
+ : voices{nullptr},
+   samplerate{float32_t(rate)},
+   max_notes{maxnotes},
+   engineMsfa{nullptr}, engineMkI{nullptr}, engineOpl{nullptr}
+#if !defined(TEENSYDUINO)
+   , compressor{nullptr}
+#endif // !defined(TEENSYDUINO)
+   {
   Exp2::init();
   Tanh::init();
   Sin::init();
 
-  Freqlut::init(rate);
-  Lfo::init(rate);
-  PitchEnv::init(rate);
-  Env::init_sr(rate);
-  Porta::init_sr(rate);
-  fx.init(rate);
+  Freqlut::init(samplerate);
+  Lfo::init(samplerate);
+  PitchEnv::init(samplerate);
+  Env::init_sr(samplerate);
+  Porta::init_sr(samplerate);
+  fx.init(samplerate);
 
   currentNote = 0;
   resetControllers();
@@ -96,7 +102,6 @@ Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
   engineMkI = new EngineMkI;
   engineOpl = new EngineOpl;
   setEngineType(MKI);
-
 #ifndef TEENSYDUINO
   compressor = new Compressor(samplerate);
 #endif
@@ -110,6 +115,12 @@ Dexed::~Dexed()
   for (uint8_t note = 0; note < max_notes; note++)
     delete voices[note].dx7_note;
   delete[] voices;
+  delete engineMsfa;
+  delete engineMkI;
+  delete engineOpl;
+#if !defined(TEENSYDUINO)
+  delete compressor;
+#endif // !defined(TEENSYDUINO)
 }
 
 void Dexed::setEngineType(uint8_t engine)

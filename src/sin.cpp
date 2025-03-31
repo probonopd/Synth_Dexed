@@ -23,12 +23,18 @@
 #define R (1 << 29)
 
 #ifdef SIN_DELTA
-int32_t sintab[SIN_N_SAMPLES << 1];
+TABLE_MEM int32_t sintab[SIN_N_SAMPLES << 1];
 #else
-int32_t sintab[SIN_N_SAMPLES + 1];
+TABLE_MEM int32_t sintab[SIN_N_SAMPLES + 1];
 #endif
 
+bool Sin::initDone = false;
 void Sin::init() {
+  if (initDone)
+    return;
+
+  initDone = true;
+  
   FRAC_NUM dphase = 2 * M_PI / SIN_N_SAMPLES;
   //int32_t c = (int32_t)floor(cos(dphase) * (1 << 30) + 0.5);
   int32_t c = (int32_t)floor(COS_FUNC(dphase) * (1 << 30) + 0.5);

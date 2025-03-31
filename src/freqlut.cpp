@@ -31,9 +31,15 @@
 
 #define MAX_LOGFREQ_INT 20
 
-int32_t lut[N_SAMPLES + 1];
+TABLE_MEM int32_t lut[N_SAMPLES + 1];
 
+bool Freqlut::initDone = false;
 void Freqlut::init(FRAC_NUM sample_rate) {
+  if (initDone)
+    return;
+
+  initDone = true;
+  
   FRAC_NUM y = (1LL << (24 + MAX_LOGFREQ_INT)) / sample_rate;
   FRAC_NUM inc = pow(2, 1.0 / N_SAMPLES);
   for (int i = 0; i < N_SAMPLES + 1; i++) {

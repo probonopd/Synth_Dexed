@@ -19,6 +19,7 @@ class Sin {
     Sin();
 
     static void init();
+    static bool initDone;
     static int32_t lookup(int32_t phase);
     static int32_t compute(int32_t phase);
 

@@ -26,9 +26,15 @@
 #define exp2(arg) pow(2.0, arg)
 #endif
 
-int32_t exp2tab[EXP2_N_SAMPLES << 1];
+TABLE_MEM int32_t exp2tab[EXP2_N_SAMPLES << 1];
 
+bool Exp2::initDone = false;
 void Exp2::init() {
+  if (initDone)
+    return;
+
+  initDone = true;
+
   FRAC_NUM inc = exp2(1.0 / EXP2_N_SAMPLES);
   FRAC_NUM y = 1 << 30;
   for (int i = 0; i < EXP2_N_SAMPLES; i++) {
@@ -41,13 +47,20 @@ void Exp2::init() {
   exp2tab[(EXP2_N_SAMPLES << 1) - 2] = (1U << 31) - exp2tab[(EXP2_N_SAMPLES << 1) - 1];
 }
 
-int32_t tanhtab[TANH_N_SAMPLES << 1];
+
+TABLE_MEM int32_t tanhtab[TANH_N_SAMPLES << 1];
 
 static FRAC_NUM dtanh(FRAC_NUM y) {
   return 1 - y * y;
 }
 
+bool Tanh::initDone = false;
 void Tanh::init() {
+  if (initDone)
+    return;
+
+  initDone = true;
+  
   FRAC_NUM step = 4.0 / TANH_N_SAMPLES;
   FRAC_NUM y = 0;
   for (int i = 0; i < TANH_N_SAMPLES; i++) {

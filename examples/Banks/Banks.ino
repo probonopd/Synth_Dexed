@@ -2,7 +2,7 @@
 #include "synth_dexed.h"
 #include "banks.h"
 
-AudioSynthDexed          dexed(4, SAMPLE_RATE); // 4 voices max
+AudioSynthDexed          dexed(4, DEXED_SAMPLE_RATE); // 4 voices max
 AudioOutputI2S           i2s1;
 AudioControlSGTL5000     sgtl5000_1;
 AudioConnection          patchCord1(dexed, 0, i2s1, 0);

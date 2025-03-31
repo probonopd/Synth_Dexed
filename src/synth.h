@@ -21,6 +21,16 @@
 
 #include <stdint.h>
 
+// For TeensyDuino, put lookup tables
+// in DMAMEM - they're initialised in code
+// so this is safe, and saves RAM1 space
+#if defined(TEENSYDUINO)
+#include <WProgram.h> // for DMAMEM definition
+#define TABLE_MEM DMAMEM
+#else
+#define TABLE_MEM
+#endif // defined(TEENSYDUINO)
+
 #define MIDI_CONTROLLER_MODE_MAX 2
 #define TRANSPOSE_FIX 24
 #define VOICE_SILENCE_LEVEL 1100
