@@ -44,7 +44,7 @@ const int32_t statics[] = {
 };
 #endif
 
-void Env::init_sr(double sampleRate) {
+void Env::init_sr(FRAC_NUM sampleRate) {
   sr_multiplier = (44100.0 / sampleRate) * (1 << 24);
 }
 

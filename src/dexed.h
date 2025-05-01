@@ -167,7 +167,7 @@ enum ENGINES {
 class Dexed
 {
   public:
-    Dexed(uint8_t maxnotes, uint16_t rate);
+    Dexed(uint8_t maxnotes, uint32_t rate);
     ~Dexed();
 
     // Global methods
@@ -361,7 +361,7 @@ class Dexed
       03, 48,                                                                             // pitch_mod_sensitivity, transpose
       73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
     };
-    float samplerate;
+    FRAC_NUM samplerate;
     uint8_t data[NUM_VOICE_PARAMETERS];
     uint8_t max_notes;
     uint8_t used_notes;

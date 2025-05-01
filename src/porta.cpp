@@ -18,8 +18,14 @@
 #include "porta.h"
 #include "synth.h"
 
-void Porta::init_sr(double sampleRate)
+bool Porta::initDone = false;
+void Porta::init_sr(FRAC_NUM sampleRate)
 {
+  if (initDone)
+    return;
+
+  initDone = true;
+  
   // compute portamento for CC 7-bit range
 
   for (uint8_t i = 0; i < 128; ++i) {
@@ -32,4 +38,4 @@ void Porta::init_sr(double sampleRate)
   }
 }
 
-int32_t Porta::rates[128];
+TABLE_MEM int32_t Porta::rates[128];

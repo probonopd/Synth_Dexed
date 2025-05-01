@@ -42,13 +42,14 @@ static const uint16_t ENV_BITDEPTH = 14;
 
 static const uint16_t SINLOG_BITDEPTH = 10;
 static const uint16_t SINLOG_TABLESIZE = 1<<SINLOG_BITDEPTH;
-static uint16_t sinLogTable[SINLOG_TABLESIZE];
+TABLE_MEM static uint16_t sinLogTable[SINLOG_TABLESIZE];
 
 static const uint16_t SINEXP_BITDEPTH = 10;
 static const uint16_t SINEXP_TABLESIZE = 1<<SINEXP_BITDEPTH;
-static uint16_t sinExpTable[SINEXP_TABLESIZE];
+TABLE_MEM static uint16_t sinExpTable[SINEXP_TABLESIZE];
 
 const uint16_t ENV_MAX = 1<<ENV_BITDEPTH;
+bool EngineMkI::initDone = false;
 
 static inline uint16_t sinLog(uint16_t phi) {
     const uint16_t SINLOG_TABLEFILTER = SINLOG_TABLESIZE-1;
@@ -67,19 +68,24 @@ static inline uint16_t sinLog(uint16_t phi) {
 }
 
 EngineMkI::EngineMkI() {
-    float bitReso = SINLOG_TABLESIZE;
     
-    for(int32_t i=0;i<SINLOG_TABLESIZE;i++) {
-        float x1 = sin(((0.5+i)/bitReso) * M_PI/2.0);
-        sinLogTable[i] = round(-1024 * log2(x1));
+    if (!initDone)
+    {
+        float bitReso = SINLOG_TABLESIZE;
+        for(int32_t i=0;i<SINLOG_TABLESIZE;i++) {
+            float x1 = sin(((0.5+i)/bitReso) * M_PI/2.0);
+            sinLogTable[i] = round(-1024 * log2(x1));
+        }
+        
+        bitReso = SINEXP_TABLESIZE;
+        for(int32_t i=0;i<SINEXP_TABLESIZE;i++) {
+            float x1 = (pow(2, float(i)/bitReso)-1) * 4096;
+            sinExpTable[i] = round(x1);
+        }
+
+        initDone = true;
     }
-    
-    bitReso = SINEXP_TABLESIZE;
-    for(int32_t i=0;i<SINEXP_TABLESIZE;i++) {
-        float x1 = (pow(2, float(i)/bitReso)-1) * 4096;
-        sinExpTable[i] = round(x1);
-    }
-    
+
 #ifdef MKIDEBUG
     uint8_t buffer[4096];
     int32_t pos = 0;

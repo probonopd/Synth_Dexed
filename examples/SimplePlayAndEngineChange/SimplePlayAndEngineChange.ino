@@ -101,7 +101,7 @@ uint8_t test_sysex[][156] = {
     32, 50, 32, 63 },
 };
 
-AudioSynthDexed dexed(16, SAMPLE_RATE);  // 4 voices max
+AudioSynthDexed dexed(16, DEXED_SAMPLE_RATE);  // 4 voices max
 AudioOutputI2S i2s1;
 AudioControlSGTL5000 sgtl5000_1;
 AudioConnection patchCord1(dexed, 0, i2s1, 0);

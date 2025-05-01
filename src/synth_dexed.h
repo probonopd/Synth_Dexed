@@ -32,7 +32,7 @@
 
 #define SYNTH_DEXED_VERSION "1.0.1"
 //#define DEBUG 1
-#define SAMPLE_RATE 44100
+#define DEXED_SAMPLE_RATE AUDIO_SAMPLE_RATE // 44100
 
 #define TRANSPOSE_FIX 24
 #define VOICE_SILENCE_LEVEL 1100
@@ -58,14 +58,14 @@
 //#define USE_SIMPLE_COMPRESSOR 1
 
 #if defined(TEENSYDUINO)
-class AudioSynthDexed : public AudioStream, public Dexed
+class AudioSynthDexed : public Dexed, public AudioStream
 {
   public:
 
-    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : AudioStream(0, NULL), Dexed(max_notes,sample_rate) { };
+    AudioSynthDexed(uint8_t max_notes, uint16_t sample_rate) : Dexed(max_notes,sample_rate), AudioStream(0, NULL)  { };
 
   protected:
-    const uint16_t audio_block_time_us = 1000000 / (SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
+    const uint16_t audio_block_time_us = 1000000 / (DEXED_SAMPLE_RATE / AUDIO_BLOCK_SAMPLES);
     volatile bool in_update = false;
     void update(void);
 };
