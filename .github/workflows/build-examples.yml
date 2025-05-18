@@ -2,8 +2,9 @@ name: Build Arduino Examples for Teensy
 
 on:
   push:
+    branches: [ main, master ]
   pull_request:
-  workflow_dispatch:
+    branches: [ main, master ]
 
 jobs:
   build:
@@ -11,13 +12,6 @@ jobs:
     strategy:
       matrix:
         board: [teensy35, teensy36, teensy40, teensy41]
-        example:
-          - examples/Banks/Banks.ino
-          - examples/VolumeChange/VolumeChange.ino
-          - examples/SimplePlayAndEngineChange/SimplePlayAndEngineChange.ino
-          - examples/SimplePlay/SimplePlay.ino
-          - examples/SimpleDexed/SimpleDexed.ino
-          - examples/DexedFilter/DexedFilter.ino
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -26,8 +20,9 @@ jobs:
           python-version: '3.x'
       - name: Install PlatformIO
         run: pip install platformio
-      - name: Build example
-        run: >
-          pio ci "${{ matrix.example }}" \
-            --board=${{ matrix.board }} \
-            --lib="."
+      - name: Build all examples for ${{ matrix.board }}
+        run: |
+          for example in examples/*/*.ino; do
+            echo "Building $example for ${{ matrix.board }}"
+            pio ci "$example" --board=${{ matrix.board }} --lib="."
+          done

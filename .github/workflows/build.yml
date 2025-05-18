@@ -21,9 +21,9 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
 
-      - name: Install dependencies (macOS)
-        if: startsWith(matrix.os, 'macos')
-        run: brew install --cask cmake
+#      - name: Install dependencies (macOS)
+#        if: startsWith(matrix.os, 'macos')
+#        run: brew install --cask cmake
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
