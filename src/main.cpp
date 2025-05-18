@@ -150,6 +150,109 @@ int main() {
     delete synth;
     return 0;
 }
+#elif defined(__APPLE__)
+#include "dexed.h"
+#include <CoreAudio/CoreAudio.h>
+#include <AudioUnit/AudioUnit.h>
+#include <CoreMIDI/CoreMIDI.h>
+#include <iostream>
+#include <thread>
+#include <atomic>
+#include <vector>
+#include <string>
+
+constexpr unsigned int SAMPLE_RATE = 44100;
+constexpr unsigned int BUFFER_FRAMES = 512;
+constexpr uint8_t MAX_NOTES = 16;
+constexpr unsigned int NUM_BUFFERS = 4;
+
+std::atomic<bool> running{true};
+Dexed* synth = nullptr;
+
+// --- Audio callback ---
+static OSStatus audioCallback(
+    void* inRefCon,
+    AudioUnitRenderActionFlags* ioActionFlags,
+    const AudioTimeStamp* inTimeStamp,
+    UInt32 inBusNumber,
+    UInt32 inNumberFrames,
+    AudioBufferList* ioData)
+{
+    Dexed* synth = reinterpret_cast<Dexed*>(inRefCon);
+    int16_t* buffer = reinterpret_cast<int16_t*>(ioData->mBuffers[0].mData);
+    synth->getSamples(buffer, inNumberFrames);
+    return noErr;
+}
+
+// --- MIDI callback ---
+void midiReadProc(const MIDIPacketList* pktlist, void* readProcRefCon, void* srcConnRefCon) {
+    Dexed* synth = reinterpret_cast<Dexed*>(readProcRefCon);
+    const MIDIPacket* packet = &pktlist->packet[0];
+    for (unsigned int i = 0; i < pktlist->numPackets; ++i) {
+        const uint8_t* data = packet->data;
+        uint8_t status = data[0] & 0xF0;
+        uint8_t note = data[1] & 0x7F;
+        uint8_t velocity = data[2] & 0x7F;
+        if (status == 0x90 && velocity > 0) {
+            synth->keydown(note, velocity);
+        } else if ((status == 0x80) || (status == 0x90 && velocity == 0)) {
+            synth->keyup(note);
+        }
+        packet = MIDIPacketNext(packet);
+    }
+}
+
+int main() {
+    synth = new Dexed(MAX_NOTES, SAMPLE_RATE);
+    synth->loadInitVoice();
+    // --- FORCE ALL OPERATOR OUTPUT LEVELS TO 99 AND ALGORITHM TO 0 FOR TESTING ---
+    for (int op = 0; op < 6; ++op) {
+        synth->setOPOutputLevel(op, 99);
+    }
+    synth->setAlgorithm(0);
+    // --------------------------------------------------------------------------
+
+    // --- Set up CoreAudio output ---
+    AudioComponentDescription desc = {kAudioUnitType_Output, kAudioUnitSubType_DefaultOutput, kAudioUnitManufacturer_Apple, 0, 0};
+    AudioComponent comp = AudioComponentFindNext(NULL, &desc);
+    AudioUnit audioUnit;
+    AudioComponentInstanceNew(comp, &audioUnit);
+    AudioStreamBasicDescription asbd = {};
+    asbd.mSampleRate = SAMPLE_RATE;
+    asbd.mFormatID = kAudioFormatLinearPCM;
+    asbd.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    asbd.mFramesPerPacket = 1;
+    asbd.mChannelsPerFrame = 1;
+    asbd.mBitsPerChannel = 16;
+    asbd.mBytesPerPacket = 2;
+    asbd.mBytesPerFrame = 2;
+    AudioUnitSetProperty(audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &asbd, sizeof(asbd));
+    AURenderCallbackStruct cb = { audioCallback, synth };
+    AudioUnitSetProperty(audioUnit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb));
+    AudioUnitInitialize(audioUnit);
+    AudioOutputUnitStart(audioUnit);
+
+    // --- Set up CoreMIDI input ---
+    MIDIClientRef midiClient;
+    MIDIInputPortRef inputPort;
+    MIDIClientCreate(CFSTR("Synth_Dexed"), NULL, NULL, &midiClient);
+    MIDIInputPortCreate(midiClient, CFSTR("Input"), midiReadProc, synth, &inputPort);
+    // Connect all MIDI sources
+    ItemCount nSrcs = MIDIGetNumberOfSources();
+    for (ItemCount i = 0; i < nSrcs; ++i) {
+        MIDIEndpointRef src = MIDIGetSource(i);
+        MIDIPortConnectSource(inputPort, src, NULL);
+    }
+    std::cout << "Synth_Dexed running (CoreAudio/CoreMIDI). Press Enter to quit.\n";
+    std::cin.get();
+    running = false;
+    AudioOutputUnitStop(audioUnit);
+    AudioUnitUninitialize(audioUnit);
+    AudioComponentInstanceDispose(audioUnit);
+    MIDIClientDispose(midiClient);
+    delete synth;
+    return 0;
+}
 #else // Linux/ALSA
 #include "dexed.h"
 #include <alsa/asoundlib.h>
