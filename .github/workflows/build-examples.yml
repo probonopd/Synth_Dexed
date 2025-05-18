@@ -23,6 +23,7 @@ jobs:
       - name: Build all examples for ${{ matrix.board }}
         run: |
           for example in examples/*/*.ino; do
+            example_dir=$(dirname "$example")
             echo "Building $example for ${{ matrix.board }}"
-            pio ci "$example" --board=${{ matrix.board }} --lib="."
+            pio ci "$example" --board=${{ matrix.board }} --lib="." --project-option="build_flags=-I$example_dir"
           done
