@@ -1,0 +1,72 @@
+name: Build
+
+on:
+  push:
+    branches: [ native ]
+  pull_request:
+    branches: [ native ]
+  workflow_dispatch:
+
+env:
+  BUILD_DIR: build/${{ runner.os }}
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install CMake
+        uses: lukka/get-cmake@v3
+
+      - name: Configure
+        run: cmake -S . -B "${{ env.BUILD_DIR }}" -A x64
+
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config Release
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-build
+          path: "${{ env.BUILD_DIR }}/Release"
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
+
+      - name: Configure
+        run: cmake -S . -B "${{ env.BUILD_DIR }}"
+
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config Release
+
+      - name: Upload Linux build
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-build
+          path: "${{ env.BUILD_DIR }}"
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: brew install cmake
+
+      - name: Configure
+        run: cmake -S . -B "${{ env.BUILD_DIR }}"
+
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config Release
+
+      - name: Upload Mac build
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-build
+          path: "${{ env.BUILD_DIR }}"
