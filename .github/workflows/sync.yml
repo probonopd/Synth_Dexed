@@ -1,0 +1,53 @@
+name: Sync from Codeberg
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        branch: [master, dev]
+
+    steps:
+    - name: Checkout GitHub repo
+      uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+
+    - name: Set up Git user
+      run: |
+        git config user.name "GitHub Action"
+        git config user.email "actions@github.com"
+
+    - name: Add Codeberg remote and fetch
+      run: |
+        git remote add upstream https://codeberg.org/dcoredump/Synth_Dexed.git || true
+        git fetch upstream
+
+    - name: Sync ${{ matrix.branch }} branch
+      run: |
+        # Check out or create the branch locally
+        git checkout -B ${{ matrix.branch }}
+
+        # Hard reset to upstream branch (mirror)
+        git reset --hard upstream/${{ matrix.branch }}
+
+        # Make sure workflow file is removed in synced branch
+        git rm -r --cached .github/workflows || true
+        rm -rf .github/workflows || true
+
+        # Commit removal if needed
+        if ! git diff --quiet; then
+          git commit -m "Remove GitHub Actions workflow from ${{ matrix.branch }}"
+        fi
+
+    - name: Force push ${{ matrix.branch }} to GitHub
+      uses: ad-m/github-push-action@v0.8.0
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        force: true
+        branch: ${{ matrix.branch }}
