@@ -1,4 +1,4 @@
-name: Build
+name: Build Executables
 
 on:
   push:
@@ -8,67 +8,35 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    env:
-      BUILD_DIR: build/Windows
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-13, windows-2022, ubuntu-22.04-arm]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: lukka/get-cmake@latest
-
-      - name: Configure
-        run: cmake -S . -B "${{ env.BUILD_DIR }}" -A x64
-
-      - name: Build
-        run: cmake --build "${{ env.BUILD_DIR }}" --config Release
-
-      - name: Upload Windows build
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-build
-          path: "${{ env.BUILD_DIR }}/Release"
-
-  build-linux:
-    runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: build/Linux
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: Install dependencies (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
 
-      - name: Configure
-        run: cmake -S . -B "${{ env.BUILD_DIR }}"
-
-      - name: Build
-        run: cmake --build "${{ env.BUILD_DIR }}" --config Release
-
-      - name: Upload Linux build
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-build
-          path: "${{ env.BUILD_DIR }}"
-
-  build-macos:
-    runs-on: macos-latest
-    env:
-      BUILD_DIR: build/macOS
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: Install dependencies (macOS)
+        if: startsWith(matrix.os, 'macos')
         run: brew install cmake
 
+      - name: Install dependencies (Windows)
+        if: startsWith(matrix.os, 'windows')
+        uses: lukka/get-cmake@latest
+
       - name: Configure
-        run: cmake -S . -B "${{ env.BUILD_DIR }}"
+        run: cmake -S . -B build
 
       - name: Build
-        run: cmake --build "${{ env.BUILD_DIR }}" --config Release
+        run: cmake --build build --config Release
 
-      - name: Upload Mac build
+      - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: macos-build
-          path: "${{ env.BUILD_DIR }}"
+          name: ${{ matrix.os }}-build
+          path: build
