@@ -1,4 +1,4 @@
-name: Build Arduino Examples for Teensy
+name: Teensy
 
 on:
   push:
