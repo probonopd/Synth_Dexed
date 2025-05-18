@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
-        run: brew install cmake
+        run: brew install --cask cmake
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
