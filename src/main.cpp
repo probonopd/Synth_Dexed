@@ -81,6 +81,8 @@ int main() {
     UINT audioDev = 0;
     std::cin >> audioDev;
     std::cin.ignore();
+    // Log selected audio device
+    std::cout << "[INFO] Selected audio device: " << audioDev << std::endl;
 
     // List MIDI input devices
     UINT numMidiDevs = midiInGetNumDevs();
@@ -105,16 +107,19 @@ int main() {
     wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
     wfx.cbSize = 0;
     if (waveOutOpen(&hWaveOut, audioDev, &wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
-        std::cerr << "Failed to open audio device!\n";
+        std::cerr << "[ERROR] Failed to open audio device!\n";
         return 1;
     }
+    std::cout << "[INFO] Audio device opened successfully." << std::endl;
     for (int i = 0; i < NUM_BUFFERS; ++i) {
         audioBuffers[i].resize(BUFFER_FRAMES);
         waveHeaders[i] = {};
         waveHeaders[i].lpData = reinterpret_cast<LPSTR>(audioBuffers[i].data());
         waveHeaders[i].dwBufferLength = BUFFER_FRAMES * sizeof(short);
         waveOutPrepareHeader(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+        std::cout << "[INFO] Prepared audio buffer " << i << std::endl;
     }
+    std::cout << "[INFO] Starting audio thread." << std::endl;
     std::thread audio(audioThread);
 
     // Set up MIDI input
@@ -122,9 +127,9 @@ int main() {
     bool midiAvailable = (numMidiDevs > 0);
     if (midiAvailable && midiInOpen(&hMidiIn, midiDev, (DWORD_PTR)midiInProc, 0, CALLBACK_FUNCTION) == MMSYSERR_NOERROR) {
         midiInStart(hMidiIn);
-        std::cout << "Listening for MIDI on port " << midiDev << "...\n";
+        std::cout << "[INFO] Listening for MIDI on port " << midiDev << "...\n";
     } else {
-        std::cerr << "Warning: No MIDI input available. Synth will play a C major chord for 1 second.\n";
+        std::cerr << "[WARN] No MIDI input available. Synth will play a C major chord for 1 second.\n";
         synth->keydown(60, 100); // C4
         synth->keydown(64, 100); // E4
         synth->keydown(67, 100); // G4
@@ -132,22 +137,27 @@ int main() {
         synth->notesOff();
     }
 
-    std::cout << "Synth_Dexed running. Press Enter to quit.\n";
+    std::cout << "[INFO] Synth_Dexed running. Press Enter to quit.\n";
     std::cin.get();
     running = false;
     audio.join();
+    std::cout << "[INFO] Audio thread stopped." << std::endl;
 
     // Cleanup
     if (hMidiIn) {
         midiInStop(hMidiIn);
         midiInClose(hMidiIn);
+        std::cout << "[INFO] MIDI input closed." << std::endl;
     }
     waveOutReset(hWaveOut);
     for (int i = 0; i < NUM_BUFFERS; ++i) {
         waveOutUnprepareHeader(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+        std::cout << "[INFO] Unprepared audio buffer " << i << std::endl;
     }
     waveOutClose(hWaveOut);
+    std::cout << "[INFO] Audio device closed." << std::endl;
     delete synth;
+    std::cout << "[INFO] Synth instance deleted. Exiting." << std::endl;
     return 0;
 }
 #elif defined(__APPLE__)
@@ -231,26 +241,35 @@ int main() {
     AudioUnitSetProperty(audioUnit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb));
     AudioUnitInitialize(audioUnit);
     AudioOutputUnitStart(audioUnit);
+    std::cout << "[INFO] CoreAudio output started." << std::endl;
 
     // --- Set up CoreMIDI input ---
     MIDIClientRef midiClient;
     MIDIPortRef inputPort;
     MIDIClientCreate(CFSTR("Synth_Dexed"), NULL, NULL, &midiClient);
+    std::cout << "[INFO] CoreMIDI client created." << std::endl;
     MIDIInputPortCreate(midiClient, CFSTR("Input"), midiReadProc, synth, &inputPort);
+    std::cout << "[INFO] CoreMIDI input port created." << std::endl;
     // Connect all MIDI sources
     ItemCount nSrcs = MIDIGetNumberOfSources();
+    std::cout << "[INFO] Found " << nSrcs << " MIDI sources." << std::endl;
     for (ItemCount i = 0; i < nSrcs; ++i) {
         MIDIEndpointRef src = MIDIGetSource(i);
         MIDIPortConnectSource(inputPort, src, NULL);
+        std::cout << "[INFO] Connected to MIDI source " << i << std::endl;
     }
-    std::cout << "Synth_Dexed running (CoreAudio/CoreMIDI). Press Enter to quit.\n";
+    std::cout << "[INFO] Synth_Dexed running (CoreAudio/CoreMIDI). Press Enter to quit.\n";
     std::cin.get();
     running = false;
     AudioOutputUnitStop(audioUnit);
+    std::cout << "[INFO] CoreAudio output stopped." << std::endl;
     AudioUnitUninitialize(audioUnit);
     AudioComponentInstanceDispose(audioUnit);
+    std::cout << "[INFO] CoreAudio unit disposed." << std::endl;
     MIDIClientDispose(midiClient);
+    std::cout << "[INFO] CoreMIDI client disposed." << std::endl;
     delete synth;
+    std::cout << "[INFO] Synth instance deleted. Exiting." << std::endl;
     return 0;
 }
 #else // Linux/ALSA
@@ -371,10 +390,21 @@ int main() {
     // ALSA audio setup
     snd_pcm_t* pcm_handle;
     if (snd_pcm_open(&pcm_handle, audioDevName.c_str(), SND_PCM_STREAM_PLAYBACK, 0) < 0) {
-        std::cerr << "Failed to open ALSA audio device: " << audioDevName << "\n";
+        std::cerr << "[ERROR] Failed to open ALSA audio device: " << audioDevName << "\n";
+        // List available ALSA errors
+        snd_output_t* output = nullptr;
+        snd_output_stdio_attach(&output, stderr, 0);
+        snd_pcm_t* test_pcm = nullptr;
+        int err = snd_pcm_open(&test_pcm, audioDevName.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+        if (err < 0) {
+            std::cerr << "[ALSA] Error: " << snd_strerror(err) << "\n";
+        }
+        if (test_pcm) snd_pcm_close(test_pcm);
+        if (output) snd_output_close(output);
         delete synth;
         return 1;
     }
+    std::cout << "[INFO] ALSA audio device opened successfully." << std::endl;
     snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 1, SAMPLE_RATE, 1, 500000);
     // ALSA MIDI setup
     std::thread midi;
@@ -385,17 +415,22 @@ int main() {
             SND_SEQ_PORT_CAP_WRITE|SND_SEQ_PORT_CAP_SUBS_WRITE,
             SND_SEQ_PORT_TYPE_APPLICATION);
         snd_seq_connect_from(seq_handle, in_port, midiClient, midiPort);
+        std::cout << "[INFO] ALSA MIDI input connected." << std::endl;
         midi = std::thread(alsa_midi_thread, seq_handle, in_port);
     }
     std::thread audio(alsa_audio_thread, pcm_handle);
-    std::cout << "Synth_Dexed running (ALSA). Press Enter to quit.\n";
+    std::cout << "[INFO] Synth_Dexed running (ALSA). Press Enter to quit.\n";
     std::cin.get();
     running = false;
     audio.join();
+    std::cout << "[INFO] Audio thread stopped." << std::endl;
     if (midiAvailable) midi.join();
     snd_pcm_close(pcm_handle);
+    std::cout << "[INFO] ALSA audio device closed." << std::endl;
     if (midiAvailable) snd_seq_close(seq_handle);
+    std::cout << "[INFO] ALSA MIDI input closed." << std::endl;
     delete synth;
+    std::cout << "[INFO] Synth instance deleted. Exiting." << std::endl;
     return 0;
 }
 #endif
