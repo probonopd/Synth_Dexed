@@ -45,6 +45,10 @@
 
 #define NUM_VOICE_PARAMETERS 156
 
+#ifndef constrain
+#define constrain(amt, low, high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
+#endif
+
 #ifdef USE_FILTER
 #define FILTER_POLES 4
 typedef struct {
@@ -369,6 +373,8 @@ class Dexed
 
     ProcessorVoice* voices;
 
+    void getSamples(int16_t* buffer, uint16_t n_samples);
+
   protected:
     uint8_t init_voice[NUM_VOICE_PARAMETERS] = {
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
@@ -404,7 +410,6 @@ class Dexed
     EngineMsfa* engineMsfa;
     EngineMkI* engineMkI;
     EngineOpl* engineOpl;
-    void getSamples(int16_t* buffer, uint16_t n_samples);
     uint8_t velocity_offset;
     uint8_t velocity_max;
     float velocity_diff;

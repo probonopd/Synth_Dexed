@@ -3,6 +3,10 @@
 #include <limits.h>
 #include <math.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 typedef int16_t q16_t;
 typedef int32_t q32_t;
 

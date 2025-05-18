@@ -26,7 +26,9 @@
 #include <limits>
 #include <cstdlib>
 #include <stdint.h>
+#ifndef _MSC_VER
 #include <unistd.h>
+#endif
 #include <algorithm>
 #include "dexed.h"
 #include "synth.h"
@@ -37,6 +39,20 @@
 #include "controllers.h"
 #include "porta.h"
 #include "int_math.h"
+#include <iostream>
+
+#if defined(_MSC_VER)
+#include <chrono>
+inline uint32_t millis() {
+    static auto start = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+}
+#endif
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 #ifdef USE_COMPRESSOR
 /*
@@ -145,7 +161,7 @@ float Dexed::getFilterResonance(void) {
 
 Dexed::Dexed(uint8_t maxnotes, uint16_t rate)
 {
-  samplerate = float32_t(rate);
+  samplerate = float(rate);
 
   Exp2::init();
   Tanh::init();
@@ -277,58 +293,102 @@ void Dexed::deactivate(void)
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
-  int32_t q32_buffer[AUDIO_BLOCK_SAMPLES];
-
-  if (refreshVoice)
-  {
-    for (uint8_t i = 0; i < used_notes; i++)
-    {
-      if ( voices[i].live )
-        voices[i].dx7_note->update(data, voices[i].midi_note, voices[i].velocity, voices[i].porta, &controllers);
+#if defined(_WIN32)
+    static int log_counter = 0;
+    bool any_live = false;
+    int midi_note = -1;
+    for (uint8_t i = 0; i < used_notes; ++i) {
+        if (voices[i].live) {
+            any_live = true;
+            midi_note = voices[i].midi_note;
+            break;
+        }
     }
-    lfo.reset(data + 137);
-    refreshVoice = false;
-  }
+    if (any_live && ++log_counter >= 100) { // Log every 100 calls when a note is active
+        std::cout << "[SYNTH] buffer[0..7]: ";
+        for (int k = 0; k < 8; ++k) std::cout << buffer[k] << ' ';
+        std::cout << std::endl;
+        if (midi_note >= 0) {
+            double freq = 440.0 * pow(2.0, (midi_note - 69) / 12.0);
+            double sr = 44100.0;
+            std::cout << "[SINE ] ref[0..7]:  ";
+            for (int k = 0; k < 8; ++k) {
+                double t = k / sr;
+                int16_t ref = static_cast<int16_t>(sin(2 * M_PI * freq * t) * 32767);
+                std::cout << ref << ' ';
+            }
+            std::cout << std::endl;
+        }
+        // Detailed logging: print velocity and operator output levels
+        std::cout << "[DETAIL] notes: ";
+        for (uint8_t i = 0; i < used_notes; ++i) {
+            if (voices[i].live) {
+                std::cout << "note=" << (int)voices[i].midi_note << " vel=" << (int)voices[i].velocity << " | ";
+                std::cout << "OP_OUT:";
+                for (int op = 0; op < 6; ++op) {
+                    std::cout << (int)data[(op * 21) + 16] << ' ';
+                }
+                std::cout << "; ";
+            }
+        }
+        std::cout << std::endl;
+        log_counter = 0;
+    }
+#endif
 
-  for (uint16_t i = 0; i < n_samples; i++) {
-    buffer[i]=0;
-    q32_buffer[i]=0;
-  }
-  
-  for (uint16_t i = 0; i < n_samples; i += _N_)
-  {
-    AlignedBuf<int32_t, _N_> audiobuf;
+    int32_t* q32_buffer = new int32_t[n_samples];
 
-    for (uint8_t j = 0; j < _N_; ++j)
+    if (refreshVoice)
     {
-      audiobuf.get()[j] = 0;
+        for (uint8_t i = 0; i < used_notes; i++)
+        {
+            if ( voices[i].live )
+                voices[i].dx7_note->update(data, voices[i].midi_note, voices[i].velocity, voices[i].porta, &controllers);
+        }
+        lfo.reset(data + 137);
+        refreshVoice = false;
     }
 
-    int32_t lfovalue = lfo.getsample();
-    int32_t lfodelay = lfo.getdelay();
-
-    for (uint8_t note = 0; note < used_notes; note++)
+    for (uint16_t i = 0; i < n_samples; i++) {
+        buffer[i]=0;
+        q32_buffer[i]=0;
+    }
+    
+    for (uint16_t i = 0; i < n_samples; i += _N_)
     {
-      if (voices[note].live)
-      {
-        voices[note].dx7_note->compute(audiobuf.get(), lfovalue, lfodelay, &controllers);
+        AlignedBuf<int32_t, _N_> audiobuf;
 
         for (uint8_t j = 0; j < _N_; ++j)
         {
-#ifdef USE_FILTER
-          q32_buffer[i + j] += lowpassFilter(audiobuf.get()[j]);
-#else
-          q32_buffer[i + j] += audiobuf.get()[j];
-#endif
-          audiobuf.get()[j] = 0;
+            audiobuf.get()[j] = 0;
         }
-      }
+
+        int32_t lfovalue = lfo.getsample();
+        int32_t lfodelay = lfo.getdelay();
+
+        for (uint8_t note = 0; note < used_notes; note++)
+        {
+            if (voices[note].live)
+            {
+                voices[note].dx7_note->compute(audiobuf.get(), lfovalue, lfodelay, &controllers);
+
+                for (uint8_t j = 0; j < _N_; ++j)
+                {
+    #ifdef USE_FILTER
+                    q32_buffer[i + j] += lowpassFilter(audiobuf.get()[j]);
+    #else
+                    q32_buffer[i + j] += audiobuf.get()[j];
+    #endif
+                    audiobuf.get()[j] = 0;
+                }
+            }
+        }
     }
-  }
 #ifdef USE_COMPRESSOR
 #endif
-  for (uint16_t i = 0; i < n_samples; i += _N_)
-    buffer[i]=q16_mul_sat(q32_convert(q32_buffer[i],Q32_SHIFT,Q16_SHIFT),gain,Q16_SHIFT);
+    for (uint16_t i = 0; i < n_samples; i += _N_)
+        buffer[i]=q16_mul_sat(q32_convert(q32_buffer[i],Q32_SHIFT,Q16_SHIFT),gain,Q16_SHIFT);
+    delete[] q32_buffer;
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
@@ -1945,12 +2005,12 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 		switch(midiData[0] & 0xf0)
 		{
 			case 0x80: // Note Off
-				Serial.printf(">NOTE OFF D1: %d\n", midiData[1]);
+				// Serial.printf(">NOTE OFF D1: %d\n", midiData[1]);
 				keyup(midiData[1]);
 				ret=true;
 				break;
 			case 0x90: // Note On
-				Serial.printf(">NOTE ON D1: %d %d\n", midiData[1],midiData[2]);
+				// Serial.printf(">NOTE ON D1: %d %d\n", midiData[1],midiData[2]);
 				keydown(midiData[1], midiData[2]);
 				ret=true;
 				break;
@@ -1991,7 +2051,7 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 						ret=true;
           					break;
         				case 65: // Portamento mode
-          					setPortamentoMode(midiData[2]);
+          				 setPortamentoMode(midiData[2]);
 						ret=true;
           					break;
         				case 66: // Sostenuto
@@ -2037,3 +2097,7 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 	}
 	return(ret);
 }
+
+#ifndef constrain
+#define constrain(amt, low, high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
+#endif

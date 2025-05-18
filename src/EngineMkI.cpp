@@ -35,7 +35,15 @@
     //#define MKIDEBUG
 #endif
 
+#if defined(_MSC_VER)
+__declspec(align(16)) const int32_t zeros[_N_] = {0};
+#else
 const int32_t __attribute__ ((aligned(16))) zeros[_N_] = {0};
+#endif
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 static const uint16_t NEGATIVE_BIT = 0x8000;
 static const uint16_t ENV_BITDEPTH = 14;

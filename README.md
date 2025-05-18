@@ -196,3 +196,35 @@ See example sketch.
     uint8_t getTranspose(void);
     void setName(char* name);
     void getName(char* buffer);
+
+## Native
+
+### Windows
+
+```
+winget install cmake
+mkdir build
+cd build
+& "C:\Program Files\CMake\bin\cmake.exe" ..
+# -- Building for: Visual Studio 17 2022
+# -- Selecting Windows SDK version 10.0.22621.0 to target Windows 10.0.22631.
+# -- The CXX compiler identification is MSVC 19.43.34809.0
+# (...)
+# -- Build files have been written to: C:/Users/User/Development/Synth_Dexed/build
+& "C:\Program Files\CMake\bin\cmake.exe"  --build . --config Release
+# Release\Synth_Dexed.exe
+```
+
+### Linux
+
+```
+sudo apt-get update
+sudo apt-get -y install cmake
+mkdir build
+cd build
+cmake ..
+make -j$(nproc)
+# ./Synth_Dexed
+```
+
+### macOS

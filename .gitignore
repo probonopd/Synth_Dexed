@@ -105,3 +105,12 @@ Sessionx.vim
 tags
 # Persistent undo
 [._]*.un~
+*.vcxproj
+*.filters
+*.stamp.*
+build/
+# CMake
+CMakeFiles/
+CMakeCache.txt
+CMakeOutput.log
+CMakeError.log
