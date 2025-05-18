@@ -2,6 +2,8 @@ name: Sync from Codeberg
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '30 17 * * 4'
 
 jobs:
   mirror:
@@ -35,15 +37,6 @@ jobs:
 
         # Hard reset to upstream branch (mirror)
         git reset --hard upstream/${{ matrix.branch }}
-
-        # Make sure workflow file is removed in synced branch
-        git rm -r --cached .github/workflows || true
-        rm -rf .github/workflows || true
-
-        # Commit removal if needed
-        if ! git diff --quiet; then
-          git commit -m "Remove GitHub Actions workflow from ${{ matrix.branch }}"
-        fi
 
     - name: Force push ${{ matrix.branch }} to GitHub
       uses: ad-m/github-push-action@v0.8.0
