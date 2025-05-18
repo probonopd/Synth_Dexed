@@ -4,13 +4,28 @@ project(Synth_Dexed LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Gather all source files
+# Gather all source files except main.cpp and main_*.cpp
 file(GLOB SYNTH_DEXED_SRC
     "src/*.cpp"
 )
+list(REMOVE_ITEM SYNTH_DEXED_SRC
+    "${CMAKE_SOURCE_DIR}/src/main.cpp"
+    "${CMAKE_SOURCE_DIR}/src/main_win.cpp"
+    "${CMAKE_SOURCE_DIR}/src/main_mac.cpp"
+    "${CMAKE_SOURCE_DIR}/src/main_linux.cpp"
+)
+
+# Add the correct main file per platform
+if (WIN32)
+    set(PLATFORM_MAIN src/main_win.cpp)
+elseif(APPLE)
+    set(PLATFORM_MAIN src/main_mac.cpp)
+else()
+    set(PLATFORM_MAIN src/main_linux.cpp)
+endif()
 
 # Create the executable
-add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/main.cpp)
+add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} ${PLATFORM_MAIN})
 
 target_include_directories(Synth_Dexed PRIVATE src)
 

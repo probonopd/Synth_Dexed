@@ -313,50 +313,8 @@ void Dexed::deactivate(void)
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
-#if defined(_WIN32)
-    static int log_counter = 0;
-    bool any_live = false;
-    int midi_note = -1;
-    for (uint8_t i = 0; i < used_notes; ++i) {
-        if (voices[i].live) {
-            any_live = true;
-            midi_note = voices[i].midi_note;
-            break;
-        }
-    }
-    if (any_live && ++log_counter >= 100) { // Log every 100 calls when a note is active
-        std::cout << "[SYNTH] buffer[0..7]: ";
-        for (int k = 0; k < 8; ++k) std::cout << buffer[k] << ' ';
-        std::cout << std::endl;
-        if (midi_note >= 0) {
-            double freq = 440.0 * pow(2.0, (midi_note - 69) / 12.0);
-            double sr = 44100.0;
-            std::cout << "[SINE ] ref[0..7]:  ";
-            for (int k = 0; k < 8; ++k) {
-                double t = k / sr;
-                int16_t ref = static_cast<int16_t>(sin(2 * M_PI * freq * t) * 32767);
-                std::cout << ref << ' ';
-            }
-            std::cout << std::endl;
-        }
-        // Detailed logging: print velocity and operator output levels
-        std::cout << "[DETAIL] notes: ";
-        for (uint8_t i = 0; i < used_notes; ++i) {
-            if (voices[i].live) {
-                std::cout << "note=" << (int)voices[i].midi_note << " vel=" << (int)voices[i].velocity << " | ";
-                std::cout << "OP_OUT:";
-                for (int op = 0; op < 6; ++op) {
-                    std::cout << (int)data[(op * 21) + 16] << ' ';
-                }
-                std::cout << "; ";
-            }
-        }
-        std::cout << std::endl;
-        log_counter = 0;
-    }
-#endif
-
-    int32_t* q32_buffer = new int32_t[n_samples];
+    // Allocate and zero-initialize q32_buffer
+    int32_t* q32_buffer = new int32_t[n_samples]();
 
     if (refreshVoice)
     {
@@ -406,7 +364,8 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     }
 #ifdef USE_COMPRESSOR
 #endif
-    for (uint16_t i = 0; i < n_samples; i += _N_)
+    // Fill all output samples, not just every _N_-th sample
+    for (uint16_t i = 0; i < n_samples; ++i)
         buffer[i]=q16_mul_sat(q32_convert(q32_buffer[i],Q32_SHIFT,Q16_SHIFT),gain,Q16_SHIFT);
     delete[] q32_buffer;
 }
