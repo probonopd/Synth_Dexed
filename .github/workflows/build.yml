@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies (macOS)
         if: startsWith(matrix.os, 'macos')
-        run: brew install cmake
+        run: brew install --cask cmake
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
@@ -39,4 +39,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-build
-          path: build
+          path: build/Synth_*
