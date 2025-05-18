@@ -15,8 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install CMake
-        uses: lukka/get-cmake@v3
+      - uses: lukka/get-cmake@latest
 
       - name: Configure
         run: cmake -S . -B "${{ env.BUILD_DIR }}" -A x64
