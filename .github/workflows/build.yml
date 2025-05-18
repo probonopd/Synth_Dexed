@@ -38,5 +38,5 @@ jobs:
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build/Synth_*
-          path: build
+          name: ${{ matrix.os }}-build
+          path: build/Synth_*
