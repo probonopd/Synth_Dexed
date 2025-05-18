@@ -24,6 +24,22 @@ if (UNIX AND NOT APPLE)
     target_link_libraries(Synth_Dexed asound pthread)
 endif()
 
+# Link to CoreAudio, AudioToolbox, AudioUnit, CoreMIDI, and CoreFoundation on macOS
+if(APPLE)
+    find_library(COREAUDIO_LIBRARY CoreAudio)
+    find_library(AUDIOTOOLBOX_LIBRARY AudioToolbox)
+    find_library(AUDIOUNIT_LIBRARY AudioUnit)
+    find_library(COREMIDI_LIBRARY CoreMIDI)
+    find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+    target_link_libraries(Synth_Dexed
+        ${COREAUDIO_LIBRARY}
+        ${AUDIOTOOLBOX_LIBRARY}
+        ${AUDIOUNIT_LIBRARY}
+        ${COREMIDI_LIBRARY}
+        ${COREFOUNDATION_LIBRARY}
+    )
+endif()
+
 # Optionally, add other Windows-specific settings here
 
 # Usage:
