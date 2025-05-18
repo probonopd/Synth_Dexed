@@ -234,7 +234,7 @@ int main() {
 
     // --- Set up CoreMIDI input ---
     MIDIClientRef midiClient;
-    MIDIInputPortRef inputPort;
+    MIDIPortRef inputPort;
     MIDIClientCreate(CFSTR("Synth_Dexed"), NULL, NULL, &midiClient);
     MIDIInputPortCreate(midiClient, CFSTR("Input"), midiReadProc, synth, &inputPort);
     // Connect all MIDI sources
