@@ -223,8 +223,17 @@ sudo apt-get -y install cmake
 mkdir build
 cd build
 cmake ..
-make -j$(nproc)
+cmake --build . --config Release
 # ./Synth_Dexed
 ```
 
 ### macOS
+
+```
+brew install cmake --formula
+mkdir build
+cd build
+cmake ..
+cmake --build . --config Release
+# ./Synth_Dexed
+```
