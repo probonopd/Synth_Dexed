@@ -43,14 +43,30 @@
 
 #include <chrono>
 
-#if defined(_MSC_VER) || defined(__linux__) || defined(__unix__)
-inline int64_t millis() {
+#if !defined(_WIN32) && !defined(__linux__) && !defined(__APPLE__)
+#error "Unsupported platform"
+#endif
+
+#if defined(_MSC_VER)
+#include <chrono>
+inline uint32_t millis() {
     static auto start = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+    return (uint32_t)std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
 }
-#else
-#error "Unsupported platform"
+#elif defined(__linux__) || defined(__APPLE__)
+#include <sys/time.h>
+inline uint32_t millis() {
+    static struct timeval start;
+    static bool initialized = false;
+    if (!initialized) {
+        gettimeofday(&start, NULL);
+        initialized = true;
+    }
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    return (uint32_t)((now.tv_sec - start.tv_sec) * 1000 + (now.tv_usec - start.tv_usec) / 1000);
+}
 #endif
 
 
@@ -2103,5 +2119,6 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 }
 
 #ifndef constrain
+
 #define constrain(amt, low, high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #endif
