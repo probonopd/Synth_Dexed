@@ -2,9 +2,7 @@ name: Build Executables
 
 on:
   push:
-    branches: [ native ]
   pull_request:
-    branches: [ native ]
   workflow_dispatch:
 
 jobs:
