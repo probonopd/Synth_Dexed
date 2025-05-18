@@ -114,3 +114,6 @@ CMakeFiles/
 CMakeCache.txt
 CMakeOutput.log
 CMakeError.log
+buildlinux/Synth_Dexed
+buildlinux/cmake_install.cmake
+buildlinux/Makefile

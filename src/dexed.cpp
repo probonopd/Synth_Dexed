@@ -41,14 +41,18 @@
 #include "int_math.h"
 #include <iostream>
 
-#if defined(_MSC_VER)
 #include <chrono>
-inline uint32_t millis() {
+
+#if defined(_MSC_VER) || defined(__linux__) || defined(__unix__)
+inline int64_t millis() {
     static auto start = std::chrono::steady_clock::now();
     auto now = std::chrono::steady_clock::now();
-    return (uint32_t)std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
 }
+#else
+#error "Unsupported platform"
 #endif
+
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
