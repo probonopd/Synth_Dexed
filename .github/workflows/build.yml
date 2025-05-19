@@ -35,8 +35,7 @@ jobs:
              cmake --build build --config Release
              cd python
              python -m pip install -r requirements.txt
-             python setup.py build
-             python setup.py install
+             python setup.py bdist_wheel
              cd -
 
       - name: Upload build
@@ -46,6 +45,5 @@ jobs:
           path: |
                 build/Release/Synth_*
                 python/dist/*.whl
-                python/dist/*.egg
                 python/main_python.py
                 python/test_dexed.py
