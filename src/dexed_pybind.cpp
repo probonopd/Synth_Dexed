@@ -11,6 +11,9 @@
 #include <mmsystem.h>
 #include <cstdint> // Added to ensure uint8_t is defined
 
+// Ensure abi3 ABI compatibility
+#define PYBIND11_USE_SMART_HOLDER_AS_DEFAULT
+
 namespace py = pybind11;
 
 class PyDexed {
@@ -36,16 +39,11 @@ public:
         }
     }
     void setGain(float gain) {
-        // std::cout << "[DEBUG C++] PyDexed::setGain called with gain: " << gain << std::endl;
         if (gain < 0.0f) gain = 0.0f;
-        if (gain > 2.0f) gain = 2.0f; // Cap gain to avoid excessive levels, adjust as needed
-        gain_ = gain;
-        // std::cout << "[DEBUG C++] PyDexed::setGain - gain_ set to " << gain_ << std::endl;
-        // Pass to synth if it has a gain method and it's intended to be controlled this way
-        // if (synth_) {
-        //    synth_->setGain(gain_); // Assuming synth has such a method
-        // }
+        if (gain > 2.0f) gain = 2.0f;
+        synth->setGain(gain);
     }
+    float getGain() const { return synth->getGain(); } // Added getGain()
     void keydown(unsigned char note, unsigned char velocity) {
         // py::scoped_ostream_redirect stream(std::cout, py::module_::import("sys").attr("stdout"));
         // std::cout << "[DEBUG C++] PyDexed::keydown called with note: " << (int)note
@@ -204,43 +202,14 @@ public:
     void setPitchbendStep(uint8_t step) { synth->setPitchbendStep(step); }
     uint8_t getPitchbendStep() const { return synth->getPitchbendStep(); }
 
-    // Operator (OP) parameter methods
-    void setOPAmpModulationSensity(uint8_t op, uint8_t sensitivity) { synth->setOPAmpModulationSensity(op, sensitivity); }
-    uint8_t getOPAmpModulationSensity(uint8_t op) const { return synth->getOPAmpModulationSensity(op); }
-    void setOPKeyboardVelocitySensity(uint8_t op, uint8_t sensitivity) { synth->setOPKeyboardVelocitySensity(op, sensitivity); }
-    uint8_t getOPKeyboardVelocitySensity(uint8_t op) const { return synth->getOPKeyboardVelocitySensity(op); }
-    void setOPOutputLevel(uint8_t op, uint8_t level) { synth->setOPOutputLevel(op, level); }
-    uint8_t getOPOutputLevel(uint8_t op) const { return synth->getOPOutputLevel(op); }
-    void setOPMode(uint8_t op, uint8_t mode) { synth->setOPMode(op, mode); }
-    uint8_t getOPMode(uint8_t op) const { return synth->getOPMode(op); }
-    void setOPFrequencyCoarse(uint8_t op, uint8_t frq_coarse) { synth->setOPFrequencyCoarse(op, frq_coarse); }
-    uint8_t getOPFrequencyCoarse(uint8_t op) const { return synth->getOPFrequencyCoarse(op); }
-    void setOPFrequencyFine(uint8_t op, uint8_t frq_fine) { synth->setOPFrequencyFine(op, frq_fine); }
-    uint8_t getOPFrequencyFine(uint8_t op) const { return synth->getOPFrequencyFine(op); }
-    void setOPDetune(uint8_t op, uint8_t detune) { synth->setOPDetune(op, detune); }
-    uint8_t getOPDetune(uint8_t op) const { return synth->getOPDetune(op); }
-
-    // Keyboard scaling and rate/level scaling methods
-    void setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t level) { synth->setOPKeyboardLevelScalingBreakPoint(op, level); }
-    uint8_t getOPKeyboardLevelScalingBreakPoint(uint8_t op) const { return synth->getOPKeyboardLevelScalingBreakPoint(op); }
-    void setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t depth) { synth->setOPKeyboardLevelScalingDepthLeft(op, depth); }
-    uint8_t getOPKeyboardLevelScalingDepthLeft(uint8_t op) const { return synth->getOPKeyboardLevelScalingDepthLeft(op); }
-    void setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t depth) { synth->setOPKeyboardLevelScalingDepthRight(op, depth); }
-    uint8_t getOPKeyboardLevelScalingDepthRight(uint8_t op) const { return synth->getOPKeyboardLevelScalingDepthRight(op); }
-    void setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t curve) { synth->setOPKeyboardLevelScalingCurveLeft(op, curve); }
-    uint8_t getOPKeyboardLevelScalingCurveLeft(uint8_t op) const { return synth->getOPKeyboardLevelScalingCurveLeft(op); }
-    void setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t curve) { synth->setOPKeyboardLevelScalingCurveRight(op, curve); }
-    uint8_t getOPKeyboardLevelScalingCurveRight(uint8_t op) const { return synth->getOPKeyboardLevelScalingCurveRight(op); }
-    void setOPKeyboardRateScale(uint8_t op, uint8_t scale) { synth->setOPKeyboardRateScale(op, scale); }
-    uint8_t getOPKeyboardRateScale(uint8_t op) const { return synth->getOPKeyboardRateScale(op); }
-
-    // Controller methods
-    void setModWheel(uint8_t value) { synth->setModWheel(value); }
-    uint8_t getModWheel() const { return synth->getModWheel(); }
-    void setModWheelRange(uint8_t range) { synth->setModWheelRange(range); }
-    uint8_t getModWheelRange() const { return synth->getModWheelRange(); }
-    void setModWheelTarget(uint8_t target) { synth->setModWheelTarget(target); }
-    uint8_t getModWheelTarget() const { return synth->getModWheelTarget(); }
+    // --- Begin: Forward all required methods to synth for Python bindings ---
+    // Controller and parameter methods
+    void setAftertouch(uint8_t value) { synth->setAftertouch(value); }
+    uint8_t getAftertouch() const { return synth->getAftertouch(); }
+    void setAftertouchRange(uint8_t range) { synth->setAftertouchRange(range); }
+    uint8_t getAftertouchRange() const { return synth->getAftertouchRange(); }
+    void setAftertouchTarget(uint8_t target) { synth->setAftertouchTarget(target); }
+    uint8_t getAftertouchTarget() const { return synth->getAftertouchTarget(); }
 
     void setBreathController(uint8_t value) { synth->setBreathController(value); }
     uint8_t getBreathController() const { return synth->getBreathController(); }
@@ -249,13 +218,6 @@ public:
     void setBreathControllerTarget(uint8_t target) { synth->setBreathControllerTarget(target); }
     uint8_t getBreathControllerTarget() const { return synth->getBreathControllerTarget(); }
 
-    void setAftertouch(uint8_t value) { synth->setAftertouch(value); }
-    uint8_t getAftertouch() const { return synth->getAftertouch(); }
-    void setAftertouchRange(uint8_t range) { synth->setAftertouchRange(range); }
-    uint8_t getAftertouchRange() const { return synth->getAftertouchRange(); }
-    void setAftertouchTarget(uint8_t target) { synth->setAftertouchTarget(target); }
-    uint8_t getAftertouchTarget() const { return synth->getAftertouchTarget(); }
-
     void setFootController(uint8_t value) { synth->setFootController(value); }
     uint8_t getFootController() const { return synth->getFootController(); }
     void setFootControllerRange(uint8_t range) { synth->setFootControllerRange(range); }
@@ -263,57 +225,92 @@ public:
     void setFootControllerTarget(uint8_t target) { synth->setFootControllerTarget(target); }
     uint8_t getFootControllerTarget() const { return synth->getFootControllerTarget(); }
 
-    // Voice configuration methods
+    void setModWheel(uint8_t value) { synth->setModWheel(value); }
+    uint8_t getModWheel() const { return synth->getModWheel(); }
+    void setModWheelRange(uint8_t range) { synth->setModWheelRange(range); }
+    uint8_t getModWheelRange() const { return synth->getModWheelRange(); }
+    void setModWheelTarget(uint8_t target) { synth->setModWheelTarget(target); }
+    uint8_t getModWheelTarget() const { return synth->getModWheelTarget(); }
+    void setOPRate(uint8_t op, uint8_t step, uint8_t rate) { synth->setOPRate(op, step, rate); }
+    uint8_t getOPRate(uint8_t op, uint8_t step) const { return synth->getOPRate(op, step); }
+    void setOPLevel(uint8_t op, uint8_t step, uint8_t level) { synth->setOPLevel(op, step, level); }
+    uint8_t getOPLevel(uint8_t op, uint8_t step) const { return synth->getOPLevel(op, step); }
     void setOPAll(uint8_t ops) { synth->setOPAll(ops); }
-    bool decodeVoice(uint8_t* data, uint8_t* encoded_data) { return synth->decodeVoice(data, encoded_data); }
-    bool encodeVoice(uint8_t* encoded_data) { return synth->encodeVoice(encoded_data); }
-    bool getVoiceData(uint8_t* data_copy) { return synth->getVoiceData(data_copy); }
     void setOPRateAll(uint8_t rate) { synth->setOPRateAll(rate); }
     void setOPLevelAll(uint8_t level) { synth->setOPLevelAll(level); }
     void setOPRateAllCarrier(uint8_t step, uint8_t rate) { synth->setOPRateAllCarrier(step, rate); }
     void setOPLevelAllCarrier(uint8_t step, uint8_t level) { synth->setOPLevelAllCarrier(step, level); }
     void setOPRateAllModulator(uint8_t step, uint8_t rate) { synth->setOPRateAllModulator(step, rate); }
     void setOPLevelAllModulator(uint8_t step, uint8_t level) { synth->setOPLevelAllModulator(step, level); }
-    void setOPRate(uint8_t op, uint8_t step, uint8_t rate) { synth->setOPRate(op, step, rate); }
-    uint8_t getOPRate(uint8_t op, uint8_t step) { return synth->getOPRate(op, step); }
-    void setOPLevel(uint8_t op, uint8_t step, uint8_t level) { synth->setOPLevel(op, step, level); }
-    uint8_t getOPLevel(uint8_t op, uint8_t step) { return synth->getOPLevel(op, step); }
-
-    // New methods to match dexed API:
-    void setPitchRate(uint8_t step, uint8_t rate) { synth->setPitchRate(step, rate); }
+    void setPBController(uint8_t pb_range, uint8_t pb_step) { synth->setPBController(pb_range, pb_step); }
+    void setMWController(uint8_t mw_range, uint8_t mw_assign, uint8_t mw_mode) { synth->setMWController(mw_range, mw_assign, mw_mode); }
+    void setFCController(uint8_t fc_range, uint8_t fc_assign, uint8_t fc_mode) { synth->setFCController(fc_range, fc_assign, fc_mode); }
+    void setBCController(uint8_t bc_range, uint8_t bc_assign, uint8_t bc_mode) { synth->setBCController(bc_range, bc_assign, bc_mode); }
+    void setATController(uint8_t at_range, uint8_t at_assign, uint8_t at_mode) { synth->setATController(at_range, at_assign, at_mode); }
+    void setPitchbend(uint8_t value1, uint8_t value2) { synth->setPitchbend(value1, value2); }
+    void setOPAmpModulationSensity(uint8_t op, uint8_t value) { synth->setOPAmpModulationSensity(op, value); }
+    uint8_t getOPAmpModulationSensity(uint8_t op) const { return synth->getOPAmpModulationSensity(op); }
+    void setOPKeyboardVelocitySensity(uint8_t op, uint8_t value) { synth->setOPKeyboardVelocitySensity(op, value); }
+    uint8_t getOPKeyboardVelocitySensity(uint8_t op) const { return synth->getOPKeyboardVelocitySensity(op); }
+    void setOPOutputLevel(uint8_t op, uint8_t value) { synth->setOPOutputLevel(op, value); }
+    uint8_t getOPOutputLevel(uint8_t op) const { return synth->getOPOutputLevel(op); }
+    void setOPMode(uint8_t op, uint8_t value) { synth->setOPMode(op, value); }
+    uint8_t getOPMode(uint8_t op) const { return synth->getOPMode(op); }
+    void setOPFrequencyCoarse(uint8_t op, uint8_t value) { synth->setOPFrequencyCoarse(op, value); }
+    uint8_t getOPFrequencyCoarse(uint8_t op) const { return synth->getOPFrequencyCoarse(op); }
+    void setOPFrequencyFine(uint8_t op, uint8_t value) { synth->setOPFrequencyFine(op, value); }
+    uint8_t getOPFrequencyFine(uint8_t op) const { return synth->getOPFrequencyFine(op); }
+    void setOPDetune(uint8_t op, uint8_t value) { synth->setOPDetune(op, value); }
+    uint8_t getOPDetune(uint8_t op) const { return synth->getOPDetune(op); }
+    void setOPKeyboardLevelScalingBreakPoint(uint8_t op, uint8_t value) { synth->setOPKeyboardLevelScalingBreakPoint(op, value); }
+    uint8_t getOPKeyboardLevelScalingBreakPoint(uint8_t op) const { return synth->getOPKeyboardLevelScalingBreakPoint(op); }
+    void setOPKeyboardLevelScalingDepthLeft(uint8_t op, uint8_t value) { synth->setOPKeyboardLevelScalingDepthLeft(op, value); }
+    uint8_t getOPKeyboardLevelScalingDepthLeft(uint8_t op) const { return synth->getOPKeyboardLevelScalingDepthLeft(op); }
+    void setOPKeyboardLevelScalingDepthRight(uint8_t op, uint8_t value) { synth->setOPKeyboardLevelScalingDepthRight(op, value); }
+    uint8_t getOPKeyboardLevelScalingDepthRight(uint8_t op) const { return synth->getOPKeyboardLevelScalingDepthRight(op); }
+    void setOPKeyboardLevelScalingCurveLeft(uint8_t op, uint8_t value) { synth->setOPKeyboardLevelScalingCurveLeft(op, value); }
+    uint8_t getOPKeyboardLevelScalingCurveLeft(uint8_t op) const { return synth->getOPKeyboardLevelScalingCurveLeft(op); }
+    void setOPKeyboardLevelScalingCurveRight(uint8_t op, uint8_t value) { synth->setOPKeyboardLevelScalingCurveRight(op, value); }
+    uint8_t getOPKeyboardLevelScalingCurveRight(uint8_t op) const { return synth->getOPKeyboardLevelScalingCurveRight(op); }
+    void setOPKeyboardRateScale(uint8_t op, uint8_t value) { synth->setOPKeyboardRateScale(op, value); }
+    uint8_t getOPKeyboardRateScale(uint8_t op) const { return synth->getOPKeyboardRateScale(op); }
+    void setPitchRate(uint8_t step, uint8_t value) { synth->setPitchRate(step, value); }
     uint8_t getPitchRate(uint8_t step) const { return synth->getPitchRate(step); }
-    void setPitchLevel(uint8_t step, uint8_t level) { synth->setPitchLevel(step, level); }
-    uint8_t getPitchLevel(uint8_t step) const { return synth->getPitchLevel(step); } // Made const
-    void setAlgorithm(uint8_t algorithm) { synth->setAlgorithm(algorithm); }
-    uint8_t getAlgorithm() const { return synth->getAlgorithm(); } // Made const
-    void setFeedback(uint8_t feedback) { synth->setFeedback(feedback); }
-    uint8_t getFeedback() const { return synth->getFeedback(); } // Made const
-    void setOscillatorSync(bool sync) { synth->setOscillatorSync(sync); }
-    bool getOscillatorSync() { return synth->getOscillatorSync(); }
-    void setLFOSpeed(uint8_t speed) { synth->setLFOSpeed(speed); }
+    void setPitchLevel(uint8_t step, uint8_t value) { synth->setPitchLevel(step, value); }
+    uint8_t getPitchLevel(uint8_t step) const { return synth->getPitchLevel(step); }
+    void setAlgorithm(uint8_t value) { synth->setAlgorithm(value); }
+    uint8_t getAlgorithm() const { return synth->getAlgorithm(); }
+    void setFeedback(uint8_t value) { synth->setFeedback(value); }
+    uint8_t getFeedback() const { return synth->getFeedback(); }
+    void setOscillatorSync(bool value) { synth->setOscillatorSync(value); }
+    bool getOscillatorSync() const { return synth->getOscillatorSync(); }
+    void setLFOSpeed(uint8_t value) { synth->setLFOSpeed(value); }
     uint8_t getLFOSpeed() const { return synth->getLFOSpeed(); }
-    void setLFODelay(uint8_t delay) { synth->setLFODelay(delay); }
+    void setLFODelay(uint8_t value) { synth->setLFODelay(value); }
     uint8_t getLFODelay() const { return synth->getLFODelay(); }
-    void setLFOPitchModulationDepth(uint8_t depth) { synth->setLFOPitchModulationDepth(depth); }
+    void setLFOPitchModulationDepth(uint8_t value) { synth->setLFOPitchModulationDepth(value); }
     uint8_t getLFOPitchModulationDepth() const { return synth->getLFOPitchModulationDepth(); }
-    void setLFOSync(bool sync) { synth->setLFOSync(sync); }
-    bool getLFOSync() { return synth->getLFOSync(); }
-    void setLFOWaveform(uint8_t waveform) { synth->setLFOWaveform(waveform); }
+    void setLFOSync(bool value) { synth->setLFOSync(value); }
+    bool getLFOSync() const { return synth->getLFOSync(); }
+    void setLFOWaveform(uint8_t value) { synth->setLFOWaveform(value); }
     uint8_t getLFOWaveform() const { return synth->getLFOWaveform(); }
-    void setLFOPitchModulationSensitivity(uint8_t sensitivity) { synth->setLFOPitchModulationSensitivity(sensitivity); }
+    void setLFOPitchModulationSensitivity(uint8_t value) { synth->setLFOPitchModulationSensitivity(value); }
     uint8_t getLFOPitchModulationSensitivity() const { return synth->getLFOPitchModulationSensitivity(); }
-    void setTranspose(uint8_t transpose) { synth->setTranspose(transpose); }
-    uint8_t getTranspose() const { return synth->getTranspose(); }
-    void setName(const char* name) { synth->setName(const_cast<char*>(name)); }
-    void getName(char* buffer) { synth->getName(buffer); } 
-    std::string getNameString() {
-        char name_buffer[11]; // DX7 names are 10 chars + null terminator
-        synth->getName(name_buffer);
-        return std::string(name_buffer);
+    void setTranspose(int8_t value) { synth->setTranspose(value); }
+    int8_t getTranspose() const { return synth->getTranspose(); }
+    void setName(const std::string& name) {
+        char buf[11] = {0};
+        size_t len = name.copy(buf, sizeof(buf) - 1);
+        buf[len] = '\0';
+        synth->setName(buf);
+    }
+    std::string getName() const {
+        char buf[11] = {0};
+        synth->getName(buf);
+        return std::string(buf);
     }
 
-    // Provide public access to synth for internal use
-    Dexed* getSynth() { return synth; }
+    // --- End: Operator and synth parameter methods ---
 
 private:
     Dexed* synth;
@@ -464,6 +461,7 @@ PYBIND11_MODULE(dexed_py, m) {
         .def("setVelocityScale", &PyDexed::setVelocityScale)
         .def("loadVoiceParameters", &PyDexed::loadVoiceParameters)
         .def("setGain", &PyDexed::setGain)
+        .def("getGain", &PyDexed::getGain)
         .def("keydown", &PyDexed::keydown, py::call_guard<py::gil_scoped_release>())
         .def("keyup", &PyDexed::keyup, py::call_guard<py::gil_scoped_release>())
         .def("getSamples", &PyDexed::getSamples) // Removed py::call_guard here
@@ -560,7 +558,47 @@ PYBIND11_MODULE(dexed_py, m) {
         .def("setTranspose", &PyDexed::setTranspose)
         .def("getTranspose", [](const PyDexed& self) { return static_cast<int>(self.getTranspose()); })
         .def("setName", &PyDexed::setName)
-        .def("getName", &PyDexed::getNameString, "Gets the voice name") // New binding
+        .def("getName", &PyDexed::getName, "Gets the voice name") // New binding
+        .def("setAftertouch", &PyDexed::setAftertouch)
+        .def("getAftertouch", &PyDexed::getAftertouch)
+        .def("setAftertouchRange", &PyDexed::setAftertouchRange)
+        .def("getAftertouchRange", &PyDexed::getAftertouchRange)
+        .def("setAftertouchTarget", &PyDexed::setAftertouchTarget)
+        .def("getAftertouchTarget", &PyDexed::getAftertouchTarget)
+        .def("setBreathController", &PyDexed::setBreathController)
+        .def("getBreathController", &PyDexed::getBreathController)
+        .def("setBreathControllerRange", &PyDexed::setBreathControllerRange)
+        .def("getBreathControllerRange", &PyDexed::getBreathControllerRange)
+        .def("setBreathControllerTarget", &PyDexed::setBreathControllerTarget)
+        .def("getBreathControllerTarget", &PyDexed::getBreathControllerTarget)
+        .def("setFootController", &PyDexed::setFootController)
+        .def("getFootController", &PyDexed::getFootController)
+        .def("setFootControllerRange", &PyDexed::setFootControllerRange)
+        .def("getFootControllerRange", &PyDexed::getFootControllerRange)
+        .def("setFootControllerTarget", &PyDexed::setFootControllerTarget)
+        .def("getFootControllerTarget", &PyDexed::getFootControllerTarget)
+        .def("setModWheel", &PyDexed::setModWheel)
+        .def("getModWheel", &PyDexed::getModWheel)
+        .def("setModWheelRange", &PyDexed::setModWheelRange)
+        .def("getModWheelRange", &PyDexed::getModWheelRange)
+        .def("setModWheelTarget", &PyDexed::setModWheelTarget)
+        .def("getModWheelTarget", &PyDexed::getModWheelTarget)
+        .def("setOPRate", &PyDexed::setOPRate)
+        .def("getOPRate", &PyDexed::getOPRate)
+        .def("setOPLevel", &PyDexed::setOPLevel)
+        .def("getOPLevel", &PyDexed::getOPLevel)
+        .def("setOPAll", &PyDexed::setOPAll)
+        .def("setOPRateAll", &PyDexed::setOPRateAll)
+        .def("setOPLevelAll", &PyDexed::setOPLevelAll)
+        .def("setOPRateAllCarrier", &PyDexed::setOPRateAllCarrier)
+        .def("setOPLevelAllCarrier", &PyDexed::setOPLevelAllCarrier)
+        .def("setOPRateAllModulator", &PyDexed::setOPRateAllModulator)
+        .def("setOPLevelAllModulator", &PyDexed::setOPLevelAllModulator)
+        .def("setPBController", &PyDexed::setPBController)
+        .def("setMWController", &PyDexed::setMWController)
+        .def("setFCController", &PyDexed::setFCController)
+        .def("setBCController", &PyDexed::setBCController)
+        .def("setATController", &PyDexed::setATController)
         ;
 
     py::class_<DexedHost>(m, "DexedHost")
