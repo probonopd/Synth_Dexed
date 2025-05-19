@@ -477,7 +477,7 @@ class TestDexedHost(unittest.TestCase):
             midi_out.send_message([0x80, 60, 0])    # Note off
             time.sleep(1)
             midi_out.close_port()
-            print("[Test] You should have heard a short FM piano note (Middle C) for about 4 seconds.\nDid you hear this sound? (y/n): ", end="")
+            print("[Test] You should have heard a short FM piano note (Middle C).\nDid you hear this sound? (y/n): ", end="")
             user_input = input().strip().lower()
             self.assertEqual(user_input, "y", "User did not confirm hearing the expected sound.")
         except Exception as e:
