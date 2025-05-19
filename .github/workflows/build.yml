@@ -41,7 +41,7 @@ jobs:
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.os }}-build
+          name: Synth_Dexed-${{ matrix.os }}
           path: |
                 build/Release/Synth_*
                 build/Synth_*
