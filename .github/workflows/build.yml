@@ -37,7 +37,6 @@ jobs:
              python -m pip install -r requirements.txt
              python setup.py build
              python setup.py install
-             python setup.py bdist_wheel
              cd -
 
       - name: Upload build
