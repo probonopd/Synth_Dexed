@@ -1,8 +1,23 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(Synth_Dexed LANGUAGES CXX)
+
+# Ensure C++17 is used
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Check the compiler and set specific flags if necessary
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    # Add MSVC-specific flags
+    add_compile_options(/std:c++17)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # Add GCC-specific flags
+    add_compile_options(-std=c++17)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Add Clang-specific flags
+    add_compile_options(-std=c++17)
+endif()
 
 # Gather all source files except main.cpp and main_*.cpp
 file(GLOB SYNTH_DEXED_SRC
