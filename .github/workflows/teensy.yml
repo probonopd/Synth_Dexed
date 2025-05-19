@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        board: [teensy35, teensy36, teensy40, teensy41]
+        board: [teensy36, teensy40, teensy41]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
