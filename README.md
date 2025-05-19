@@ -1,6 +1,6 @@
 # Synth_Dexed
 
-Synth_Dexed is a port of the [Dexed sound engine]((https://github.com/asb2m10/dexed) as library for the Teensy-3.5/3.6/4.x with an audio shield, and for Windows, Linux, and macOS (WIP; see below). Dexed is heavily based on https://github.com/google/music-synthesizer-for-android. Synth_Dexed is SysEx compatible with a famous 6-OP FM synth and is used in [MicroDexed](https://codeberg.org/dcoredump/MicroDexed) and [MiniDexed](https://github.com/probonopd/MiniDexed).
+Synth_Dexed is a port of the [Dexed sound engine](https://github.com/asb2m10/dexed) as library for the Teensy-3.5/3.6/4.x with an audio shield, and for Windows, Linux, and macOS (WIP; see below). Dexed is heavily based on https://github.com/google/music-synthesizer-for-android. Synth_Dexed is SysEx compatible with a famous 6-OP FM synth and is used in [MicroDexed](https://codeberg.org/dcoredump/MicroDexed) and [MiniDexed](https://github.com/probonopd/MiniDexed).
 
 ## Mirrored branches
 
