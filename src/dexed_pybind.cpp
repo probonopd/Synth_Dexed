@@ -619,4 +619,23 @@ PYBIND11_MODULE(dexed_py, m) {
         .def("getEngineType", &DexedHost::getEngineType)
         .def("loadInitVoice", &DexedHost::loadInitVoice)
         ;
+
+#ifdef USE_COMPRESSOR
+    m.def("setCompDownsample", &PyDexed::setCompDownsample);
+    m.def("getCompDownsample", &PyDexed::getCompDownsample);
+    m.def("setCompAttack", &PyDexed::setCompAttack);
+    m.def("getCompAttack", &PyDexed::getCompAttack);
+    m.def("setCompRelease", &PyDexed::setCompRelease);
+    m.def("getCompRelease", &PyDexed::getCompRelease);
+    m.def("setCompRatio", &PyDexed::setCompRatio);
+    m.def("getCompRatio", &PyDexed::getCompRatio);
+    m.def("setCompKnee", &PyDexed::setCompKnee);
+    m.def("getCompKnee", &PyDexed::getCompKnee);
+    m.def("setCompThreshold", &PyDexed::setCompThreshold);
+    m.def("getCompThreshold", &PyDexed::getCompThreshold);
+    m.def("setCompMakeupGain", &PyDexed::setCompMakeupGain);
+    m.def("getCompMakeupGain", &PyDexed::getCompMakeupGain);
+    m.def("setCompEnable", &PyDexed::setCompEnable);
+    m.def("getCompEnable", &PyDexed::getCompEnable);
+#endif
 }
