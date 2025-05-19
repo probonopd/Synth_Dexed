@@ -4,3 +4,4 @@ sounddevice
 mido
 python-rtmidi
 wheel
+setuptools
