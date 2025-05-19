@@ -50,7 +50,7 @@ uint8_t fmpiano_sysex[156] = {
 }; // FM-Piano
 
 // MIDI input callback
-void midiReadProc(const MIDIPacketList* pktlist, void* readProcRefCon, void*, void*) {
+void midiReadProc(const MIDIPacketList* pktlist, void* readProcRefCon, void* srcConnRefCon) {
     std::lock_guard<std::mutex> lock(synthMutex);
     if (!synth) return;
     for (unsigned int i = 0; i < pktlist->numPackets; ++i) {
