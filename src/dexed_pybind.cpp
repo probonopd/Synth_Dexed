@@ -9,8 +9,14 @@
 #include <thread>
 #include <atomic>
 #include <vector>
+#ifdef _WIN32
 #include <windows.h>
 #include <mmsystem.h>
+#elif defined(__linux__)
+#include <alsa/asoundlib.h>
+#elif defined(__APPLE__)
+#include <AudioUnit/AudioUnit.h>
+#endif
 #include <cstdint> // Added to ensure uint8_t is defined
 
 // Ensure abi3 ABI compatibility
@@ -331,12 +337,24 @@ private:
     std::thread audio_thread;
     WAVEHDR waveHeaders[NUM_BUFFERS];
     std::vector<std::vector<short>> audioBuffers;
+#elif defined(__linux__)
+    snd_pcm_t* pcm_handle;
+    std::thread audio_thread;
+    std::vector<std::vector<short>> audioBuffers;
+#elif defined(__APPLE__)
+    AudioUnit audioUnit;
+    std::thread audio_thread;
+    std::vector<std::vector<short>> audioBuffers;
 #endif
 public:
     DexedHost(uint8_t max_notes, uint16_t sample_rate, int audio_device = 0)
         : synth(new Dexed(max_notes, sample_rate)), running(false)
 #ifdef _WIN32
         , hWaveOut(nullptr), audio_device(audio_device), audioBuffers(NUM_BUFFERS)
+#elif defined(__linux__)
+        , pcm_handle(nullptr), audioBuffers(NUM_BUFFERS)
+#elif defined(__APPLE__)
+        , audioUnit(nullptr), audioBuffers(NUM_BUFFERS)
 #endif
     {
 #ifdef _WIN32
@@ -346,6 +364,14 @@ public:
             waveHeaders[i] = {};
             waveHeaders[i].lpData = reinterpret_cast<LPSTR>(audioBuffers[i].data());
             waveHeaders[i].dwBufferLength = 2048 * 2 * sizeof(short);
+        }
+#elif defined(__linux__)
+        for (int i = 0; i < NUM_BUFFERS; ++i) {
+            audioBuffers[i].resize(1024 * 2); // stereo
+        }
+#elif defined(__APPLE__)
+        for (int i = 0; i < NUM_BUFFERS; ++i) {
+            audioBuffers[i].resize(1024 * 2); // stereo
         }
 #endif
     }
@@ -380,6 +406,49 @@ public:
         }
         running = true;
         audio_thread = std::thread(&DexedHost::audio_loop, this);
+#elif defined(__linux__)
+        if (running) return;
+        int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
+        if (err < 0) {
+            std::cerr << "[ERROR] Failed to open ALSA PCM device: " << snd_strerror(err) << std::endl;
+            pcm_handle = nullptr;
+            return;
+        }
+        snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, 48000, 1, 500000);
+        running = true;
+        audio_thread = std::thread(&DexedHost::audio_loop, this);
+#elif defined(__APPLE__)
+        if (running) return;
+        AudioComponentDescription desc = { kAudioUnitType_Output, kAudioUnitSubType_DefaultOutput, kAudioUnitManufacturer_Apple, 0, 0 };
+        AudioComponent comp = AudioComponentFindNext(nullptr, &desc);
+        AudioComponentInstanceNew(comp, &audioUnit);
+        AudioStreamBasicDescription asbd = {};
+        asbd.mSampleRate = 48000;
+        asbd.mFormatID = kAudioFormatLinearPCM;
+        asbd.mFormatFlags = kLinearPCMFormatFlagIsSignedInteger | kLinearPCMFormatFlagIsPacked;
+        asbd.mFramesPerPacket = 1;
+        asbd.mChannelsPerFrame = 2;
+        asbd.mBitsPerChannel = 16;
+        asbd.mBytesPerFrame = 4;
+        asbd.mBytesPerPacket = 4;
+        AudioUnitSetProperty(audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &asbd, sizeof(asbd));
+        // Lambda for render callback
+        auto renderCallback = [](void* inRefCon, AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32, UInt32 inNumberFrames, AudioBufferList* ioData) -> OSStatus {
+            DexedHost* host = static_cast<DexedHost*>(inRefCon);
+            std::vector<int16_t> monoBuffer(inNumberFrames);
+            if (host->synth) host->synth->getSamples(monoBuffer.data(), inNumberFrames);
+            for (UInt32 i = 0; i < inNumberFrames; ++i) {
+                int16_t sample = monoBuffer[i];
+                ((int16_t*)ioData->mBuffers[0].mData)[i] = sample;
+                ((int16_t*)ioData->mBuffers[1].mData)[i] = sample;
+            }
+            return noErr;
+        };
+        AURenderCallbackStruct cb = { renderCallback, this };
+        AudioUnitSetProperty(audioUnit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb));
+        AudioUnitInitialize(audioUnit);
+        AudioOutputUnitStart(audioUnit);
+        running = true;
 #endif
     }
 
@@ -400,6 +469,23 @@ public:
             hWaveOut = nullptr;
         }
         std::cout << "[C++] DexedHost::stop_audio: end" << std::endl;
+#elif defined(__linux__)
+        running = false;
+        if (audio_thread.joinable()) audio_thread.join();
+        if (pcm_handle) {
+            snd_pcm_drain(pcm_handle);
+            snd_pcm_close(pcm_handle);
+            pcm_handle = nullptr;
+        }
+#elif defined(__APPLE__)
+        running = false;
+        if (audio_thread.joinable()) audio_thread.join();
+        if (audioUnit) {
+            AudioOutputUnitStop(audioUnit);
+            AudioUnitUninitialize(audioUnit);
+            AudioComponentInstanceDispose(audioUnit);
+            audioUnit = nullptr;
+        }
 #endif
     }
 
@@ -452,6 +538,29 @@ private:
         } catch (...) {
             std::cerr << "[C++] DexedHost::audio_loop: unknown exception" << std::endl;
         }
+    }
+#elif defined(__linux__)
+private:
+    void audio_loop() {
+        int bufferIndex = 0;
+        std::vector<int16_t> monoBuffer(1024);
+        while (running) {
+            if (synth) synth->getSamples(monoBuffer.data(), 1024);
+            for (int i = 0; i < 1024; ++i) {
+                audioBuffers[bufferIndex][2*i] = monoBuffer[i];
+                audioBuffers[bufferIndex][2*i+1] = monoBuffer[i];
+            }
+            int err = snd_pcm_writei(pcm_handle, audioBuffers[bufferIndex].data(), 1024);
+            if (err < 0) {
+                snd_pcm_prepare(pcm_handle);
+            }
+            bufferIndex = (bufferIndex + 1) % NUM_BUFFERS;
+        }
+    }
+#elif defined(__APPLE__)
+private:
+    void audio_loop() {
+        // CoreAudio uses callback, so nothing needed here
     }
 #endif
 };
