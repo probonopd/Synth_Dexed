@@ -10,9 +10,9 @@ See the `master` and `dev` branches.
 
 The branch `origin` is original to this repository, in the hope that it can eventually be merged upstream. It contains the following:
 
-- [x] Synth_Dexed port to Windows
-- [ ] Synth_Dexed port to Linux
-- [ ] Synth_Dexed port to macOS
+- [x] Synth_Dexed port to Windows (standalone executable)
+- [ ] Synth_Dexed port to Linux (standalone executable)
+- [ ] Synth_Dexed port to macOS (standalone executable)
 - [x] Synth_Dexed Python bindings for Windows
 - [ ] Synth_Dexed Python bindings for Linux
 - [ ] Synth_Dexed Python bindings for macOS
