@@ -1,6 +1,7 @@
 #ifndef ARDUINO
 
 // Windows-specific main implementation
+
 #define NOMINMAX
 #include <algorithm>
 #include <mutex>
@@ -67,11 +68,22 @@ int main(int argc, char* argv[]) {
     // std::cout << "[DEBUG] Entered main_win.cpp main()" << std::endl;
     std::signal(SIGINT, signal_handler);
     int audioDev = 0;
+    int midiDev = 0;
     bool useSynth = true;
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
+        if (arg == "-h" || arg == "--help") {
+            std::cout << "Usage: " << argv[0] << " [options]\n"
+                      << "  -h, --help           Show this help message and exit\n"
+                      << "  -a, --audio-device N Select audio device index (default: 0)\n"
+                      << "  -m, --midi-device N  Select MIDI input device index (default: 0)\n"
+                      << "  --sine               Output test sine wave instead of synth\n"
+                      << "  --synth              Use synth (default)\n";
+            return 0;
+        } else if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
             audioDev = std::atoi(argv[++i]);
+        } else if ((arg == "--midi-device" || arg == "-m") && i + 1 < argc) {
+            midiDev = std::atoi(argv[++i]);
         } else if (arg == "--sine") {
             useSynth = false;
         } else if (arg == "--synth") {
@@ -124,17 +136,20 @@ int main(int argc, char* argv[]) {
         }
         // std::cout << "[DEBUG] MIDI: midiInGetNumDevs()" << std::endl;
         UINT numMidiDevs = midiInGetNumDevs();
-        // std::cout << "[DEBUG] MIDI: numMidiDevs=" << numMidiDevs << std::endl;
+        std::cout << "Available MIDI input devices:" << std::endl;
+        for (UINT i = 0; i < numMidiDevs; ++i) {
+            MIDIINCAPS caps;
+            midiInGetDevCaps(i, &caps, sizeof(caps));
+            std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
+        }
+        std::cout << "[INFO] Using MIDI input device: " << midiDev << std::endl;
         try {
             if (numMidiDevs > 0) {
-                // std::cout << "[DEBUG] MIDI: before midiInOpen" << std::endl;
-                UINT midiDev = 0;
-                MMRESULT res = midiInOpen(&hMidiIn, midiDev, (DWORD_PTR)midiInProc, 0, CALLBACK_FUNCTION);
-                // std::cout << "[DEBUG] MIDI: after midiInOpen, res=" << res << std::endl;
+                UINT selectedMidiDev = (midiDev < (int)numMidiDevs) ? midiDev : 0;
+                MMRESULT res = midiInOpen(&hMidiIn, selectedMidiDev, (DWORD_PTR)midiInProc, 0, CALLBACK_FUNCTION);
                 if (res == MMSYSERR_NOERROR) {
-                    // std::cout << "[DEBUG] MIDI: before midiInStart" << std::endl;
                     midiInStart(hMidiIn);
-                    std::cout << "[INFO] MIDI input started on device 0." << std::endl;
+                    std::cout << "[INFO] MIDI input started on device " << selectedMidiDev << "." << std::endl;
                 } else {
                     std::cerr << "[ERROR] Failed to open MIDI input device!" << std::endl;
                 }
