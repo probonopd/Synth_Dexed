@@ -22,7 +22,7 @@ The branch `native` is original to this repository, in the hope that it can even
 - [x] Synth_Dexed Python bindings for Linux (64-bit ARM) __untested__
 - [x] Synth_Dexed Python bindings for macOS __untested__
 - [x] Unit tests for Python bindings
-- [x] Automated builds on GitHub Actions for Teensy 3.6, Teensy 4.0, and Teensy 4.1
+- [x] Automated builds on GitHub Actions for Teensy 3.6, Teensy 4.0, and Teensy 4.1 __untested__
 - [x] Automated builds on GitHub Actions for Windows
-- [x] Automated builds on GitHub Actions for Linux
-- [x] Automated builds on GitHub Actions for macOS
+- [x] Automated builds on GitHub Actions for Linux __untested__
+- [x] Automated builds on GitHub Actions for macOS __untested__
