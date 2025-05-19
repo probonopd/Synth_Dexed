@@ -3,4 +3,4 @@ numpy
 sounddevice
 mido
 python-rtmidi
-wheels
+wheel
