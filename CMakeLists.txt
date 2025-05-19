@@ -15,6 +15,11 @@ list(REMOVE_ITEM SYNTH_DEXED_SRC
     "${CMAKE_SOURCE_DIR}/src/main_linux.cpp"
 )
 
+# Exclude dexed_pybind.cpp for standalone builds
+if (NOT TARGET_PYTHON_BINDINGS)
+    list(REMOVE_ITEM SYNTH_DEXED_SRC "${CMAKE_SOURCE_DIR}/src/dexed_pybind.cpp")
+endif()
+
 # Add the correct main file per platform
 if (WIN32)
     set(PLATFORM_MAIN src/main_win.cpp)
@@ -61,3 +66,9 @@ endif()
 #   mkdir build && cd build
 #   cmake .. -G "Visual Studio 16 2019"   # or your preferred generator
 #   cmake --build .
+
+# Add a target for Python bindings
+if (BUILD_PYTHON_BINDINGS)
+    add_library(dexed_pybind MODULE src/dexed_pybind.cpp)
+    target_link_libraries(dexed_pybind PRIVATE pybind11::module)
+endif()

@@ -35,6 +35,7 @@ ext_modules = [
         ],
         language="c++",
         extra_compile_args=["/std:c++17"],  # Force C++17 for MSVC
+        libraries=["winmm"],  # Add winmm for Windows multimedia API
     ),
 ]
 

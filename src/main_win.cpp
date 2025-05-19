@@ -14,7 +14,7 @@
 #include <string>
 #pragma comment(lib, "winmm.lib")
 constexpr unsigned int SAMPLE_RATE = 48000;
-constexpr unsigned int BUFFER_FRAMES = 2048;
+constexpr unsigned int BUFFER_FRAMES = 1024; // Reduce for lower latency
 constexpr uint8_t MAX_NOTES = 16;
 constexpr unsigned int NUM_BUFFERS = 4;
 std::atomic<bool> running{true};
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
             // Load sample voice from SimplePlay.ino
             synth->loadVoiceParameters(fmpiano_sysex);
             // Set gain even higher for testing
-            synth->setGain(5.0f);
+            synth->setGain(2.0f);
             // std::cout << "[DEBUG] Sample voice loaded and gain set to 1.0f" << std::endl;
         }
         // std::cout << "[DEBUG] MIDI: midiInGetNumDevs()" << std::endl;
@@ -147,50 +147,63 @@ int main(int argc, char* argv[]) {
         // std::cout << "[DEBUG] MIDI setup complete" << std::endl;
     }
     // std::cout << "[DEBUG] Before starting audio thread" << std::endl;
+    // Pre-fill all audio buffers before starting audio thread
+    std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
+    for (int i = 0; i < NUM_BUFFERS; ++i) {
+        if (useSynth) {
+            std::lock_guard<std::mutex> lock(synthMutex);
+            if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
+            for (int j = 0; j < BUFFER_FRAMES; ++j) {
+                audioBuffers[i][2*j] = monoBuffer[j];
+                audioBuffers[i][2*j+1] = monoBuffer[j];
+            }
+        } else {
+            static double phase = 0.0;
+            double freq = 440.0;
+            double phaseInc = 2.0 * 3.141592653589793 * freq / 48000.0;
+            for (int j = 0; j < BUFFER_FRAMES; ++j) {
+                int16_t sample = (int16_t)(std::sin(phase) * 16000.0);
+                phase += phaseInc;
+                if (phase > 2.0 * 3.141592653589793) phase -= 2.0 * 3.141592653589793;
+                audioBuffers[i][2*j] = sample;
+                audioBuffers[i][2*j+1] = sample;
+                monoBuffer[j] = sample;
+            }
+        }
+        waveOutWrite(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+    }
     std::thread audio([&]() {
-        // std::cout << "[DEBUG] Inside audio thread" << std::endl;
         int bufferIndex = 0;
-        static double phase = 0.0;
-        double freq = 440.0;
-        double phaseInc = 2.0 * 3.141592653589793 * freq / 48000.0;
         std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
         while (running) {
             WAVEHDR& hdr = waveHeaders[bufferIndex];
-            if (!(hdr.dwFlags & WHDR_INQUEUE)) {
-                // std::cout << "[DEBUG] audio thread: before useSynth check" << std::endl;
-                if (useSynth) {
-                    // std::cout << "[DEBUG] audio thread: inside useSynth block" << std::endl;
-                    {
-                        std::lock_guard<std::mutex> lock(synthMutex);
-                        if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
-                    }
-                    // std::cout << "[DEBUG] monoBuffer[0..7]: ";
-                    // for (int dbg = 0; dbg < 8; ++dbg) std::cout << monoBuffer[dbg] << " ";
-                    // std::cout << std::endl;
-                    const int FM_GAIN = 1;
-                    for (int i = 0; i < BUFFER_FRAMES; ++i) {
-                        int32_t sample = monoBuffer[i] * FM_GAIN;
-                        if (sample > 32767) sample = 32767;
-                        if (sample < -32768) sample = -32768;
-                        audioBuffers[bufferIndex][2*i] = static_cast<int16_t>(sample);
-                        audioBuffers[bufferIndex][2*i+1] = static_cast<int16_t>(sample);
-                    }
-                } else {
-                    // std::cout << "[DEBUG] audio thread: inside sine block" << std::endl;
-                    for (int i = 0; i < BUFFER_FRAMES; ++i) {
-                        int16_t sample = (int16_t)(std::sin(phase) * 16000.0);
-                        phase += phaseInc;
-                        if (phase > 2.0 * 3.141592653589793) phase -= 2.0 * 3.141592653589793;
-                        audioBuffers[bufferIndex][2*i] = sample;
-                        audioBuffers[bufferIndex][2*i+1] = sample;
-                        monoBuffer[i] = sample;
-                    }
-                }
-                // std::cout << "[DEBUG] audio thread: after useSynth/sine block" << std::endl;
-                waveOutWrite(hWaveOut, &hdr, sizeof(WAVEHDR));
+            // Wait for buffer to be done (WHDR_INQUEUE cleared)
+            while (hdr.dwFlags & WHDR_INQUEUE) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                if (!running) return;
             }
+            if (useSynth) {
+                std::lock_guard<std::mutex> lock(synthMutex);
+                if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
+                for (int i = 0; i < BUFFER_FRAMES; ++i) {
+                    audioBuffers[bufferIndex][2*i] = monoBuffer[i];
+                    audioBuffers[bufferIndex][2*i+1] = monoBuffer[i];
+                }
+            } else {
+                static double phase = 0.0;
+                double freq = 440.0;
+                double phaseInc = 2.0 * 3.141592653589793 * freq / 48000.0;
+                for (int i = 0; i < BUFFER_FRAMES; ++i) {
+                    int16_t sample = (int16_t)(std::sin(phase) * 16000.0);
+                    phase += phaseInc;
+                    if (phase > 2.0 * 3.141592653589793) phase -= 2.0 * 3.141592653589793;
+                    audioBuffers[bufferIndex][2*i] = sample;
+                    audioBuffers[bufferIndex][2*i+1] = sample;
+                    monoBuffer[i] = sample;
+                }
+            }
+            waveOutWrite(hWaveOut, &hdr, sizeof(WAVEHDR));
             bufferIndex = (bufferIndex + 1) % NUM_BUFFERS;
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     });
     // std::cout << "[DEBUG] After starting audio thread" << std::endl;

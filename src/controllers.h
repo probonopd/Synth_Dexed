@@ -69,7 +69,7 @@ class FmMod {
 
     uint8_t getTarget(void)
     {
-      return (pitch | amp << 1 | eg << 2);
+      return (static_cast<uint8_t>(pitch) | (static_cast<uint8_t>(amp) << 1) | (static_cast<uint8_t>(eg) << 2));
     }
 
     void setMode(uint8_t m)
@@ -82,7 +82,7 @@ class Controllers {
     void applyMod(int cc, FmMod &mod)
     {
       uint8_t total = 0;
-      float range = mod.range / 100.0;
+      float range = mod.range / 100.0f;
 
       switch (mod.ctrl_mode)
       {
@@ -90,10 +90,10 @@ class Controllers {
           total = uint8_t(float(cc) * range); // LINEAR mode
           break;
         case 1:
-          total = uint8_t(127.0 * range - (float(cc) * range)); // REVERSE mode
+          total = uint8_t(127.0f * range - (float(cc) * range)); // REVERSE mode
           break;
         case 2:
-          total = uint8_t(range * float(cc) + (1.0 - range) * 127.0); // DIRECT BC mode by Thierry (opus.quatre)
+          total = uint8_t(range * float(cc) + (1.0f - range) * 127.0f); // DIRECT BC mode by Thierry (opus.quatre)
           break;
       }
 

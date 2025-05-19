@@ -1,0 +1,6 @@
+pybind11
+numpy
+sounddevice
+mido
+unittest
+python-rtmidi

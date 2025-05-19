@@ -215,6 +215,15 @@ cd build
 # Release\Synth_Dexed.exe
 ```
 
+Python bindings:
+
+```
+cd python
+pip install -r requirements.txt
+python setup.py clean --all # When needed
+python setup.py build; python setup.py install; python -m unittest -v test_dexed.py
+```
+
 ### Linux
 
 ```
