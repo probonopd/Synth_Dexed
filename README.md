@@ -8,7 +8,7 @@ See the `master` and `dev` branches.
 
 ## New branch
 
-The branch `origin` is original to this repository, in the hope that it can eventually be merged upstream. It contains the following:
+The branch `native` is original to this repository, in the hope that it can eventually be merged upstream. It contains the following:
 
 - [x] Synth_Dexed port to Windows (standalone executable)
 - [ ] Synth_Dexed port to Linux (standalone executable)
