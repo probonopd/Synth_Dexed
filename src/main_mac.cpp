@@ -1,1 +1,5 @@
-# macOS-specific main implementation goes here
+#ifndef ARDUINO
+
+// macOS-specific main implementation goes here
+
+#endif

@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 // Windows-specific main implementation
 #define NOMINMAX
 #include <algorithm>
@@ -234,3 +236,5 @@ int main(int argc, char* argv[]) {
     }
     return 0;
 }
+
+#endif

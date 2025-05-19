@@ -1,1 +1,5 @@
-# Linux-specific main implementation goes here
+#ifndef ARDUINO
+
+// Linux-specific main implementation goes here
+
+#endif
