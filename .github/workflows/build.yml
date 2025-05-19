@@ -44,6 +44,8 @@ jobs:
           name: ${{ matrix.os }}-build
           path: |
                 build/Release/Synth_*
+                build/Synth_*
+                Synth_*
                 python/dist/*.whl
                 python/main_python.py
                 python/test_dexed.py
