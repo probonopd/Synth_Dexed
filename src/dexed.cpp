@@ -43,7 +43,7 @@
 
 #include <chrono>
 
-#if !defined(_WIN32) && !defined(__linux__) && !defined(__APPLE__)
+#if !defined(_WIN32) && !defined(__linux__) && !defined(__APPLE__) && !defined(ARDUINO)
 #error "Unsupported platform"
 #endif
 

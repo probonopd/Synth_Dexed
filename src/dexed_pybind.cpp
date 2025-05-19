@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/iostream.h>
@@ -639,3 +641,5 @@ PYBIND11_MODULE(dexed_py, m) {
     m.def("getCompEnable", &PyDexed::getCompEnable);
 #endif
 }
+
+#endif
