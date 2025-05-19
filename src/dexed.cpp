@@ -1206,7 +1206,15 @@ void Dexed::setMasterTune(int8_t mastertune)
 
 int8_t Dexed::getMasterTune(void)
 {
-  return (controllers.masterTune);
+  // Inverse of setMasterTune transformation
+  // controllers.masterTune = (int(mastertune / 100.0 * 0x4000) << 11) * (1.0 / 12.0);
+  // We want to recover mastertune in range -99..99
+  float val = static_cast<float>(controllers.masterTune);
+  // Reverse the scaling: mastertune = ...
+  // Undo: x = (int(mastertune / 100.0 * 0x4000) << 11) * (1.0 / 12.0)
+  // Approximate inverse:
+  float mastertune = (val * 12.0f / (1 << 11)) / 0x4000 * 100.0f;
+  return static_cast<int8_t>(mastertune + 0.5f); // round to nearest int
 }
 
 void Dexed::setModWheel(uint8_t value)
