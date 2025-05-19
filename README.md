@@ -1,4 +1,4 @@
-# Synth_Dexed [![Teensy](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml) [![Build](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/native.yml)
+# Synth_Dexed
 
 ## Mirrored branches
 
@@ -6,7 +6,8 @@ Mirrored from https://codeberg.org/dcoredump/Synth_Dexed.
 
 See the `master` and `dev` branches.
 
-## New branch
+## Native branch [![Teensy](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml) [![Build Executables](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml)
+
 
 The branch `native` is original to this repository, in the hope that it can eventually be merged upstream. It contains the following:
 
