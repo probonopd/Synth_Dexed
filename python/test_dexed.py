@@ -1,7 +1,8 @@
 import unittest
 import ctypes
+import time
 from dexed_py import Dexed
-
+import rtmidi
 import faulthandler
 faulthandler.enable()
 
@@ -44,14 +45,10 @@ class TestDexedHost(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        device_index = 0
-        print(f"[INFO] Using audio device: {device_index}")
         print("[INFO] Initializing DexedHost...")
         cls.synth = Dexed(16, 48000)
         cls.synth.loadVoiceParameters(FMPIANO_SYSEX)
         cls.synth.setGain(2.0)
-        print("[INFO] Audio started.")
-        # Removed sleep for speed
 
     @classmethod
     def tearDownClass(cls):
@@ -468,7 +465,7 @@ class TestDexedHost(unittest.TestCase):
             self.synth.enable(False)
             self.assertFalse(self.synth.isEnabled())
 
-"""    def test_audible_sound(self):
+    def test_audible_sound(self):
         try:
             self.synth.resetControllers()
             self.synth.setGain(2.0)
@@ -488,7 +485,7 @@ class TestDexedHost(unittest.TestCase):
             print("[Test] Exception occurred in test_audible_sound:")
             traceback.print_exc()
             raise
-"""
+
 if __name__ == "__main__":
     TestDexedHost.list_audio_devices()
     print("[INFO] Running DexedHost tests with audio device 0...")
