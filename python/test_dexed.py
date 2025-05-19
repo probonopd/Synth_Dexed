@@ -460,6 +460,13 @@ class TestDexedHost(unittest.TestCase):
         if hasattr(self.synth, 'getPitchbend'):
             val = self.synth.getPitchbend()
             self.assertIsInstance(val, int)
+    
+    def test_enable_disable(self):
+        if hasattr(self.synth, 'enable'):
+            self.synth.enable(True)
+            self.assertTrue(self.synth.isEnabled())
+            self.synth.enable(False)
+            self.assertFalse(self.synth.isEnabled())
 
 """    def test_audible_sound(self):
         try:

@@ -1,4 +1,7 @@
 
+#ifndef BANKS_H
+#define BANKS_H
+
 //
 // File generated with sysex2c.py
 //
@@ -5786,3 +5789,5 @@ uint8_t progmem_bank[10][32][128] PROGMEM =
 		}
 	}
 };
+
+#endif // BANKS_H
