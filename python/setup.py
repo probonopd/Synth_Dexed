@@ -1,7 +1,7 @@
 from setuptools import setup, Extension
 import pybind11
-import glob
 import os
+import sys
 
 # Collect all relevant source files for Dexed
 src_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../src"))
@@ -25,6 +25,12 @@ sources = [
     # Add any other .cpp files your Dexed implementation requires
 ]
 
+compile_args = []
+if sys.platform == "win32":
+    compile_args.append("/std:c++17")
+else:
+    compile_args.append("-std=c++17")
+
 ext_modules = [
     Extension(
         "dexed_py",
@@ -34,9 +40,9 @@ ext_modules = [
             src_dir
         ],
         language="c++",
-        extra_compile_args=["/std:c++17"],  # Force C++17 for MSVC
-        libraries=["winmm"],  # Add winmm for Windows multimedia API
-        py_limited_api=True,  # <--- critical for abi3
+        extra_compile_args=compile_args,
+        libraries=["winmm"] if sys.platform == "win32" else [],
+        py_limited_api=True,
     ),
 ]
 
