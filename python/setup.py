@@ -31,6 +31,19 @@ if sys.platform == "win32":
 else:
     compile_args.append("-std=c++17")
 
+libraries = (
+    ["winmm"] if sys.platform == "win32"
+    else ["asound"] if sys.platform.startswith("linux")
+    else []
+)
+extra_link_args = []
+if sys.platform == "darwin":
+    extra_link_args = [
+        "-framework", "CoreAudio",
+        "-framework", "AudioUnit",
+        "-framework", "CoreMIDI"
+    ]
+
 ext_modules = [
     Extension(
         "dexed_py",
@@ -41,8 +54,10 @@ ext_modules = [
         ],
         language="c++",
         extra_compile_args=compile_args,
-        libraries=["winmm"] if sys.platform == "win32" else [],
-        py_limited_api=True,
+        libraries=libraries,
+        extra_link_args=extra_link_args,
+        # py_limited_api=True,
+        # define_macros=[("Py_LIMITED_API", "0x03020000")],
     ),
 ]
 

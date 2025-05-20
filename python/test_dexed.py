@@ -377,12 +377,139 @@ class TestDexedHost(unittest.TestCase):
         # Not exposed in Python, so just check for presence
         self.assertTrue(True)
 
-    def test_check_system_exclusive(self):
+    def test_check_system_exclusive_status_codes(self):
         if hasattr(self.synth, 'checkSystemExclusive'):
-            # Provide a minimal valid sysex buffer
-            result = self.synth.checkSystemExclusive(bytes([0xF0, 0x7E, 0x00, 0xF7]))
-            self.assertIsInstance(result, bool)
+            # Valid Yamaha parameter change (7 bytes, voice parameter)
+            # Result: 300 + (param_group * 128) + param_index
+            # param_group = sysex[3] & 0x03
+            # param_index = sysex[4] & 0x7F
+            # For sysex_param: group=0, index=1 -> 300 + 0 + 1 = 301
+            sysex_param = bytes([0xF0, 0x43, 0x00, 0x00, 0x01, 0x7F, 0xF7])
+            result_param = self.synth.checkSystemExclusive(sysex_param)
+            # print(f"[TEST] checkSystemExclusive (param change) type: {type(result_param)}, value: {result_param}")
+            self.assertTrue(300 <= result_param <= 455, f"Expected 300-455, got {result_param}")
 
+            # Invalid: wrong end byte (not 0xF7)
+            sysex_bad_end = bytes([0xF0, 0x43, 0x00, 0x00, 0x01, 0x7F, 0x00])
+            result_bad_end = self.synth.checkSystemExclusive(sysex_bad_end)
+            # print(f"[TEST] checkSystemExclusive (bad end) result: {result_bad_end}")
+            self.assertEqual(result_bad_end, -1)
+
+            # Invalid: not Yamaha (manufacturer ID not 0x43)
+            sysex_not_yamaha = bytes([0xF0, 0x44, 0x00, 0x00, 0x01, 0x7F, 0xF7])
+            result_not_yamaha = self.synth.checkSystemExclusive(sysex_not_yamaha)
+            # print(f"[TEST] checkSystemExclusive (not Yamaha) result: {result_not_yamaha}")
+            self.assertEqual(result_not_yamaha, -2)
+
+            # Invalid: unknown message length (default case, e.g. < 6 bytes, or unexpected length)
+            sysex_unknown_len_short = bytes([0xF0, 0x43, 0x00, 0x00, 0xF7]) # 5 bytes
+            result_unknown_len_short = self.synth.checkSystemExclusive(sysex_unknown_len_short)
+            # print(f"[TEST] checkSystemExclusive (unknown len short) result: {result_unknown_len_short}")
+            self.assertEqual(result_unknown_len_short, -11)
+
+            sysex_unknown_len_long = bytes([0xF0, 0x43, 0x00, 0x00, 0x01, 0x02, 0x03, 0xF7]) # 8 bytes, not bulk
+            result_unknown_len_long = self.synth.checkSystemExclusive(sysex_unknown_len_long)
+            # print(f"[TEST] checkSystemExclusive (unknown len long) result: {result_unknown_len_long}")
+            self.assertEqual(result_unknown_len_long, -11)
+
+
+            # -3: Unknown SysEx parameter change type (len=7, but sysex[3] type bits are not voice or function)
+            # type_bits = (sysex[3] & 0x7C) >> 2. Voice=0, Function=2.
+            # Using 0x04 for sysex[3] -> type_bits = (0x04 & 0x7C) >> 2 = 0x04 >> 2 = 1 (unknown)
+            sysex_minus_3 = bytes([0xF0, 0x43, 0x00, 0x04, 0x00, 0x00, 0xF7])
+            result_minus_3 = self.synth.checkSystemExclusive(sysex_minus_3)
+            # print(f"[TEST] checkSystemExclusive (-3 unknown param type) result: {result_minus_3}")
+            self.assertEqual(result_minus_3, -3)
+
+            # Function parameter change (returns sysex[4] & 0x7F, which is 0-127, but typically 0-13 for DX7 func params)
+            # sysex[3] type bits (2-6) must be 2 (function). So, sysex[3] = 0x08 (.... 10..).
+            # Test with param index 5 (sysex[4]=0x05).
+            sysex_func_param_5 = bytes([0xF0, 0x43, 0x00, 0x08, 0x05, 0x42, 0xF7]) # value 0x42 is ignored
+            result_func_param_5 = self.synth.checkSystemExclusive(sysex_func_param_5)
+            # print(f"[TEST] checkSystemExclusive (func param 5) result: {result_func_param_5}")
+            self.assertEqual(result_func_param_5, 5)
+
+            # Test with max function param index 13 (0x0D)
+            sysex_func_param_13 = bytes([0xF0, 0x43, 0x00, 0x08, 0x0D, 0x00, 0xF7])
+            result_func_param_13 = self.synth.checkSystemExclusive(sysex_func_param_13)
+            # print(f"[TEST] checkSystemExclusive (func param 13) result: {result_func_param_13}")
+            self.assertEqual(result_func_param_13, 13)
+
+            # Voice Bulk (155 data bytes + 1 checksum byte = 156 payload. Total len with headers/footers = 6+156+1 = 163)
+            # sysex[3] must be 0x00 (.... 00.. type bits)
+            # sysex[4,5] (BC, WC) must be 0x00, 0x9B for 155 bytes
+            valid_voice_data = [0x00] * 155
+            # Checksum for all-zero data: sum_data = 0. (128 - 0) & 0x7F = 0.
+            valid_voice_checksum = 0x00
+
+            # 100: Voice loaded (valid 1 voice bulk)
+            sysex_voice_bulk_ok = bytes([0xF0, 0x43, 0x00, 0x00, 0x00, 0x9B] + valid_voice_data + [valid_voice_checksum, 0xF7])
+            self.assertEqual(len(sysex_voice_bulk_ok), 163, "Voice bulk OK length check")
+            result_voice_bulk_ok = self.synth.checkSystemExclusive(sysex_voice_bulk_ok)
+            # print(f"[TEST] checkSystemExclusive (voice bulk OK) result: {result_voice_bulk_ok}")
+            self.assertEqual(result_voice_bulk_ok, 100)
+
+            # -5: Not a SysEx voice bulk upload (sysex[3] indicates not voice bulk, e.g. 0x09 for bank)
+            sysex_minus_5 = bytes([0xF0, 0x43, 0x00, 0x09, 0x00, 0x9B] + valid_voice_data + [valid_voice_checksum, 0xF7])
+            result_minus_5 = self.synth.checkSystemExclusive(sysex_minus_5)
+            # print(f"[TEST] checkSystemExclusive (-5 not voice bulk) result: {result_minus_5}")
+            self.assertEqual(result_minus_5, -5)
+
+            # -6: Wrong data length for voice bulk (BC, WC in sysex[4,5] are not 0x00, 0x9B)
+            # Use 0x00, 0x9A (header says 154 bytes, but provide 155 bytes of data to keep length 163)
+            sysex_minus_6 = bytes([0xF0, 0x43, 0x00, 0x00, 0x00, 0x9A] + valid_voice_data + [valid_voice_checksum, 0xF7])
+            self.assertEqual(len(sysex_minus_6), 163, "Voice bulk -6 length check")
+            result_minus_6 = self.synth.checkSystemExclusive(sysex_minus_6)
+            # print(f"[TEST] checkSystemExclusive (-6 wrong voice data len) result: {result_minus_6}")
+            self.assertEqual(result_minus_6, -6)
+
+            # -7: Checksum error for one voice
+            invalid_voice_checksum = 0x01 # Correct checksum for all-zero data is 0x00
+            sysex_minus_7 = bytes([0xF0, 0x43, 0x00, 0x00, 0x00, 0x9B] + valid_voice_data + [invalid_voice_checksum, 0xF7])
+            result_minus_7 = self.synth.checkSystemExclusive(sysex_minus_7)
+            # print(f"[TEST] checkSystemExclusive (-7 voice checksum error) result: {result_minus_7}")
+            self.assertEqual(result_minus_7, -7)
+
+            # Bank Bulk (32 voices * 128 bytes/voice = 4096 data bytes. Plus 1 checksum. Total 4097 payload)
+            # Total length with headers/footers = 6 + 4097 + 1 = 4104
+            # sysex[3] must be 0x09 (.... 1001 type bits for bank)
+            # sysex[4,5] (BC, WC) must be 0x20, 0x00 for 4096 bytes (BC=MSB, WC=LSB of byte count: 4096 = 0x1000, but Yamaha uses 0x2000 for 4096 bytes)
+            # Yamaha DX7 manual states format is F0 43 0n 09 hh ll (data) cs F7 where n is channel
+            # hh ll is byte count. For 4096 bytes, this is 0x1000. So hh=0x10, ll=0x00.
+            # However, the C++ code uses (sysex[4] << 7) | sysex[5] for byte count, and expects 0x2000 for 4096.
+            # This means sysex[4] should be 0x20 and sysex[5] should be 0x00 for 4096 bytes.
+            valid_bank_data = [0x00] * 4096
+            # Checksum for all-zero data: sum_data = 0. (128 - 0) & 0x7F = 0.
+            valid_bank_checksum = 0x00
+
+            # 200: Bank loaded (valid bank bulk)
+            # Using sysex[4]=0x20, sysex[5]=0x00 for 4096 bytes as per C++ logic ((0x20 << 7) | 0x00 = 0x1000 = 4096)
+            sysex_bank_bulk_ok = bytes([0xF0, 0x43, 0x00, 0x09, 0x20, 0x00] + valid_bank_data + [valid_bank_checksum, 0xF7])
+            self.assertEqual(len(sysex_bank_bulk_ok), 4104, "Bank bulk OK length check")
+            result_bank_bulk_ok = self.synth.checkSystemExclusive(sysex_bank_bulk_ok)
+            # print(f"[TEST] checkSystemExclusive (bank bulk OK) result: {result_bank_bulk_ok}")
+            self.assertEqual(result_bank_bulk_ok, 200)
+
+            # -8: Not a SysEx bank bulk upload (sysex[3] indicates not bank bulk, e.g. 0x00 for voice param)
+            sysex_minus_8 = bytes([0xF0, 0x43, 0x00, 0x00, 0x20, 0x00] + valid_bank_data + [valid_bank_checksum, 0xF7])
+            result_minus_8 = self.synth.checkSystemExclusive(sysex_minus_8)
+            # print(f"[TEST] checkSystemExclusive (-8 not bank bulk) result: {result_minus_8}")
+            self.assertEqual(result_minus_8, -8)
+
+            # -9: Wrong data length for bank bulk (BC, WC in sysex[4,5] are not 0x20, 0x00 for 4096)
+            # Use 0x20, 0x01 (header says 4097 bytes, but provide 4096 bytes of data to keep length 4104)
+            sysex_minus_9 = bytes([0xF0, 0x43, 0x00, 0x09, 0x20, 0x01] + valid_bank_data + [valid_bank_checksum, 0xF7])
+            self.assertEqual(len(sysex_minus_9), 4104, "Bank bulk -9 length check")
+            result_minus_9 = self.synth.checkSystemExclusive(sysex_minus_9)
+            # print(f"[TEST] checkSystemExclusive (-9 wrong bank data len) result: {result_minus_9}")
+            self.assertEqual(result_minus_9, -9)
+
+            # -10: Checksum error for bank
+            invalid_bank_checksum = 0x01 # Correct checksum for all-zero data is 0x00
+            sysex_minus_10 = bytes([0xF0, 0x43, 0x00, 0x09, 0x20, 0x00] + valid_bank_data + [invalid_bank_checksum, 0xF7])
+            result_minus_10 = self.synth.checkSystemExclusive(sysex_minus_10)
+            self.assertEqual(result_minus_10, -10)
+            
     def test_set_sustain(self):
         if hasattr(self.synth, 'setSustain') and hasattr(self.synth, 'getSustain'):
             self.synth.setSustain(True)

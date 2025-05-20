@@ -302,3 +302,6 @@ cython_debug/
 .vscode/c_cpp_properties.json
 .vscode/extensions.json
 .vscode/launch.json
+bildlx/Makefile
+bildlx/cmake_install.cmake
+bildlx/Synth_Dexed

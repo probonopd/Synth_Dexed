@@ -15,6 +15,7 @@
 #include <cmath>
 #include "dexed.h"
 #include <map>
+#include <poll.h>
 constexpr unsigned int SAMPLE_RATE = 48000;
 constexpr unsigned int BUFFER_FRAMES = 1024;
 constexpr uint8_t MAX_NOTES = 16;
@@ -52,25 +53,37 @@ uint8_t fmpiano_sysex[156] = {
 void midi_thread_func() {
     snd_seq_event_t* ev = nullptr;
     while (running) {
-        snd_seq_event_input(seq_handle, &ev);
-        if (!ev) continue;
-        if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF) {
-            std::lock_guard<std::mutex> lock(synthMutex);
-            if (!synth) continue;
-            uint8_t note = ev->data.note.note;
-            uint8_t velocity = ev->data.note.velocity;
-            if (ev->type == SND_SEQ_EVENT_NOTEON && velocity > 0) {
-                synth->keydown(note, velocity);
-            } else {
-                synth->keyup(note);
+        // Use poll to avoid blocking forever
+        int npfd = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
+        struct pollfd* pfd = (struct pollfd*)alloca(npfd * sizeof(struct pollfd));
+        snd_seq_poll_descriptors(seq_handle, pfd, npfd, POLLIN);
+        int poll_result = poll(pfd, npfd, 100); // 100ms timeout
+        if (!running) break;
+        if (poll_result > 0) {
+            int events = snd_seq_event_input(seq_handle, &ev);
+            if (events > 0 && ev) {
+                std::cout << "[MIDI] Event type: " << ev->type << std::endl;
+                if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF) {
+                    std::lock_guard<std::mutex> lock(synthMutex);
+                    if (!synth) continue;
+                    uint8_t note = ev->data.note.note;
+                    uint8_t velocity = ev->data.note.velocity;
+                    std::cout << "[MIDI] Note " << (int)note << (ev->type == SND_SEQ_EVENT_NOTEON ? " ON " : " OFF ") << (int)velocity << std::endl;
+                    if (ev->type == SND_SEQ_EVENT_NOTEON && velocity > 0) {
+                        synth->keydown(note, velocity);
+                    } else {
+                        synth->keyup(note);
+                    }
+                } else if (ev->type == SND_SEQ_EVENT_CONTROLLER) {
+                    std::lock_guard<std::mutex> lock(synthMutex);
+                    if (!synth) continue;
+                    uint8_t ctrl = ev->data.control.param;
+                    uint8_t value = ev->data.control.value;
+                    uint8_t midi[3] = { static_cast<uint8_t>(0xB0 | (ev->data.control.channel & 0x0F)), ctrl, value };
+                    std::cout << "[MIDI] Controller " << (int)ctrl << " value " << (int)value << std::endl;
+                    synth->midiDataHandler(1, midi, 3);
+                }
             }
-        } else if (ev->type == SND_SEQ_EVENT_CONTROLLER) {
-            std::lock_guard<std::mutex> lock(synthMutex);
-            if (!synth) continue;
-            uint8_t ctrl = ev->data.control.param;
-            uint8_t value = ev->data.control.value;
-            uint8_t midi[3] = { static_cast<uint8_t>(0xB0 | (ev->data.control.channel & 0x0F)), ctrl, value };
-            synth->midiDataHandler(1, midi, 3);
         }
     }
 }

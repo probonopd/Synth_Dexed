@@ -1,7 +1,8 @@
 #ifndef ARDUINO
 
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
 #include <pybind11/pybind11.h>
-#include <pybind11/numpy.h>
 #include <pybind11/iostream.h>
 #include <string> // Added for std::string
 #include <cstring>
@@ -20,7 +21,7 @@
 #include <cstdint> // Added to ensure uint8_t is defined
 
 // Ensure abi3 ABI compatibility
-#define PYBIND11_USE_SMART_HOLDER_AS_DEFAULT
+// #define PYBIND11_USE_SMART_HOLDER_AS_DEFAULT
 
 namespace py = pybind11;
 
@@ -65,44 +66,6 @@ public:
         synth->keyup(note);
         // std::cout << "[DEBUG C++] After synth->keyup, notes playing: " << synth->getNumNotesPlaying() << std::endl;
     }
-    py::array_t<short> getSamples(size_t frames_requested_mono) {
-        // GIL is held by default upon entry from Python now.
-
-        if (!synth) {
-            // std::cout << "[DEBUG C++] PyDexed::getSamples - Synth not available. Returning empty buffer." << std::endl;
-            auto result = py::array_t<short>(frames_requested_mono);
-            std::fill_n(result.mutable_data(), frames_requested_mono, (short)0);
-            return result;
-        }
-
-        std::vector<short> stereo_buffer(frames_requested_mono * 2);
-
-        {
-            py::gil_scoped_release release_gil_for_synth; // Release GIL for this block
-
-            // Core C++ synth processing - no Python API calls here.
-            synth->getSamples(stereo_buffer.data(), static_cast<uint16_t>(frames_requested_mono));
-            
-            // GIL is automatically reacquired when 'release_gil_for_synth' goes out of scope.
-        }
-
-        // GIL is now held again.
-        // Prepare mono output buffer and create Python NumPy array.
-        std::vector<short> mono_output_buffer(frames_requested_mono);
-        for (size_t i = 0; i < frames_requested_mono; ++i) {
-            mono_output_buffer[i] = stereo_buffer[i * 2]; // Left channel
-        }
-
-        return py::array_t<short>(py::buffer_info(
-            mono_output_buffer.data(),            /* Pointer to buffer */
-            sizeof(short),                        /* Size of one scalar */
-            py::format_descriptor<short>::format(), /* Python struct-style format descriptor */
-            1,                                    /* Number of dimensions */
-            { frames_requested_mono },            /* Buffer dimensions */
-            { sizeof(short) }                     /* Strides (in bytes) for each index */
-        ));
-    }
-
     void activate() { 
         // std::cout << "[DEBUG C++] PyDexed::activate() called." << std::endl;
         synth->activate(); 
@@ -142,10 +105,11 @@ public:
     void ControllersRefresh() { synth->ControllersRefresh(); }
     void setEngineType(int type) { synth->setEngineType(type); }
     int getEngineType() { return synth->getEngineType(); }
-    bool checkSystemExclusive(py::bytes sysex) {
-        std::string s = sysex;
-        std::vector<uint8_t> buf(s.begin(), s.end());
-        return synth->checkSystemExclusive(buf.data(), static_cast<uint16_t>(buf.size()));
+    int checkSystemExclusive(py::bytes sysex_data) {
+        std::string sysex_str = sysex_data; // py::bytes can be implicitly converted to std::string
+        const uint8_t* ptr = reinterpret_cast<const uint8_t*>(sysex_str.data());
+        uint16_t len = static_cast<uint16_t>(sysex_str.size());
+        return synth->checkSystemExclusive(ptr, len);
     }
 
     void debugSynthState() {
@@ -167,24 +131,6 @@ public:
             std::cout << (int)voiceData[i] << " ";
         }
         std::cout << std::endl;
-    }
-
-    void fillSamples(py::array_t<short, py::array::c_style> out_buffer) {
-        py::buffer_info buf = out_buffer.request();
-        if (buf.ndim != 2 || buf.shape[1] != 2 || buf.itemsize != sizeof(short)) {
-            throw std::runtime_error("Output buffer must be shape (frames, 2), dtype int16");
-        }
-        size_t frames = buf.shape[0];
-        short* data = static_cast<short*>(buf.ptr);
-
-        if (!synth) {
-            std::memset(data, 0, frames * 2 * sizeof(short));
-            return;
-        }
-        {
-            py::gil_scoped_release release;
-            synth->getSamples(data, static_cast<uint16_t>(frames)); // Fills interleaved stereo
-        }
     }
 
     // New methods to match dexed API:
@@ -316,6 +262,12 @@ public:
         char buf[11] = {0};
         synth->getName(buf);
         return std::string(buf);
+    }
+
+    py::bytes get_samples(uint16_t n_samples) {
+        std::vector<int16_t> buffer(n_samples);
+        synth->getSamples(buffer.data(), n_samples);
+        return py::bytes(reinterpret_cast<const char*>(buffer.data()), n_samples * sizeof(int16_t));
     }
 
     // --- End: Operator and synth parameter methods ---
@@ -575,7 +527,6 @@ PYBIND11_MODULE(dexed_py, m) {
         .def("getGain", &PyDexed::getGain)
         .def("keydown", &PyDexed::keydown, py::call_guard<py::gil_scoped_release>())
         .def("keyup", &PyDexed::keyup, py::call_guard<py::gil_scoped_release>())
-        .def("getSamples", &PyDexed::getSamples) // Removed py::call_guard here
         .def("activate", &PyDexed::activate)
         .def("deactivate", &PyDexed::deactivate)
         .def("getMonoMode", &PyDexed::getMonoMode)
@@ -594,10 +545,12 @@ PYBIND11_MODULE(dexed_py, m) {
         .def("ControllersRefresh", &PyDexed::ControllersRefresh)
         .def("setEngineType", &PyDexed::setEngineType)
         .def("getEngineType", &PyDexed::getEngineType)
-        .def("checkSystemExclusive", &PyDexed::checkSystemExclusive)
+        .def("checkSystemExclusive", [](PyDexed& self, py::bytes sysex_bytes) {
+            // Call the class method and ensure its int result is returned to Python
+            return static_cast<int>(self.checkSystemExclusive(sysex_bytes));
+        })
         .def("debugSynthState", &PyDexed::debugSynthState)
         .def("debugVoiceParameters", &PyDexed::debugVoiceParameters)
-        .def("fillSamples", &PyDexed::fillSamples)
         .def("setSustain", &PyDexed::setSustain)
         .def("getSustain", &PyDexed::getSustain)
         .def("setSostenuto", &PyDexed::setSostenuto)
@@ -710,6 +663,8 @@ PYBIND11_MODULE(dexed_py, m) {
         .def("setFCController", &PyDexed::setFCController)
         .def("setBCController", &PyDexed::setBCController)
         .def("setATController", &PyDexed::setATController)
+        .def("setPitchbend", &PyDexed::setPitchbend)
+        .def("get_samples", &PyDexed::get_samples, py::arg("n_samples"), "Get audio samples as bytes (16-bit little-endian PCM)")
         ;
 
     py::class_<DexedHost>(m, "DexedHost")

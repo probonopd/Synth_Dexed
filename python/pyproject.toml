@@ -9,7 +9,6 @@ description = "Python bindings for Synth_Dexed"
 readme = "README.md"
 requires-python = ">=3.7"
 dependencies = [
-    "numpy",
     "sounddevice",
     "mido",
     "python-rtmidi"

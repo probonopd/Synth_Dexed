@@ -51,7 +51,6 @@ jobs:
                 build/Release/Synth_*
                 build/Synth_*
                 Synth_*
-                python/wheelhouse/*.whl
                 wheelhouse/*.whl
                 python/main_python.py
                 python/test_dexed.py

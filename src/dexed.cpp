@@ -1139,38 +1139,44 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
 	return(-4);
       break;
     case 163: // 1 Voice bulk upload
-      if ((sysex[3] & 0x7f) != 0)
-        return(-5);
+      {
+        const int8_t bulk_checksum = sysex[161];
+        if ((sysex[3] & 0x7f) != 0)
+          return(-5);
 
-      if (((sysex[4] << 7) | sysex[5]) != 0x9b)
-        return(-6);
+        if (((sysex[4] << 7) | sysex[5]) != 0x9b)
+          return(-6);
 
-      // checksum calculation
-      for (uint8_t i = 0; i < 155 ; i++)
-        bulk_checksum_calc -= sysex[i + 6];
-      bulk_checksum_calc &= 0x7f;
+        // checksum calculation
+        for (uint8_t i = 0; i < 155 ; i++)
+          bulk_checksum_calc -= sysex[i + 6];
+        bulk_checksum_calc &= 0x7f;
 
-      if (bulk_checksum_calc != bulk_checksum)
-        return(-7);
+        if (bulk_checksum_calc != bulk_checksum)
+          return(-7);
 
-      return(100);
+        return(100);
+      }
       break;
     case 4104: // 1 Bank bulk upload
-      if ((sysex[3] & 0x7f) != 9)
-        return(-8);
+      {
+        const int8_t bulk_checksum = sysex[4102];
+        if ((sysex[3] & 0x7f) != 9)
+          return(-8);
 
-      if (((sysex[4] << 7) | sysex[5]) != 0x1000)
-        return(-9);
+        if (((sysex[4] << 7) | sysex[5]) != 0x1000)
+          return(-9);
 
-      // checksum calculation
-      for (uint16_t i = 0; i < 4096 ; i++)
-        bulk_checksum_calc -= sysex[i + 6];
-      bulk_checksum_calc &= 0x7f;
+        // checksum calculation
+        for (uint16_t i = 0; i < 4096 ; i++)
+          bulk_checksum_calc -= sysex[i + 6];
+        bulk_checksum_calc &= 0x7f;
+        
+        if (bulk_checksum_calc != bulk_checksum)
+          return(-10);
 
-      if (bulk_checksum_calc != bulk_checksum)
-        return(-10);
-
-      return(200);
+        return(200);
+      }
       break;
     default:
       return(-11);

@@ -1,5 +1,4 @@
 pybind11
-numpy
 sounddevice
 mido
 python-rtmidi
