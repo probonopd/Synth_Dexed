@@ -54,4 +54,5 @@ setup(
     ext_modules=ext_modules,
     install_requires=["pybind11"],
     zip_safe=False,
+    py_modules=[],
 )
