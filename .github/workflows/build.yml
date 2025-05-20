@@ -29,14 +29,19 @@ jobs:
 
       - name: Configure
         run: cmake -S . -B build
+        env:
+          CMAKE_BUILD_TYPE: Release
+          
+      - name: Build Python wheels with cibuildwheel
+        uses: pypa/cibuildwheel@v2.16.5
+        with:
+          package-dir: python
+        env:
+          CIBW_BUILD: cp3*-* # build for all CPython versions
 
-      - name: Build
+      - name: Build C++ project
         run: |
              cmake --build build --config Release
-             cd python
-             python -m pip install -r requirements.txt
-             python setup.py bdist_wheel
-             cd -
 
       - name: Upload build
         uses: actions/upload-artifact@v4
@@ -46,6 +51,6 @@ jobs:
                 build/Release/Synth_*
                 build/Synth_*
                 Synth_*
-                python/dist/*.whl
+                python/wheelhouse/*.whl
                 python/main_python.py
                 python/test_dexed.py
