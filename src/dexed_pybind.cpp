@@ -366,7 +366,7 @@ public:
             pcm_handle = nullptr;
             return;
         }
-        snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, 48000, 1, 500000);
+        snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, 48000, 1, 10000); // 0.01 sec latency
         running = true;
         audio_thread = std::thread(&DexedHost::audio_loop, this);
 #elif defined(__APPLE__)

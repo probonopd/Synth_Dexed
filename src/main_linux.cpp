@@ -119,7 +119,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "[ERROR] Failed to open ALSA PCM device: " << snd_strerror(err) << std::endl;
         return 1;
     }
-    snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, SAMPLE_RATE, 1, 500000); // 0.5 sec latency
+    snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, SAMPLE_RATE, 1, 10000); // 0.01 sec latency
     std::cout << "[INFO] ALSA PCM device opened successfully." << std::endl;
     for (int i = 0; i < NUM_BUFFERS; ++i) {
         audioBuffers[i].resize(BUFFER_FRAMES * 2);
