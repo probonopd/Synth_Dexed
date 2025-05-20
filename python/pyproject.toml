@@ -17,3 +17,6 @@ dependencies = [
 
 [tool.cibuildwheel]
 # Add cibuildwheel-specific options here if needed
+
+[tool.cibuildwheel.linux]
+before-all = "apt-get update && apt-get install -y libasound2-dev"
