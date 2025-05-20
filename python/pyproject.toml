@@ -20,11 +20,13 @@ dependencies = [
 
 # https://gcore.de/en/help/linux/centos7-new-repo-url-after-eol.php
 [tool.cibuildwheel.linux]
-before-all = "if [ -e /etc/redhat-release ] && grep -q 'CentOS Linux release 7' /etc/redhat-release; then \
+before-build = '''
+if [ -e /etc/redhat-release ] && grep -q 'CentOS Linux release 7' /etc/redhat-release; then \
   sed -i 's|mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/CentOS-*.repo && \
   sed -i 's|#baseurl=|baseurl=|g' /etc/yum.repos.d/CentOS-*.repo && \
   sed -i 's|http://mirror.centos.org|https://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo && \
   yum clean all && yum makecache && yum install -y alsa-lib-devel; \
 fi; \
 if [ -e /etc/alpine-release ]; then apk add --no-cache alsa-lib-dev; fi; \
-if command -v apt-get >/dev/null; then apt-get update && apt-get install -y libasound2-dev; fi"
+if command -v apt-get >/dev/null; then apt-get update && apt-get install -y libasound2-dev; fi
+'''
