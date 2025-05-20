@@ -22,10 +22,8 @@ dependencies = [
 [tool.cibuildwheel.linux]
 before-build = '''
 if [ -e /etc/redhat-release ] && grep -q 'CentOS Linux release 7' /etc/redhat-release; then \
-  sed -i 's|mirrorlist=|#mirrorlist=|g' /etc/yum.repos.d/CentOS-*.repo && \
-  sed -i 's|#baseurl=|baseurl=|g' /etc/yum.repos.d/CentOS-*.repo && \
-  sed -i 's|http://mirror.centos.org|https://vault.centos.org|g' /etc/yum.repos.d/CentOS-*.repo && \
-  yum clean all && yum makecache && yum install -y alsa-lib-devel; \
+sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
+sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* \
 fi; \
 if [ -e /etc/alpine-release ]; then apk add --no-cache alsa-lib-dev; fi; \
 if command -v apt-get >/dev/null; then apt-get update && apt-get install -y libasound2-dev; fi
