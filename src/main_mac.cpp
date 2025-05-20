@@ -73,7 +73,7 @@ void midiReadProc(const MIDIPacketList* pktlist, void* readProcRefCon, void* src
             for (auto* s : unisonSynths) s->midiDataHandler(1, midi, 3);
         } else if (status == 0xF0) {
             // SysEx
-            for (auto* s : unisonSynths) s->midiDataHandler(0, data, pkt->length);
+            for (auto* s : unisonSynths) s->midiDataHandler(0, const_cast<uint8_t*>(data), pkt->length);
         }
     }
 }
