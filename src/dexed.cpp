@@ -1976,6 +1976,11 @@ void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
 
 bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midiData1, uint8_t midiData2)
 {
+//    std::cout << "[DEXED DEBUG] midiDataHandler (short): midiChannel=" << (int)midiChannel
+//              << " midiState=0x" << std::hex << (int)midiState
+//              << " data1=" << std::dec << (int)midiData1
+//              << " data2=" << (int)midiData2 << std::endl;
+
     uint8_t m[3];
     m[0]=midiState;
     m[1]=midiData1;
@@ -1985,11 +1990,22 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midi
 
 bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 {
+//    std::cout << "[DEXED DEBUG] midiDataHandler (long): midiChannel=" << (int)midiChannel
+//              << " status=0x" << std::hex << (int)(midiData[0] & 0xF0)
+//              << " channel=" << std::dec << (int)(midiData[0] & 0x0F)
+//              << " data1=" << (int)midiData[1]
+//              << " data2=" << (int)midiData[2]
+//              << " len=" << len << std::endl;
+
     // check for MIDI channel (except for system messages)
     uint8_t status = midiData[0] & 0xF0;
     uint8_t channel = midiData[0] & 0x0F;
-    if ((status < 0xF0) && (channel != midiChannel-1))
+    if ((status < 0xF0) && (channel != midiChannel-1)) {
+//        std::cout << "[DEXED DEBUG] Channel mismatch: status=0x" << std::hex << (int)status
+//                  << " channel=" << std::dec << (int)channel
+//                  << " midiChannel=" << (int)midiChannel << " (expecting " << (int)(midiChannel-1) << ") -- IGNORED" << std::endl;
         return false;
+    }
 
     bool ret = false;
 
