@@ -16,6 +16,11 @@
 #include "dexed.h"
 #include <map>
 #include <poll.h>
+// --- Unison parameters ---
+int unisonVoices = 1; // 1-4
+float unisonSpread = 0.0f; // 0-99
+float unisonDetune = 0.0f; // cents
+std::vector<Dexed*> unisonSynths;
 #define MAX_NOTES 16
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024;
@@ -64,25 +69,33 @@ void midi_thread_func() {
             int events = snd_seq_event_input(seq_handle, &ev);
             if (events > 0 && ev) {
                 std::cout << "[MIDI] Event type: " << ev->type << std::endl;
+                std::lock_guard<std::mutex> lock(synthMutex);
+                if (unisonSynths.empty()) continue;
                 if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF) {
-                    std::lock_guard<std::mutex> lock(synthMutex);
-                    if (!synth) continue;
                     uint8_t note = ev->data.note.note;
                     uint8_t velocity = ev->data.note.velocity;
                     std::cout << "[MIDI] Note " << (int)note << (ev->type == SND_SEQ_EVENT_NOTEON ? " ON " : " OFF ") << (int)velocity << std::endl;
-                    if (ev->type == SND_SEQ_EVENT_NOTEON && velocity > 0) {
-                        synth->keydown(note, velocity);
-                    } else {
-                        synth->keyup(note);
+                    for (auto* s : unisonSynths) {
+                        if (ev->type == SND_SEQ_EVENT_NOTEON && velocity > 0) {
+                            s->keydown(note, velocity);
+                        } else {
+                            s->keyup(note);
+                        }
                     }
                 } else if (ev->type == SND_SEQ_EVENT_CONTROLLER) {
-                    std::lock_guard<std::mutex> lock(synthMutex);
-                    if (!synth) continue;
                     uint8_t ctrl = ev->data.control.param;
                     uint8_t value = ev->data.control.value;
                     uint8_t midi[3] = { static_cast<uint8_t>(0xB0 | (ev->data.control.channel & 0x0F)), ctrl, value };
                     std::cout << "[MIDI] Controller " << (int)ctrl << " value " << (int)value << std::endl;
-                    synth->midiDataHandler(1, midi, 3);
+                    for (auto* s : unisonSynths) {
+                        s->midiDataHandler(1, midi, 3);
+                    }
+                } else if (ev->type == SND_SEQ_EVENT_SYSEX) {
+                    uint8_t* sysex = (uint8_t*)ev->data.ext.ptr;
+                    uint16_t len = ev->data.ext.len;
+                    for (auto* s : unisonSynths) {
+                        s->midiDataHandler(0, sysex, len);
+                    }
                 }
             }
         }
@@ -106,7 +119,10 @@ int main(int argc, char* argv[]) {
                       << "  --num-buffers N      Set number of audio buffers (default: 4)\n"
                       << "  --alsa-latency N     Set ALSA latency in microseconds (default: 10000)\n"
                       << "  --sine               Output test sine wave instead of synth\n"
-                      << "  --synth              Use synth (default)\n";
+                      << "  --synth              Use synth (default)\n"
+                      << "  --unison-voices N    Set number of unison voices (1-4, default: 1)\n"
+                      << "  --unison-spread N    Set unison spread (0-99, default: 0)\n"
+                      << "  --unison-detune N    Set unison detune (in cents, default: 0)\n";
             return 0;
         } else if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
             audioDev = std::atoi(argv[++i]);
@@ -124,6 +140,12 @@ int main(int argc, char* argv[]) {
             useSynth = false;
         } else if (arg == "--synth") {
             useSynth = true;
+        } else if (arg == "--unison-voices" && i + 1 < argc) {
+            unisonVoices = std::clamp(std::atoi(argv[++i]), 1, 4);
+        } else if (arg == "--unison-spread" && i + 1 < argc) {
+            unisonSpread = std::clamp((float)std::atof(argv[++i]), 0.0f, 99.0f);
+        } else if (arg == "--unison-detune" && i + 1 < argc) {
+            unisonDetune = (float)std::atof(argv[++i]);
         }
     }
     // Enumerate and print available ALSA PCM audio output devices
@@ -226,21 +248,60 @@ int main(int argc, char* argv[]) {
     // Synth setup
     if (useSynth) {
         std::lock_guard<std::mutex> lock(synthMutex);
-        synth = new Dexed(MAX_NOTES, SAMPLE_RATE);
-        synth->resetControllers();
-        synth->setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
-        synth->loadVoiceParameters(fmpiano_sysex);
-        synth->setGain(2.0f);
+        for (int v = 0; v < unisonVoices; ++v) {
+            Dexed* s = new Dexed(MAX_NOTES, SAMPLE_RATE);
+            s->resetControllers();
+            s->setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
+            s->loadVoiceParameters(fmpiano_sysex);
+            // Detune and pan logic
+            float detuneCents = 0.0f;
+            if (unisonVoices == 2) {
+                detuneCents = (v == 0 ? -1.0f : 1.0f) * (unisonDetune / 2.0f);
+            } else if (unisonVoices == 3) {
+                detuneCents = (v - 1) * (unisonDetune / 1.0f);
+            } else if (unisonVoices == 4) {
+                detuneCents = (v - 1.5f) * (unisonDetune / 1.5f);
+            }
+            int8_t masterTune = static_cast<int8_t>(detuneCents);
+            s->setMasterTune(masterTune);
+            int detuneValue = 7;
+            if (unisonVoices == 2) {
+                detuneValue = (v == 0) ? 0 : 14;
+            } else if (unisonVoices == 3) {
+                detuneValue = v * 7;
+            } else if (unisonVoices == 4) {
+                detuneValue = v * 5;
+            }
+            for (int op = 0; op < 6; ++op) {
+                s->setOPDetune(op, detuneValue);
+            }
+            s->setGain(2.0f);
+            unisonSynths.push_back(s);
+        }
     }
     // Pre-fill all audio buffers
     std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
+    std::vector<std::vector<int16_t>> unisonBuffers(unisonVoices, std::vector<int16_t>(BUFFER_FRAMES));
     for (int i = 0; i < numBuffers; ++i) {
         if (useSynth) {
             std::lock_guard<std::mutex> lock(synthMutex);
-            if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
+            for (int v = 0; v < unisonVoices; ++v) {
+                unisonSynths[v]->getSamples(unisonBuffers[v].data(), BUFFER_FRAMES);
+            }
             for (int j = 0; j < BUFFER_FRAMES; ++j) {
-                audioBuffers[i][2*j] = monoBuffer[j];
-                audioBuffers[i][2*j+1] = monoBuffer[j];
+                float left = 0.0f, right = 0.0f;
+                for (int v = 0; v < unisonVoices; ++v) {
+                    float pan = 0.0f;
+                    if (unisonVoices == 2) pan = (v == 0 ? -1.0f : 1.0f) * (unisonSpread / 99.0f);
+                    else if (unisonVoices == 3) pan = (v - 1) * (unisonSpread / 99.0f);
+                    else if (unisonVoices == 4) pan = (v - 1.5f) * (unisonSpread / 99.0f);
+                    float panL = std::cos((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                    float panR = std::sin((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                    left += unisonBuffers[v][j] * panL;
+                    right += unisonBuffers[v][j] * panR;
+                }
+                audioBuffers[i][2*j] = std::clamp((int)left, -32768, 32767);
+                audioBuffers[i][2*j+1] = std::clamp((int)right, -32768, 32767);
             }
         } else {
             static double phase = 0.0;
@@ -261,14 +322,27 @@ int main(int argc, char* argv[]) {
     // Start audio thread
     std::thread audio([&]() {
         int bufferIndex = 0;
-        std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
+        std::vector<std::vector<int16_t>> unisonBuffers(unisonVoices, std::vector<int16_t>(BUFFER_FRAMES));
         while (running) {
             if (useSynth) {
                 std::lock_guard<std::mutex> lock(synthMutex);
-                if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
+                for (int v = 0; v < unisonVoices; ++v) {
+                    unisonSynths[v]->getSamples(unisonBuffers[v].data(), BUFFER_FRAMES);
+                }
                 for (int i = 0; i < BUFFER_FRAMES; ++i) {
-                    audioBuffers[bufferIndex][2*i] = monoBuffer[i];
-                    audioBuffers[bufferIndex][2*i+1] = monoBuffer[i];
+                    float left = 0.0f, right = 0.0f;
+                    for (int v = 0; v < unisonVoices; ++v) {
+                        float pan = 0.0f;
+                        if (unisonVoices == 2) pan = (v == 0 ? -1.0f : 1.0f) * (unisonSpread / 99.0f);
+                        else if (unisonVoices == 3) pan = (v - 1) * (unisonSpread / 99.0f);
+                        else if (unisonVoices == 4) pan = (v - 1.5f) * (unisonSpread / 99.0f);
+                        float panL = std::cos((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                        float panR = std::sin((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                        left += unisonBuffers[v][i] * panL;
+                        right += unisonBuffers[v][i] * panR;
+                    }
+                    audioBuffers[bufferIndex][2*i] = std::clamp((int)left, -32768, 32767);
+                    audioBuffers[bufferIndex][2*i+1] = std::clamp((int)right, -32768, 32767);
                 }
             } else {
                 static double phase = 0.0;
@@ -302,10 +376,11 @@ int main(int argc, char* argv[]) {
     snd_seq_close(seq_handle);
     {
         std::lock_guard<std::mutex> lock(synthMutex);
-        if (synth) {
-            delete synth;
-            synth = nullptr;
+        for (auto* s : unisonSynths) {
+            delete s;
         }
+        unisonSynths.clear();
+        synth = nullptr;
     }
     return 0;
 }
