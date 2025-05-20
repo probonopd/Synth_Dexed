@@ -113,8 +113,42 @@ int main(int argc, char* argv[]) {
             useSynth = true;
         }
     }
+    // Enumerate and print available ALSA PCM audio output devices
+    void **hints;
+    int numAudioDevices = 0;
+    std::vector<std::string> deviceNames;
+    std::vector<std::string> deviceDescs;
+    if (snd_device_name_hint(-1, "pcm", &hints) >= 0) {
+        void **n = hints;
+        std::cout << "Available audio output devices:" << std::endl;
+        int idx = 0;
+        while (*n != nullptr) {
+            char *name = snd_device_name_get_hint(*n, "NAME");
+            char *desc = snd_device_name_get_hint(*n, "DESC");
+            if (name && std::string(name) != "null" && std::string(name).find("_voice") == std::string::npos) {
+                deviceNames.push_back(name);
+                deviceDescs.push_back(desc ? desc : name);
+                std::cout << "  [" << idx << "] " << (desc ? desc : name) << " (" << name << ")" << std::endl;
+                ++idx;
+            }
+            if (name) free(name);
+            if (desc) free(desc);
+            ++n;
+        }
+        numAudioDevices = idx;
+        snd_device_name_free_hint(hints);
+    }
+    if (deviceNames.empty()) {
+        std::cerr << "[WARN] No ALSA audio output devices found. Defaulting to 'default'." << std::endl;
+        deviceNames.push_back("default");
+    }
+    if (audioDev < 0 || audioDev >= (int)deviceNames.size()) {
+        std::cerr << "[WARN] Invalid audio device index, using device 0." << std::endl;
+        audioDev = 0;
+    }
+    std::cout << "[INFO] Using audio device: [" << audioDev << "] " << deviceDescs[audioDev] << " (" << deviceNames[audioDev] << ")" << std::endl;
     // Open ALSA PCM device for playback
-    int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
+    int err = snd_pcm_open(&pcm_handle, deviceNames[audioDev].c_str(), SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0) {
         std::cerr << "[ERROR] Failed to open ALSA PCM device: " << snd_strerror(err) << std::endl;
         return 1;
