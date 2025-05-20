@@ -16,10 +16,10 @@
 #include <vector>
 #include <string>
 #pragma comment(lib, "winmm.lib")
-constexpr unsigned int SAMPLE_RATE = 48000;
-constexpr unsigned int BUFFER_FRAMES = 1024; // Reduce for lower latency
+unsigned int SAMPLE_RATE = 48000;
+unsigned int BUFFER_FRAMES = 1024; // Reduce for lower latency
 constexpr uint8_t MAX_NOTES = 16;
-constexpr unsigned int NUM_BUFFERS = 4;
+unsigned int NUM_BUFFERS = 4;
 std::atomic<bool> running{true};
 void signal_handler(int signal) {
     if (signal == SIGINT) {
@@ -77,6 +77,9 @@ int main(int argc, char* argv[]) {
                       << "  -h, --help           Show this help message and exit\n"
                       << "  -a, --audio-device N Select audio device index (default: 0)\n"
                       << "  -m, --midi-device N  Select MIDI input device index (default: 0)\n"
+                      << "  --sample-rate N      Set sample rate (default: 48000)\n"
+                      << "  --buffer-frames N    Set audio buffer size in frames (default: 1024)\n"
+                      << "  --num-buffers N      Set number of audio buffers (default: 4)\n"
                       << "  --sine               Output test sine wave instead of synth\n"
                       << "  --synth              Use synth (default)\n";
             return 0;
@@ -84,6 +87,12 @@ int main(int argc, char* argv[]) {
             audioDev = std::atoi(argv[++i]);
         } else if ((arg == "--midi-device" || arg == "-m") && i + 1 < argc) {
             midiDev = std::atoi(argv[++i]);
+        } else if (arg == "--sample-rate" && i + 1 < argc) {
+            SAMPLE_RATE = std::atoi(argv[++i]);
+        } else if (arg == "--buffer-frames" && i + 1 < argc) {
+            BUFFER_FRAMES = std::atoi(argv[++i]);
+        } else if (arg == "--num-buffers" && i + 1 < argc) {
+            NUM_BUFFERS = std::atoi(argv[++i]);
         } else if (arg == "--sine") {
             useSynth = false;
         } else if (arg == "--synth") {
@@ -101,7 +110,7 @@ int main(int argc, char* argv[]) {
     WAVEFORMATEX wfx = {};
     wfx.wFormatTag = WAVE_FORMAT_PCM;
     wfx.nChannels = 2;
-    wfx.nSamplesPerSec = 48000;
+    wfx.nSamplesPerSec = SAMPLE_RATE;
     wfx.wBitsPerSample = 16;
     wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
     wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;

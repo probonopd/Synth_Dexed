@@ -16,10 +16,10 @@
 #include "dexed.h"
 #include <map>
 #include <poll.h>
-constexpr unsigned int SAMPLE_RATE = 48000;
-constexpr unsigned int BUFFER_FRAMES = 1024;
-constexpr uint8_t MAX_NOTES = 16;
-constexpr unsigned int NUM_BUFFERS = 4;
+unsigned int SAMPLE_RATE = 48000;
+unsigned int BUFFER_FRAMES = 1024;
+unsigned int NUM_BUFFERS = 4;
+unsigned int ALSA_LATENCY = 10000; // microseconds
 std::atomic<bool> running{true};
 void signal_handler(int signal) {
     if (signal == SIGINT) {
@@ -100,6 +100,10 @@ int main(int argc, char* argv[]) {
                       << "  -h, --help           Show this help message and exit\n"
                       << "  -a, --audio-device N Select audio device index (default: 0)\n"
                       << "  -m, --midi-device N  Select MIDI input device index (default: 0)\n"
+                      << "  --sample-rate N      Set sample rate (default: 48000)\n"
+                      << "  --buffer-frames N    Set audio buffer size in frames (default: 1024)\n"
+                      << "  --num-buffers N      Set number of audio buffers (default: 4)\n"
+                      << "  --alsa-latency N     Set ALSA latency in microseconds (default: 10000)\n"
                       << "  --sine               Output test sine wave instead of synth\n"
                       << "  --synth              Use synth (default)\n";
             return 0;
@@ -107,6 +111,14 @@ int main(int argc, char* argv[]) {
             audioDev = std::atoi(argv[++i]);
         } else if ((arg == "--midi-device" || arg == "-m") && i + 1 < argc) {
             midiDev = std::atoi(argv[++i]);
+        } else if (arg == "--sample-rate" && i + 1 < argc) {
+            SAMPLE_RATE = std::atoi(argv[++i]);
+        } else if (arg == "--buffer-frames" && i + 1 < argc) {
+            BUFFER_FRAMES = std::atoi(argv[++i]);
+        } else if (arg == "--num-buffers" && i + 1 < argc) {
+            NUM_BUFFERS = std::atoi(argv[++i]);
+        } else if (arg == "--alsa-latency" && i + 1 < argc) {
+            ALSA_LATENCY = std::atoi(argv[++i]);
         } else if (arg == "--sine") {
             useSynth = false;
         } else if (arg == "--synth") {
@@ -153,7 +165,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "[ERROR] Failed to open ALSA PCM device: " << snd_strerror(err) << std::endl;
         return 1;
     }
-    snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, SAMPLE_RATE, 1, 10000); // 0.01 sec latency
+    snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, SAMPLE_RATE, 1, ALSA_LATENCY); // microseconds
     std::cout << "[INFO] ALSA PCM device opened successfully." << std::endl;
     for (int i = 0; i < NUM_BUFFERS; ++i) {
         audioBuffers[i].resize(BUFFER_FRAMES * 2);
