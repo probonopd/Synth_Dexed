@@ -19,4 +19,7 @@ dependencies = [
 # Add cibuildwheel-specific options here if needed
 
 [tool.cibuildwheel.linux]
-before-all = "apt-get update && apt-get install -y libasound2-dev"
+before-all = [
+    "if [ -e /etc/redhat-release ]; then yum install -y alsa-lib-devel; fi",
+    "if [ -e /etc/alpine-release ]; then apk add --no-cache alsa-lib-dev; fi"
+]
