@@ -59,6 +59,9 @@ class Dx7Note {
     void transferPortamento(Dx7Note &src);
     void oscSync();
 
+    void setAftertouch(uint8_t value) { aftertouch_ = value; }
+    uint8_t getAftertouch() const { return aftertouch_; }
+
   private:
     Env env_[6];
     FmOpParams params_[6];
@@ -77,6 +80,8 @@ class Dx7Note {
     int porta_rateindex_;
     int porta_gliss_;
     int32_t porta_curpitch_[6];
+
+    uint8_t aftertouch_ = 0; // Per-note aftertouch value
 };
 
 #endif

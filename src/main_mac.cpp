@@ -18,7 +18,7 @@
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024;
 constexpr uint8_t MAX_NOTES = 16;
-unsigned int NUM_BUFFERS = 4;
+int numBuffers = 4;
 std::atomic<bool> running{true};
 void signal_handler(int signal) {
     if (signal == SIGINT) {
@@ -28,7 +28,7 @@ void signal_handler(int signal) {
 }
 Dexed* synth = nullptr;
 std::mutex synthMutex;
-std::vector<short> audioBuffers[NUM_BUFFERS];
+std::vector<std::vector<short>> audioBuffers;
 AudioUnit audioUnit = nullptr;
 MIDIClientRef midiClient = 0;
 MIDIEndpointRef midiIn = 0;
@@ -124,13 +124,14 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--buffer-frames" && i + 1 < argc) {
             BUFFER_FRAMES = std::atoi(argv[++i]);
         } else if (arg == "--num-buffers" && i + 1 < argc) {
-            NUM_BUFFERS = std::atoi(argv[++i]);
+            numBuffers = std::atoi(argv[++i]);
         } else if (arg == "--sine") {
             useSynth = false;
         } else if (arg == "--synth") {
             useSynth = true;
         }
     }
+    audioBuffers.resize(numBuffers);
     // List audio devices (CoreAudio)
     UInt32 size = 0;
     AudioObjectPropertyAddress addr = { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };

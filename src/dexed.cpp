@@ -1976,119 +1976,124 @@ void Dexed::setVelocityScale(uint8_t setup = MIDI_VELOCITY_SCALING_OFF)
 
 bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midiData1, uint8_t midiData2)
 {
-	uint8_t m[3];
-
-	m[0]=midiState;
-	m[1]=midiData1;
-	m[2]=midiData2;
-
-	return(midiDataHandler(midiChannel, m, 3));
+    uint8_t m[3];
+    m[0]=midiState;
+    m[1]=midiData1;
+    m[2]=midiData2;
+    return(midiDataHandler(midiChannel, m, 3));
 }
 
 bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 {
-	// check for MIDI channel
-	if((midiData[0] & 0x0f) != midiChannel-1)
-		return(false);
+    // check for MIDI channel (except for system messages)
+    uint8_t status = midiData[0] & 0xF0;
+    uint8_t channel = midiData[0] & 0x0F;
+    if ((status < 0xF0) && (channel != midiChannel-1))
+        return false;
 
-	bool ret=false;
+    bool ret = false;
 
-	if(len==3)
-	{
-		switch(midiData[0] & 0xf0)
-		{
-			case 0x80: // Note Off
-				// Serial.printf(">NOTE OFF D1: %d\n", midiData[1]);
-				keyup(midiData[1]);
-				ret=true;
-				break;
-			case 0x90: // Note On
-				// Serial.printf(">NOTE ON D1: %d %d\n", midiData[1],midiData[2]);
-				keydown(midiData[1], midiData[2]);
-				ret=true;
-				break;
-			case 0xB0: // Control Change
-	      			switch(midiData[1])
-				{
-        				case 0: // BankSelect MSB
-						break;
-        				case 1: // Modulation wheel
-          					setModWheel(midiData[2]);
-          					ControllersRefresh();
-						ret=true;
-          					break;
-        				case 2: // Breath controller
-          					setBreathController(midiData[2]);
-          					ControllersRefresh();
-						ret=true;
-          					break;
-        				case 4:	// Foot controller
-          					setFootController(midiData[2]);
-          					ControllersRefresh();
-						ret=true;
-          					break;
-        				case 5:  // Portamento time
-          					setPortamentoTime(midiData[2]);
-						ret=true;
-          					break;
-        				case 7:  // Volume
-          					setGain(float(midiData[2])/127.0);
-						ret=true;
-          					break;
-        				case 10: // Pan
-          					break;
-        				case 32: // Bank select LSB
-          					break;
-        				case 64: // Sustain
-          					setSustain(midiData[2] > 63);
-						ret=true;
-          					break;
-        				case 65: // Portamento mode
-          				 setPortamentoMode(midiData[2]);
-						ret=true;
-          					break;
-        				case 66: // Sostenuto
-          					setSostenuto(midiData[2] > 63);
-						ret=true;
-          					break;
-        				case 94: // Tune
-          					//setMasterTune(midiData[2]); TODO
-          					//doRefreshVoice();
-						ret=true;
-          					break;
-        				case 120: // Panic
-          					panic();
-						ret=true;
-          					break;
-        				case 121: // Reset all controllers
-          					resetControllers();
-						ret=true;
-          					break;
-        				case 123: // All notes off
-          					notesOff();
-						ret=true;
-          					break;
-        				case 126:
-            					setMonoMode(true);
-						ret=true;
-        				case 127:
-            					setMonoMode(false);
-						ret=true;
-          					break;
-				}
-				break;
-		}
-	}
-	// System Exclusive
-	else
-	{
-		uint16_t sysex_ret=checkSystemExclusive(midiData,len);
-		if((sysex_ret>=0 && sysex_ret <=100) || (sysex_ret>=300 && sysex_ret <=455))
-			ret=true;
-		else
-			ret=false;
-	}
-	return(ret);
+    if (len == 3) {
+        switch (status) {
+            case 0x80: // Note Off
+                keyup(midiData[1]);
+                ret = true;
+                break;
+            case 0x90: // Note On
+                keydown(midiData[1], midiData[2]);
+                ret = true;
+                break;
+            case 0xA0: // Polyphonic Aftertouch
+                // midiData[1] = note, midiData[2] = aftertouch value
+                for (uint8_t i = 0; i < used_notes; ++i) {
+                    if (voices[i].live && voices[i].midi_note == midiData[1]) {
+                        voices[i].aftertouch = midiData[2];
+                        if (voices[i].dx7_note) {
+                            voices[i].dx7_note->setAftertouch(midiData[2]);
+                        }
+                        break;
+                    }
+                }
+                ControllersRefresh();
+                ret = true;
+                break;
+            case 0xB0: // Control Change
+                switch (midiData[1]) {
+                    case 0:   /* Bank Select MSB */ break;
+                    case 1:   setModWheel(midiData[2]); ControllersRefresh(); ret = true; break;
+                    case 2:   setBreathController(midiData[2]); ControllersRefresh(); ret = true; break;
+                    case 4:   setFootController(midiData[2]); ControllersRefresh(); ret = true; break;
+                    case 5:   setPortamentoTime(midiData[2]); ret = true; break;
+                    case 6:   /* Data Entry MSB */ break;
+                    case 7:   setGain(float(midiData[2])/127.0); ret = true; break;
+                    case 10:  /* Pan */ break;
+                    case 11:  /* Expression */ break;
+                    case 32:  /* Bank Select LSB */ break;
+                    case 64:  setSustain(midiData[2] > 63); ret = true; break;
+                    case 65:  setPortamentoMode(midiData[2]); ret = true; break;
+                    case 66:  setSostenuto(midiData[2] > 63); ret = true; break;
+                    case 67:  setHold(midiData[2] > 63); ret = true; break;
+                    case 96:  /* Data Increment */ break;
+                    case 97:  /* Data Decrement */ break;
+                    case 98:  /* NRPN LSB */ break;
+                    case 99:  /* NRPN MSB */ break;
+                    case 100: /* RPN LSB */ break;
+                    case 101: /* RPN MSB */ break;
+                    case 120: panic(); ret = true; break;
+                    case 121: resetControllers(); ret = true; break;
+                    case 123: notesOff(); ret = true; break;
+                    case 126: setMonoMode(true); ret = true; break;
+                    case 127: setMonoMode(false); ret = true; break;
+                    default: break;
+                }
+                break;
+            case 0xC0: // Program Change
+                #ifdef _WIN32
+                printf("[MIDI] Program Change received (not implemented yet)\n");
+                #else
+                std::cout << "[MIDI] Program Change received (not implemented yet)" << std::endl;
+                #endif
+                ret = true;
+                break;
+            case 0xD0: // Channel Aftertouch
+                setAftertouch(midiData[1]);
+                ControllersRefresh();
+                ret = true;
+                break;
+            case 0xE0: // Pitch Bend
+                setPitchbend(midiData[1], midiData[2]);
+                ControllersRefresh();
+                ret = true;
+                break;
+            default:
+                break;
+        }
+    } else if (len >= 3 && midiData[0] == 0xF0) { // System Exclusive
+        // Full DX7 SysEx handling
+        int16_t sysex_ret = checkSystemExclusive(midiData, len);
+        if (sysex_ret == 100) { // 1-voice bulk
+            // Apply voice data
+            loadVoiceParameters((uint8_t*)&midiData[6]);
+            ret = true;
+        } else if (sysex_ret >= 300 && sysex_ret < 456) { // Parameter change
+            ret = true;
+        } else if (sysex_ret == 200) { // Bank bulk
+            // Optionally: implement bank loading
+            ret = true;
+        } else if (sysex_ret >= 0) {
+            ret = true;
+        } else {
+            ret = false;
+        }
+    } else if (len == 1 && (midiData[0] & 0xF8) == 0xF8) { // System Real-Time
+        // MIDI Clock, Start, Continue, Stop, Active Sensing, System Reset
+        // Optionally: handle timing, etc.
+        ret = true;
+    } else if (len == 2 && (midiData[0] & 0xF0) == 0xF0) {
+        // Song Select, Song Position Pointer, Tune Request, etc.
+        ret = true;
+    }
+    return ret;
 }
 
 #ifndef constrain

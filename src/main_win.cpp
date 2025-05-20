@@ -19,7 +19,7 @@
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024; // Reduce for lower latency
 constexpr uint8_t MAX_NOTES = 16;
-unsigned int NUM_BUFFERS = 4;
+int numBuffers = 4;
 std::atomic<bool> running{true};
 void signal_handler(int signal) {
     if (signal == SIGINT) {
@@ -29,8 +29,8 @@ void signal_handler(int signal) {
 }
 Dexed* synth = nullptr;
 std::mutex synthMutex;
-std::vector<short> audioBuffers[NUM_BUFFERS];
-WAVEHDR waveHeaders[NUM_BUFFERS];
+std::vector<std::vector<short>> audioBuffers;
+std::vector<WAVEHDR> waveHeaders;
 HWAVEOUT hWaveOut = nullptr;
 void CALLBACK midiInProc(HMIDIIN, UINT uMsg, DWORD_PTR, DWORD_PTR dwParam1, DWORD_PTR, DWORD_PTR) {
     std::lock_guard<std::mutex> lock(synthMutex);
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--buffer-frames" && i + 1 < argc) {
             BUFFER_FRAMES = std::atoi(argv[++i]);
         } else if (arg == "--num-buffers" && i + 1 < argc) {
-            NUM_BUFFERS = std::atoi(argv[++i]);
+            numBuffers = std::atoi(argv[++i]);
         } else if (arg == "--sine") {
             useSynth = false;
         } else if (arg == "--synth") {
@@ -120,7 +120,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     std::cout << "[INFO] Audio device opened successfully." << std::endl;
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
+    audioBuffers.resize(numBuffers);
+    waveHeaders.resize(numBuffers);
+    for (int i = 0; i < numBuffers; ++i) {
         audioBuffers[i].resize(BUFFER_FRAMES * 2);
         waveHeaders[i] = {};
         waveHeaders[i].lpData = reinterpret_cast<LPSTR>(audioBuffers[i].data());
@@ -175,7 +177,7 @@ int main(int argc, char* argv[]) {
     // std::cout << "[DEBUG] Before starting audio thread" << std::endl;
     // Pre-fill all audio buffers before starting audio thread
     std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
+    for (int i = 0; i < numBuffers; ++i) {
         if (useSynth) {
             std::lock_guard<std::mutex> lock(synthMutex);
             if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
@@ -229,7 +231,7 @@ int main(int argc, char* argv[]) {
                 }
             }
             waveOutWrite(hWaveOut, &hdr, sizeof(WAVEHDR));
-            bufferIndex = (bufferIndex + 1) % NUM_BUFFERS;
+            bufferIndex = (bufferIndex + 1) % numBuffers;
         }
     });
     // std::cout << "[DEBUG] After starting audio thread" << std::endl;
@@ -243,7 +245,7 @@ int main(int argc, char* argv[]) {
     running = false;
     audio.join();
     waveOutReset(hWaveOut);
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
+    for (int i = 0; i < numBuffers; ++i) {
         waveOutUnprepareHeader(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
     }
     waveOutClose(hWaveOut);

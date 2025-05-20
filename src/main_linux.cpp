@@ -18,7 +18,7 @@
 #include <poll.h>
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024;
-unsigned int NUM_BUFFERS = 4;
+int numBuffers = 4;
 unsigned int ALSA_LATENCY = 10000; // microseconds
 std::atomic<bool> running{true};
 void signal_handler(int signal) {
@@ -29,7 +29,7 @@ void signal_handler(int signal) {
 }
 Dexed* synth = nullptr;
 std::mutex synthMutex;
-std::vector<short> audioBuffers[NUM_BUFFERS];
+std::vector<std::vector<short>> audioBuffers;
 snd_pcm_t* pcm_handle = nullptr;
 snd_seq_t* seq_handle = nullptr;
 int midi_in_port = -1;
@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--buffer-frames" && i + 1 < argc) {
             BUFFER_FRAMES = std::atoi(argv[++i]);
         } else if (arg == "--num-buffers" && i + 1 < argc) {
-            NUM_BUFFERS = std::atoi(argv[++i]);
+            numBuffers = std::atoi(argv[++i]);
         } else if (arg == "--alsa-latency" && i + 1 < argc) {
             ALSA_LATENCY = std::atoi(argv[++i]);
         } else if (arg == "--sine") {
@@ -167,7 +167,8 @@ int main(int argc, char* argv[]) {
     }
     snd_pcm_set_params(pcm_handle, SND_PCM_FORMAT_S16_LE, SND_PCM_ACCESS_RW_INTERLEAVED, 2, SAMPLE_RATE, 1, ALSA_LATENCY); // microseconds
     std::cout << "[INFO] ALSA PCM device opened successfully." << std::endl;
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
+    audioBuffers.resize(numBuffers);
+    for (int i = 0; i < numBuffers; ++i) {
         audioBuffers[i].resize(BUFFER_FRAMES * 2);
     }
     // ALSA MIDI setup
@@ -232,7 +233,7 @@ int main(int argc, char* argv[]) {
     }
     // Pre-fill all audio buffers
     std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
-    for (int i = 0; i < NUM_BUFFERS; ++i) {
+    for (int i = 0; i < numBuffers; ++i) {
         if (useSynth) {
             std::lock_guard<std::mutex> lock(synthMutex);
             if (synth) synth->getSamples(monoBuffer.data(), BUFFER_FRAMES);
@@ -285,7 +286,7 @@ int main(int argc, char* argv[]) {
             if (err < 0) {
                 snd_pcm_prepare(pcm_handle);
             }
-            bufferIndex = (bufferIndex + 1) % NUM_BUFFERS;
+            bufferIndex = (bufferIndex + 1) % numBuffers;
         }
     });
     std::cout << "[INFO] Synth_Dexed running. Press Ctrl+C to quit.\n";
