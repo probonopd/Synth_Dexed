@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pybind11"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dexed_py"
+version = "0.1.0"
+description = "Python bindings for Synth_Dexed"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "numpy",
+    "sounddevice",
+    "mido",
+    "python-rtmidi"
+]
+
+[tool.cibuildwheel]
+# Add cibuildwheel-specific options here if needed
