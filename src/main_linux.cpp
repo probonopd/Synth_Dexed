@@ -16,6 +16,7 @@
 #include "dexed.h"
 #include <map>
 #include <poll.h>
+#define MAX_NOTES 16
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024;
 int numBuffers = 4;
