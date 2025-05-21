@@ -501,18 +501,15 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
 #endif
     hooks.open_midi(midiDev);
     // Parse --midi-socket-port N from args
-    int midiSocketPort = 0;
+    int midiSocketPort = 50007; // Default port
+    // Parse --midi-socket-port N from args
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if ((arg == "--midi-socket-port" || arg == "--midi-port") && i + 1 < argc) {
             midiSocketPort = std::atoi(argv[++i]);
         }
     }
-    if (midiSocketPort == 0) {
-        midiSocketPort = find_free_port();
-        if (midiSocketPort == 0) midiSocketPort = 50007; // fallback
-    }
-    std::cout << "[INFO] MIDI socket server will listen on 127.0.0.1:" << midiSocketPort << std::endl;
+    std::cout << "[INFO] MIDI UDP server will listen on 127.0.0.1:" << midiSocketPort << std::endl;
     // Start MIDI UDP server (UDP, localhost:midiSocketPort)
     MidiUdpServer midiServer(midiSocketPort, [](const uint8_t* data, size_t len) {
         std::cout << "[MIDI UDP] Received " << len << " bytes: ";
