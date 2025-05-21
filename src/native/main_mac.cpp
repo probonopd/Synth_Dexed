@@ -61,6 +61,18 @@ void mac_close_midi() {
     MIDIClientDispose(midiClient);
 }
 
+// Add this CoreMIDI callback to forward all MIDI messages to Dexed
+void mac_midi_input_callback(const MIDIPacketList* pktlist, void* readProcRefCon, void* srcConnRefCon) {
+    for (unsigned int i = 0; i < pktlist->numPackets; ++i) {
+        const MIDIPacket* pkt = &pktlist->packet[i];
+        const uint8_t* data = pkt->data;
+        uint16_t len = pkt->length;
+        for (size_t v = 0; v < unisonSynths.size(); ++v) {
+            unisonSynths[v]->midiDataHandler(0, data, len);
+        }
+    }
+}
+
 // High-priority audio thread loop for macOS
 void mac_audio_thread_loop(std::atomic<bool>& running, bool useSynth, PlatformHooks& hooks) {
     // Set audio thread to high priority (nice value -20)

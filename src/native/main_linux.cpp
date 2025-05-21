@@ -120,6 +120,41 @@ void linux_audio_thread_loop(std::atomic<bool>& running, bool useSynth, Platform
     std::cout << "[AUDIO][LINUX] Exiting audio thread. Underruns: " << underrunCount << std::endl;
 }
 
+// Add this function to poll and forward all ALSA MIDI messages to Dexed
+void linux_midi_poll_loop() {
+    struct pollfd *pfds;
+    int npfds = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
+    pfds = (struct pollfd*)alloca(npfds * sizeof(struct pollfd));
+    snd_seq_poll_descriptors(seq_handle, pfds, npfds, POLLIN);
+    while (running) {
+        if (poll(pfds, npfds, 100) > 0) {
+            snd_seq_event_t *ev = nullptr;
+            while (snd_seq_event_input(seq_handle, &ev) > 0) {
+                if (!ev) continue;
+                if (ev->type == SND_SEQ_EVENT_SYSEX) {
+                    uint8_t* data = (uint8_t*)ev->data.ext.ptr;
+                    uint16_t len = ev->data.ext.len;
+                    for (size_t v = 0; v < unisonSynths.size(); ++v) {
+                        unisonSynths[v]->midiDataHandler(0, data, len);
+                    }
+                } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF ||
+                           ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND ||
+                           ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS ||
+                           ev->type == SND_SEQ_EVENT_PROGRAMCHANGE) {
+                    uint8_t midi_bytes[3];
+                    midi_bytes[0] = ev->data.control.param;
+                    midi_bytes[1] = ev->data.control.value & 0x7F;
+                    midi_bytes[2] = (ev->data.control.value >> 7) & 0x7F;
+                    for (size_t v = 0; v < unisonSynths.size(); ++v) {
+                        unisonSynths[v]->midiDataHandler(ev->data.control.channel + 1, midi_bytes, 3);
+                    }
+                }
+                snd_seq_free_event(ev);
+            }
+        }
+    }
+}
+
 PlatformHooks get_linux_hooks() {
     PlatformHooks hooks = {};
     hooks.open_audio = linux_open_audio;

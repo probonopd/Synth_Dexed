@@ -104,12 +104,11 @@ void CALLBACK midiInProc(HMIDIIN, UINT uMsg, DWORD_PTR, DWORD_PTR dwParam1, DWOR
         uint8_t channel = msg & 0x0F;
         uint8_t data1 = (msg >> 8) & 0x7F;
         uint8_t data2 = (msg >> 16) & 0x7F;
-        if (DEBUG_ENABLED)
-            std::cout << "[MIDI DEBUG] Short msg: status=0x" << std::hex << (int)status << ", channel=" << std::dec << (int)(channel+1) << ", data1=" << (int)data1 << ", data2=" << (int)data2 << std::endl;
+        uint8_t midi_bytes[3] = { static_cast<uint8_t>(status | channel), data1, data2 };
         for (size_t v = 0; v < unisonSynths.size(); ++v) {
             if (DEBUG_ENABLED)
                 std::cout << "[MIDI DEBUG] Passing to Dexed instance " << v << " at " << unisonSynths[v] << std::endl;
-            unisonSynths[v]->midiDataHandler(channel + 1, status, data1, data2);
+            unisonSynths[v]->midiDataHandler(channel + 1, midi_bytes, 3);
         }
     } else if (uMsg == MIM_LONGDATA) {
         MIDIHDR* midiHdr = (MIDIHDR*)dwParam1;

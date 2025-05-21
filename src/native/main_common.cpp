@@ -107,7 +107,12 @@ void setup_unison_synths() {
         
         // Ensure gain is properly set to a value that will produce audible output
         s->setGain(2.0f);
-        
+
+        // Enable pitch bend and mod wheel by default
+        s->setPitchbendRange(2);    // ±2 semitones for pitch bend
+        s->setModWheelRange(99);    // Full range for mod wheel
+        s->setModWheelTarget(1);    // 1=pitch, 2=amp, 4=EG, or combinations
+
         unisonSynths.push_back(s);
     }
     
@@ -131,20 +136,20 @@ void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
-            std::cout << "Usage: " << argv[0] << " [options]\\n"
-                      << "  -h, --help           Show this help message and exit\\n"
-                      << "  -a, --audio-device N Select audio device index (default: 0)\\n"
-                      << "  -m, --midi-device N  Select MIDI input device index (default: 0)\\n"
-                      << "  --sample-rate N      Set sample rate (default: 48000)\\n"
-                      << "  --buffer-frames N    Set audio buffer size in frames (default: 1024)\\n"
-                      << "  --num-buffers N      Set number of audio buffers (default: 4)\\n"
-                      << "  --sine               Output test sine wave instead of synth\\n"
-                      << "  --synth              Use synth (default)\\n"
-                      << "  --unison-voices N    Set number of unison voices (1-4, default: 1)\\n"
-                      << "  --unison-spread N    Set unison spread (0-99, default: 0)\\n"
-                      << "  --unison-detune N    Set unison detune (cents, default: 0)\\n"
-                      << "  --midi-data HEX_STRING   Load custom voice from sysex hex string\\n"
-                      << "  --debug              Enable debug output\\n";
+            std::cout << "Usage: " << argv[0] << " [options]\n"
+                      << "  -h, --help           Show this help message and exit\n"
+                      << "  -a, --audio-device N Select audio device index (default: 0)\n"
+                      << "  -m, --midi-device N  Select MIDI input device index (default: 0)\n"
+                      << "  --sample-rate N      Set sample rate (default: 48000)\n"
+                      << "  --buffer-frames N    Set audio buffer size in frames (default: 1024)\n"
+                      << "  --num-buffers N      Set number of audio buffers (default: 4)\n"
+                      << "  --sine               Output test sine wave instead of synth\n"
+                      << "  --synth              Use synth (default)\n"
+                      << "  --unison-voices N    Set number of unison voices (1-4, default: 1)\n"
+                      << "  --unison-spread N    Set unison spread (0-99, default: 0)\n"
+                      << "  --unison-detune N    Set unison detune (cents, default: 0)\n"
+                      << "  --midi-data HEX_STRING   Load custom voice from sysex hex string\n"
+                      << "  --debug              Enable debug output\n";
             exit(0);
         } else if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
             audioDev = std::atoi(argv[++i]);

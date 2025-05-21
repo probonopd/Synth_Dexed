@@ -140,6 +140,11 @@ def main():
     print("[INFO] Adjusting synth settings...")
     synth.setTranspose(36)  # Match old working example
     synth.setMonoMode(False)  # Make sure synth is in polyphonic mode
+
+    # Enable pitch bend and mod wheel by default
+    synth.setPitchbendRange(2)    # ±2 semitones for pitch bend
+    synth.setModWheelRange(99)    # Full range for mod wheel
+    synth.setModWheelTarget(1)    # 1=pitch, 2=amp, 4=EG, or combinations
     
     print("[INFO] Starting audio...")
     synth.start_audio()
