@@ -10,6 +10,7 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+#include <string> // Add this line
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -28,6 +29,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+std::vector<uint8_t> customVoiceSysex; // Added for custom voice
 int unisonVoices = 1;
 float unisonSpread = 0.0f;
 float unisonDetune = 0.0f;
@@ -129,19 +131,20 @@ void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help") {
-            std::cout << "Usage: " << argv[0] << " [options]\n"
-                      << "  -h, --help           Show this help message and exit\n"
-                      << "  -a, --audio-device N Select audio device index (default: 0)\n"
-                      << "  -m, --midi-device N  Select MIDI input device index (default: 0)\n"
-                      << "  --sample-rate N      Set sample rate (default: 48000)\n"
-                      << "  --buffer-frames N    Set audio buffer size in frames (default: 1024)\n"
-                      << "  --num-buffers N      Set number of audio buffers (default: 4)\n"
-                      << "  --sine               Output test sine wave instead of synth\n"
-                      << "  --synth              Use synth (default)\n"
-                      << "  --unison-voices N    Set number of unison voices (1-4, default: 1)\n"
-                      << "  --unison-spread N    Set unison spread (0-99, default: 0)\n"
-                      << "  --unison-detune N    Set unison detune (cents, default: 0)\n"
-                      << "  --debug              Enable debug output\n";
+            std::cout << "Usage: " << argv[0] << " [options]\\n"
+                      << "  -h, --help           Show this help message and exit\\n"
+                      << "  -a, --audio-device N Select audio device index (default: 0)\\n"
+                      << "  -m, --midi-device N  Select MIDI input device index (default: 0)\\n"
+                      << "  --sample-rate N      Set sample rate (default: 48000)\\n"
+                      << "  --buffer-frames N    Set audio buffer size in frames (default: 1024)\\n"
+                      << "  --num-buffers N      Set number of audio buffers (default: 4)\\n"
+                      << "  --sine               Output test sine wave instead of synth\\n"
+                      << "  --synth              Use synth (default)\\n"
+                      << "  --unison-voices N    Set number of unison voices (1-4, default: 1)\\n"
+                      << "  --unison-spread N    Set unison spread (0-99, default: 0)\\n"
+                      << "  --unison-detune N    Set unison detune (cents, default: 0)\\n"
+                      << "  --midi-data HEX_STRING   Load custom voice from sysex hex string\\n"
+                      << "  --debug              Enable debug output\\n";
             exit(0);
         } else if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
             audioDev = std::atoi(argv[++i]);
@@ -163,6 +166,21 @@ void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool
             unisonSpread = std::clamp((float)std::atof(argv[++i]), 0.0f, 99.0f);
         } else if (arg == "--unison-detune" && i + 1 < argc) {
             unisonDetune = (float)std::atof(argv[++i]);
+        } else if (arg == "--midi-data" && i + 1 < argc) {
+            std::string hexString = argv[++i];
+            customVoiceSysex.clear();
+            for (size_t j = 0; j < hexString.length(); j += 2) {
+                if (hexString[j] == ' ') { j--; continue; }
+                std::string byteString = hexString.substr(j, 2);
+                if (byteString.length() < 2) break;
+                try {
+                    uint8_t byte = static_cast<uint8_t>(std::stoul(byteString, nullptr, 16));
+                    customVoiceSysex.push_back(byte);
+                } catch (...) {
+                    customVoiceSysex.clear();
+                    break;
+                }
+            }
         } else if (arg == "--debug") {
             DEBUG_ENABLED = true;
         }
@@ -344,6 +362,35 @@ void handle_midi_channel_print(uint8_t channel) {
     std::cout << (int)channel;
 }
 
+// Helper: Extract DX7 single voice data from sysex
+bool extract_dx7_voice_data(const std::vector<uint8_t>& sysex, uint8_t* out, size_t out_size) {
+    // Typical DX7 single voice dump: F0 43 00 09 20 ... 155 bytes ... F7
+    // Or: F0 43 10 00 01 1B ... 155 bytes ... F7
+    // Find F0 at start, F7 at end, and at least 32 or 155 bytes in between
+    if (sysex.size() < 34) return false;
+    if (sysex.front() != 0xF0 || sysex.back() != 0xF7) return false;
+    // Try to find the start of the actual voice data (skip header)
+    size_t data_start = 0;
+    // Yamaha usually: F0 43 00 09 20 ... or F0 43 10 00 01 1B ...
+    // Find first byte after header (usually 5 or 6 bytes header)
+    // We'll look for the first byte after the header that could be the start of the 32/155 bytes
+    // For now, try offsets 5 and 6
+    size_t possible_starts[] = {5, 6};
+    for (size_t off : possible_starts) {
+        if (sysex.size() > off + out_size && sysex.size() - off - 1 >= out_size) {
+            // Looks like enough data
+            std::memcpy(out, &sysex[off], out_size);
+            return true;
+        }
+    }
+    // Fallback: try to find a 32/155-byte region before F7
+    if (sysex.size() - 1 >= out_size) {
+        std::memcpy(out, &sysex[sysex.size() - 1 - out_size], out_size);
+        return true;
+    }
+    return false;
+}
+
 int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     if (DEBUG_ENABLED) std::cout << "[DEBUG] Entered main_common_entry" << std::endl;
     int audioDev = 0;
@@ -353,6 +400,18 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     if (DEBUG_ENABLED) std::cout << "[DEBUG] Before parse_common_args" << std::endl;
     parse_common_args(argc, argv, audioDev, midiDev, useSynth);
     if (DEBUG_ENABLED) std::cout << "[DEBUG] After parse_common_args" << std::endl;
+
+    // Load custom voice if provided
+    if (!customVoiceSysex.empty()) {
+        size_t n = (customVoiceSysex.size() < sizeof(fmpiano_sysex)) ? customVoiceSysex.size() : sizeof(fmpiano_sysex);
+        std::memcpy(fmpiano_sysex, customVoiceSysex.data(), n);
+        std::cout << "[INFO] Loaded custom voice: copied " << n << " bytes directly from --voice argument." << std::endl;
+        // Optional: print first 8 bytes for debug
+        std::cout << "[VOICE DEBUG] First 8 bytes: ";
+        for (size_t i = 0; i < 8 && i < n; ++i) std::cout << (int)fmpiano_sysex[i] << " ";
+        std::cout << std::endl;
+    }
+
     if (DEBUG_ENABLED) std::cout << "[DEBUG] Before setup_unison_synths" << std::endl;
     setup_unison_synths();
     if (DEBUG_ENABLED) std::cout << "[DEBUG] After setup_unison_synths" << std::endl;
@@ -410,6 +469,14 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     std::cout << "  unisonVoices: " << unisonVoices << std::endl;
     std::cout << "  unisonSpread: " << unisonSpread << std::endl;
     std::cout << "  unisonDetune: " << unisonDetune << std::endl;
+    // Send custom MIDI data if provided
+    if (!customVoiceSysex.empty()) {
+        std::cout << "[INFO] Sending custom MIDI data from --midi-data argument (" << customVoiceSysex.size() << " bytes) to synth engine." << std::endl;
+        // Send to all unison synths (or just the first if you prefer)
+        for (auto* s : unisonSynths) {
+            if (s) s->midiDataHandler(0, customVoiceSysex.data(), (int)customVoiceSysex.size());
+        }
+    }
     while (running) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
