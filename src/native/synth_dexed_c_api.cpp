@@ -26,11 +26,10 @@ struct SynthWrapper {
 };
 
 // Audio thread loop, matching main_win.cpp
-static void synth_audio_thread(SynthWrapper* wrapper) {
 #if defined(_WIN32)
+static void synth_audio_thread(SynthWrapper* wrapper) {
     HANDLE hThread = GetCurrentThread();
     SetThreadPriority(hThread, THREAD_PRIORITY_HIGHEST);
-#endif
     int bufferIndex = 0;
     while (wrapper->running) {
         WAVEHDR& hdr = waveHeaders[bufferIndex];
@@ -44,6 +43,7 @@ static void synth_audio_thread(SynthWrapper* wrapper) {
         bufferIndex = (bufferIndex + 1) % numBuffers;
     }
 }
+#endif
 
 extern uint8_t fmpiano_sysex[156];
 
@@ -88,6 +88,7 @@ void synth_send_midi(synth_handle handle, const uint8_t* data, uint32_t length) 
 }
 
 void synth_start_audio(synth_handle handle) {
+#if defined(_WIN32)
     if (!handle) return;
     auto* wrapper = reinterpret_cast<SynthWrapper*>(handle);
     if (wrapper->running) return;
@@ -98,9 +99,14 @@ void synth_start_audio(synth_handle handle) {
     wrapper->audio_thread = std::thread([wrapper, hooks]() mutable {
         win_audio_thread_loop(wrapper->running, true, hooks);
     });
+#else
+    (void)handle;
+    std::cerr << "[ERROR] synth_start_audio is only implemented on Windows." << std::endl;
+#endif
 }
 
 void synth_stop_audio(synth_handle handle) {
+#if defined(_WIN32)
     if (!handle) return;
     auto* wrapper = reinterpret_cast<SynthWrapper*>(handle);
     if (!wrapper->running) return;
@@ -110,6 +116,10 @@ void synth_stop_audio(synth_handle handle) {
     }
     PlatformHooks hooks = get_win_hooks();
     hooks.close_audio();
+#else
+    (void)handle;
+    std::cerr << "[ERROR] synth_stop_audio is only implemented on Windows." << std::endl;
+#endif
 }
 
 void synth_load_init_voice(synth_handle handle) {
@@ -118,11 +128,13 @@ void synth_load_init_voice(synth_handle handle) {
     wrapper->synth->loadInitVoice();
 }
 
-__declspec(dllexport) void synth_load_epiano_patch(synth_handle handle) {
+#if defined(_WIN32)
+SYNTHDEXED_API void synth_load_epiano_patch(synth_handle handle) {
     if (!handle) return;
     auto* wrapper = reinterpret_cast<SynthWrapper*>(handle);
     wrapper->synth->loadVoiceParameters(fmpiano_sysex);
     wrapper->synth->setGain(2.0f);
 }
+#endif
 
 } // extern "C"

@@ -24,7 +24,7 @@ file(GLOB SYNTH_DEXED_SRC
     "../*.cpp"
 )
 list(REMOVE_ITEM SYNTH_DEXED_SRC
-    "${CMAKE_CURRENT_LIST_DIR}/../main.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/main.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/main_win.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/main_mac.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/main_linux.cpp"
@@ -40,7 +40,11 @@ endif()
 list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/synth_dexed_c_api.cpp")
 # Add platform and shared code for DLL
 list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/main_common.cpp")
-list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/main_win.cpp")
+
+# Only add main_win.cpp for Windows builds
+if (WIN32)
+    list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/main_win.cpp")
+endif()
 
 # Always build Synth_Dexed as a shared library
 add_library(Synth_Dexed SHARED ${SYNTH_DEXED_SRC})

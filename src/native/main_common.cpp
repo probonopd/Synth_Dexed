@@ -421,3 +421,20 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     if (DEBUG_ENABLED) std::cout << "[DEBUG] main_common_entry: about to return from main_common_entry" << std::endl;
     return 0;
 }
+
+void debug_audio_buffers(bool useSynth) {
+    // Define bufferIndex locally - using a default value of 0
+    static int bufferIndex = 0;
+    
+    // Debug code only - this function isn't called in the actual program
+    std::cout << "[DEBUG] debug_audio_buffers: synth=" << synth << std::endl;
+    if (synth) {
+        synth->getSamples(audioBuffers[bufferIndex].data(), BUFFER_FRAMES);
+        std::cout << "[DEBUG] getSamples called, first sample: " << audioBuffers[bufferIndex][0] << std::endl;
+        
+        // Increment bufferIndex for next call, wrapping around if needed
+        bufferIndex = (bufferIndex + 1) % numBuffers;
+    } else {
+        std::cout << "[DEBUG] synth is nullptr!" << std::endl;
+    }
+}
