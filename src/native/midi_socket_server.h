@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #pragma once
 #include <thread>
 #include <atomic>
@@ -36,3 +38,5 @@ private:
     std::thread th_;
     std::atomic<bool> running_;
 };
+
+#endif

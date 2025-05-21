@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "midi_socket_server.h"
 #include <iostream>
 #ifdef _WIN32
@@ -157,3 +159,5 @@ void MidiUdpServer::threadFunc() {
     close(sock);
 #endif
 }
+
+#endif
