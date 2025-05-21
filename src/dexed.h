@@ -31,6 +31,18 @@
 #if defined(TEENSYDUINO)
 #include <Audio.h>
 #endif
+
+// Add DLL export/import declarations for Windows
+#ifdef _WIN32
+  #ifdef SYNTH_DEXED_EXPORTS
+    #define DEXED_API __declspec(dllexport)
+  #else
+    #define DEXED_API __declspec(dllimport)
+  #endif
+#else
+  #define DEXED_API
+#endif
+
 #include "fm_op_kernel.h"
 #include "synth.h"
 #include "env.h"
@@ -179,7 +191,7 @@ enum ENGINES {
 
 //==============================================================================
 
-class Dexed
+class DEXED_API Dexed
 {
   public:
     Dexed(uint8_t maxnotes, uint16_t rate);

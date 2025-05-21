@@ -25,9 +25,9 @@ file(GLOB SYNTH_DEXED_SRC
 )
 list(REMOVE_ITEM SYNTH_DEXED_SRC
     "${CMAKE_SOURCE_DIR}/src/main.cpp"
-    "${CMAKE_SOURCE_DIR}/src/main_win.cpp"
-    "${CMAKE_SOURCE_DIR}/src/main_mac.cpp"
-    "${CMAKE_SOURCE_DIR}/src/main_linux.cpp"
+    "${CMAKE_SOURCE_DIR}/src/native/main_win.cpp"
+    "${CMAKE_SOURCE_DIR}/src/native/main_mac.cpp"
+    "${CMAKE_SOURCE_DIR}/src/native/main_linux.cpp"
 )
 
 # Exclude dexed_pybind.cpp for standalone builds
@@ -37,17 +37,17 @@ endif()
 
 # Add the correct platform-specific file(s)
 if (WIN32)
-    set(PLATFORM_SOURCES src/main_win.cpp)
+    set(PLATFORM_SOURCES src/native/main_win.cpp)
 elseif(APPLE)
-    set(PLATFORM_SOURCES src/main_mac.cpp)
+    set(PLATFORM_SOURCES src/native/main_mac.cpp)
 else()
-    set(PLATFORM_SOURCES src/main_linux.cpp)
+    set(PLATFORM_SOURCES src/native/main_linux.cpp)
 endif()
 
 # Create the executable with main.cpp as the entry point
-add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/main.cpp src/main_common.cpp ${PLATFORM_SOURCES})
+add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/main.cpp src/native/main_common.cpp ${PLATFORM_SOURCES})
 
-target_include_directories(Synth_Dexed PRIVATE src)
+target_include_directories(Synth_Dexed PRIVATE src src/native)
 
 # Link to Windows multimedia library for MIDI support
 if (WIN32)

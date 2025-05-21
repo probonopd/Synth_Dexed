@@ -53,7 +53,9 @@ bool win_open_audio(int audioDev) {
     wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
     wfx.cbSize = 0;
     MMRESULT result = waveOutOpen(&hWaveOut, audioDev, &wfx, 0, 0, CALLBACK_NULL);
-    if (DEBUG_ENABLED) {
+    if (result != MMSYSERR_NOERROR) {
+        std::cout << "[ERROR] waveOutOpen failed with code: " << result << std::endl;
+    } else {
         std::cout << "[DEBUG] After waveOutOpen" << std::endl;
         std::cout << "[DEBUG] audioBuffers.size() = " << audioBuffers.size() << ", numBuffers = " << numBuffers << ", BUFFER_FRAMES = " << BUFFER_FRAMES << std::endl;
         std::cout << "[DEBUG] Before buffer preparation loop" << std::endl;
@@ -129,7 +131,13 @@ void CALLBACK midiInProc(HMIDIIN, UINT uMsg, DWORD_PTR, DWORD_PTR dwParam1, DWOR
 }
 
 bool win_open_midi(int midiDev) {
-    // Always print device list and info
+    // Check if we're being called from Python - environment variable will be set by Python script
+    if (std::getenv("DEXED_PYTHON_HOST") != nullptr) {
+        std::cout << "[INFO] Running under Python - MIDI will be handled by Python script" << std::endl;
+        return true; // Return success but don't actually open MIDI port
+    }
+
+    // Only reach here if not running under Python
     std::cout << "[DEBUG] win_open_midi called" << std::endl;
     UINT numMidiDevs = midiInGetNumDevs();
     std::cout << "Available MIDI input devices:" << std::endl;
@@ -175,6 +183,15 @@ void win_audio_thread_loop(std::atomic<bool>& running, bool useSynth, PlatformHo
     HANDLE hThread = GetCurrentThread();
     SetThreadPriority(hThread, THREAD_PRIORITY_HIGHEST);
     int bufferIndex = 0;
+    
+    // Only set the environment variable if --sine was specified
+    if (!useSynth) {
+        _putenv_s("DEXED_TEST_SINE", "1");
+        std::cout << "[DEBUG] Setting sine wave test mode from command line parameter" << std::endl;
+    }
+    
+    std::cout << "[DEBUG] Starting win_audio_thread_loop with useSynth=" << (useSynth ? "true" : "false") << std::endl;
+    
     while (running) {
         WAVEHDR& hdr = waveHeaders[bufferIndex];
         // Wait for buffer to be done (WHDR_INQUEUE cleared)
@@ -182,18 +199,49 @@ void win_audio_thread_loop(std::atomic<bool>& running, bool useSynth, PlatformHo
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             if (!running) return;
         }
-        fill_audio_buffers(useSynth);
-        waveOutWrite(hWaveOut, &hdr, sizeof(WAVEHDR));
+        
+        // Use the single-buffer fill with enhanced diagnostics
+        fill_audio_buffer(bufferIndex, useSynth);
+        
+        // Submit the filled buffer
+        hooks.submit_audio_buffer(bufferIndex);
+        
         bufferIndex = (bufferIndex + 1) % numBuffers;
     }
 }
 
 // Pre-fill all audio buffers before starting the audio thread
 void win_prefill_audio_buffers(bool useSynth) {
-    for (int i = 0; i < numBuffers; ++i) {
-        fill_audio_buffers(useSynth);
-        waveOutWrite(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+    // Only enable sine wave test if synth mode is disabled
+    if (!useSynth) {
+        _putenv_s("DEXED_TEST_SINE", "1");
+        std::cout << "[DEBUG] Setting sine wave test mode for prefill" << std::endl;
+    } else {
+        // Ensure the environment variable is cleared if synth mode is enabled
+        _putenv_s("DEXED_TEST_SINE", "");
     }
+    
+    std::cout << "[DEBUG] win_prefill_audio_buffers: Filling " << numBuffers << " buffers with useSynth=" << (useSynth ? "true" : "false") << std::endl;
+    
+    for (int i = 0; i < numBuffers; ++i) {
+        // Use our enhanced fill_audio_buffer function with detailed diagnostics
+        fill_audio_buffer(i, useSynth);
+        
+        // Verify buffer has data before submission
+        int zeroCount = 0;
+        for (int j = 0; j < 32 && j*2 < audioBuffers[i].size(); j++) {
+            if (audioBuffers[i][j*2] == 0) zeroCount++;
+        }
+        
+        std::cout << "[DEBUG] Buffer " << i << " has " << zeroCount << "/32 zero samples before submission" << std::endl;
+        
+        // Submit buffer to sound card
+        waveOutWrite(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+        
+        std::cout << "[DEBUG] Buffer " << i << " submitted to sound card" << std::endl;
+    }
+    
+    std::cout << "[DEBUG] All buffers initialized and submitted" << std::endl;
 }
 
 // Remove the main() function from this file to avoid duplicate symbol errors.

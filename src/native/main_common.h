@@ -25,6 +25,7 @@ void setup_unison_synths();
 void cleanup_unison_synths();
 void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool& useSynth);
 void fill_audio_buffers(bool useSynth);
+void fill_audio_buffer(int bufferIndex, bool useSynth);
 void handle_midi_channel_print(uint8_t channel);
 
 struct PlatformHooks {
