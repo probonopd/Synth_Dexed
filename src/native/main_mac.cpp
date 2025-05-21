@@ -68,7 +68,7 @@ void mac_midi_input_callback(const MIDIPacketList* pktlist, void* readProcRefCon
         const uint8_t* data = pkt->data;
         uint16_t len = pkt->length;
         for (size_t v = 0; v < unisonSynths.size(); ++v) {
-            unisonSynths[v]->midiDataHandler(0, data, len);
+            unisonSynths[v]->midiDataHandler(0, const_cast<uint8_t*>(data), len);
         }
     }
 }
