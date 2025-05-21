@@ -35,17 +35,17 @@ if (NOT TARGET_PYTHON_BINDINGS)
     list(REMOVE_ITEM SYNTH_DEXED_SRC "${CMAKE_SOURCE_DIR}/src/dexed_pybind.cpp")
 endif()
 
-# Add the correct main file per platform
+# Add the correct platform-specific file(s)
 if (WIN32)
-    set(PLATFORM_MAIN src/main_win.cpp)
+    set(PLATFORM_SOURCES src/main_win.cpp)
 elseif(APPLE)
-    set(PLATFORM_MAIN src/main_mac.cpp)
+    set(PLATFORM_SOURCES src/main_mac.cpp)
 else()
-    set(PLATFORM_MAIN src/main_linux.cpp)
+    set(PLATFORM_SOURCES src/main_linux.cpp)
 endif()
 
-# Create the executable
-add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} ${PLATFORM_MAIN})
+# Create the executable with main.cpp as the entry point
+add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/main.cpp src/main_common.cpp ${PLATFORM_SOURCES})
 
 target_include_directories(Synth_Dexed PRIVATE src)
 
