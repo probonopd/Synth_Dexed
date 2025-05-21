@@ -24,7 +24,7 @@ file(GLOB SYNTH_DEXED_SRC
     "src/*.cpp"
 )
 list(REMOVE_ITEM SYNTH_DEXED_SRC
-    "${CMAKE_SOURCE_DIR}/src/main.cpp"
+    "${CMAKE_SOURCE_DIR}/src/native/main.cpp"
     "${CMAKE_SOURCE_DIR}/src/native/main_win.cpp"
     "${CMAKE_SOURCE_DIR}/src/native/main_mac.cpp"
     "${CMAKE_SOURCE_DIR}/src/native/main_linux.cpp"
@@ -45,7 +45,7 @@ else()
 endif()
 
 # Create the executable with main.cpp as the entry point
-add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/main.cpp src/native/main_common.cpp ${PLATFORM_SOURCES})
+add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/native/main.cpp src/native/main_common.cpp ${PLATFORM_SOURCES})
 
 target_include_directories(Synth_Dexed PRIVATE src src/native)
 
