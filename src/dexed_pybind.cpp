@@ -340,7 +340,35 @@ public:
 
     void start_audio() {
 #ifdef _WIN32
-        if (running) return;
+        if (running) {
+            std::cout << "[C++] Audio already running" << std::endl;
+            return;
+        }
+        
+        std::cout << "[C++] Starting audio..." << std::endl;
+        std::cout << "[C++] Selected audio device: " << audio_device << std::endl;
+        
+        // Check how many audio devices are available
+        UINT numDevs = waveOutGetNumDevs();
+        std::cout << "[C++] Available audio output devices: " << numDevs << std::endl;
+        
+        if (audio_device >= numDevs) {
+            std::cerr << "[ERROR] Selected audio device (" << audio_device << ") out of range. Max: " << (numDevs - 1) << std::endl;
+            std::cerr << "[ERROR] Defaulting to audio device 0" << std::endl;
+            audio_device = 0;
+        }
+        
+        // Get device capabilities
+        WAVEOUTCAPS caps = {};
+        MMRESULT capResult = waveOutGetDevCaps(audio_device, &caps, sizeof(caps));
+        if (capResult == MMSYSERR_NOERROR) {
+            std::wcout << L"[C++] Audio device: " << caps.szPname << std::endl;
+            std::cout << "[C++] Device supports " << caps.wChannels << " channels" << std::endl;
+        } else {
+            std::cerr << "[ERROR] Failed to get device capabilities: " << capResult << std::endl;
+        }
+        
+        // Set up the wave format
         WAVEFORMATEX wfx = {};
         wfx.wFormatTag = WAVE_FORMAT_PCM;
         wfx.nChannels = 2;
@@ -349,15 +377,70 @@ public:
         wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
         wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
         wfx.cbSize = 0;
-        if (waveOutOpen(&hWaveOut, audio_device, &wfx, 0, 0, CALLBACK_NULL) != MMSYSERR_NOERROR) {
+        
+        std::cout << "[C++] Opening audio device with format:" << std::endl;
+        std::cout << "[C++]   Format: PCM" << std::endl;
+        std::cout << "[C++]   Channels: " << wfx.nChannels << std::endl;
+        std::cout << "[C++]   Sample rate: " << wfx.nSamplesPerSec << " Hz" << std::endl;
+        std::cout << "[C++]   Bits per sample: " << wfx.wBitsPerSample << std::endl;
+        std::cout << "[C++]   Block align: " << wfx.nBlockAlign << " bytes" << std::endl;
+        std::cout << "[C++]   Avg bytes per sec: " << wfx.nAvgBytesPerSec << std::endl;
+        
+        // Try to open the audio device
+        MMRESULT result = waveOutOpen(&hWaveOut, audio_device, &wfx, 0, 0, CALLBACK_NULL);
+        if (result != MMSYSERR_NOERROR) {
+            std::cerr << "[ERROR] waveOutOpen failed with code: " << result << std::endl;
+            switch (result) {
+                case MMSYSERR_ALLOCATED:
+                    std::cerr << "[ERROR] The specified resource is already allocated" << std::endl;
+                    break;
+                case MMSYSERR_BADDEVICEID:
+                    std::cerr << "[ERROR] The specified device ID is out of range" << std::endl;
+                    break;
+                case MMSYSERR_NODRIVER:
+                    std::cerr << "[ERROR] No device driver is present" << std::endl;
+                    break;
+                case MMSYSERR_NOMEM:
+                    std::cerr << "[ERROR] Unable to allocate memory" << std::endl;
+                    break;
+                case WAVERR_BADFORMAT:
+                    std::cerr << "[ERROR] Unsupported wave format" << std::endl;
+                    break;
+                case WAVERR_SYNC:
+                    std::cerr << "[ERROR] The device is synchronous" << std::endl;
+                    break;
+                default:
+                    std::cerr << "[ERROR] Unknown error" << std::endl;
+                    break;
+            }
             hWaveOut = nullptr;
             return;
         }
+        
+        std::cout << "[C++] Audio device opened successfully" << std::endl;
+        
+        // Prepare headers for each buffer
         for (int i = 0; i < NUM_BUFFERS; ++i) {
-            waveOutPrepareHeader(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+            std::cout << "[C++] Preparing buffer " << i << std::endl;
+            std::cout << "[C++]   Buffer size: " << audioBuffers[i].size() << " samples" << std::endl;
+            std::cout << "[C++]   Data pointer: " << (void*)audioBuffers[i].data() << std::endl;
+            
+            // Ensure the header points to our buffer
+            waveHeaders[i].lpData = reinterpret_cast<LPSTR>(audioBuffers[i].data());
+            waveHeaders[i].dwBufferLength = 2048 * 2 * sizeof(short);
+            
+            MMRESULT prepResult = waveOutPrepareHeader(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
+            if (prepResult != MMSYSERR_NOERROR) {
+                std::cerr << "[ERROR] waveOutPrepareHeader failed for buffer " << i << " with code: " << prepResult << std::endl;
+            } else {
+                std::cout << "[C++]   Header prepared successfully" << std::endl;
+            }
         }
+        
         running = true;
         audio_thread = std::thread(&DexedHost::audio_loop, this);
+        
+        std::cout << "[C++] Audio started." << std::endl;
 #elif defined(__linux__)
         if (running) return;
         int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
@@ -464,6 +547,22 @@ private:
         try {
             std::vector<int16_t> monoBuffer(2048); // Use the same size as your class buffer
             int bufferIndex = 0;
+            int debugCounter = 0;
+            bool forceSineTest = true; // Always enable sine test to verify audio output path
+            double sinePhase = 0.0;
+            
+            std::cout << "[C++] DexedHost::audio_loop: Starting audio thread" << std::endl;
+            std::cout << "[C++] Audio device handle: " << (hWaveOut != nullptr ? "Valid" : "NULL") << std::endl;
+            
+            // Verify audio buffer setup
+            std::cout << "[C++] Audio buffer configuration:" << std::endl;
+            for (int i = 0; i < NUM_BUFFERS; i++) {
+                std::cout << "[C++] Buffer " << i << ": "
+                          << "size=" << audioBuffers[i].size() 
+                          << ", header data=" << (void*)waveHeaders[i].lpData
+                          << ", length=" << waveHeaders[i].dwBufferLength << std::endl;
+            }
+            
             while (true) {
                 std::lock_guard<std::mutex> lock(audio_mutex);
                 if (!running || !synth) {
@@ -476,12 +575,86 @@ private:
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     if (!running) return;
                 }
-                synth->getSamples(monoBuffer.data(), 2048);
-                for (int i = 0; i < 2048; ++i) {
-                    audioBuffers[bufferIndex][2*i] = monoBuffer[i];
-                    audioBuffers[bufferIndex][2*i+1] = monoBuffer[i];
+                
+                // Clear buffer to ensure we don't reuse old data
+                std::fill(monoBuffer.begin(), monoBuffer.end(), 0);
+                
+                // Generate a test sine wave
+                if (forceSineTest) {
+                    // Debug: generate a loud sine wave to verify audio path
+                    double freq = 440.0; // A4 440 Hz
+                    for (int i = 0; i < 2048; i++) {
+                        // Generate sine wave with amplitude 16000 (loud but not maximum)
+                        monoBuffer[i] = (int16_t)(sin(sinePhase) * 16000.0);  
+                        sinePhase += 2.0 * 3.14159265358979323846 * freq / 48000.0;
+                        if (sinePhase > 2.0 * 3.14159265358979323846) 
+                            sinePhase -= 2.0 * 3.14159265358979323846;
+                    }
+                    
+                    // Also try getting samples from synth if available
+                    if (synth && synth->getNumNotesPlaying() > 0) {
+                        std::cout << "[AUDIO] Getting samples from synth (notes playing: " 
+                                 << synth->getNumNotesPlaying() << ")" << std::endl;
+                        std::vector<int16_t> synthBuffer(2048);
+                        synth->getSamples(synthBuffer.data(), 2048);
+                        
+                        // Mix synth output with sine wave
+                        for (int i = 0; i < 2048; i++) {
+                            monoBuffer[i] += synthBuffer[i] / 2; // Mix 50/50
+                        }
+                    }
+                } else {
+                    // Normal synth processing
+                    synth->getSamples(monoBuffer.data(), 2048);
                 }
-                waveOutWrite(hWaveOut, &hdr, sizeof(WAVEHDR));
+                
+                // Debug output - print first few samples every few buffers
+                if (debugCounter++ % 5 == 0) {
+                    int zeroCount = 0;
+                    for (int i = 0; i < 32; i++) {
+                        if (monoBuffer[i] == 0) zeroCount++;
+                    }
+                    
+                    std::cout << "[AUDIO] Buffer " << bufferIndex << " first 8 samples: ";
+                    for (int i = 0; i < 8; i++) {
+                        std::cout << monoBuffer[i] << " ";
+                    }
+                    std::cout << "(" << zeroCount << "/32 zeros)" << std::endl;
+                    
+                    // Check header flags
+                    std::cout << "[AUDIO] Header flags: 0x" << std::hex << hdr.dwFlags << std::dec << std::endl;
+                }
+                
+                // Convert mono to stereo - explicitly check if header is prepared properly
+                if (!(hdr.dwFlags & WHDR_PREPARED)) {
+                    std::cout << "[ERROR] Buffer " << bufferIndex << " not prepared!" << std::endl;
+                    waveOutPrepareHeader(hWaveOut, &hdr, sizeof(WAVEHDR));
+                }
+                
+                // Explicitly check buffer validity
+                if (!audioBuffers[bufferIndex].data() || audioBuffers[bufferIndex].size() < 2048*2) {
+                    std::cout << "[ERROR] Invalid buffer at index " << bufferIndex << std::endl;
+                } else {
+                    // Copy data into the audio buffer (stereo)
+                    for (int i = 0; i < 2048; ++i) {
+                        audioBuffers[bufferIndex][2*i] = monoBuffer[i];
+                        audioBuffers[bufferIndex][2*i+1] = monoBuffer[i];
+                    }
+                }
+                
+                // Verify waveHeader is still pointing to our buffer
+                if (hdr.lpData != reinterpret_cast<LPSTR>(audioBuffers[bufferIndex].data())) {
+                    std::cout << "[ERROR] Header data pointer mismatch!" << std::endl;
+                    // Fix it
+                    hdr.lpData = reinterpret_cast<LPSTR>(audioBuffers[bufferIndex].data());
+                }
+                
+                // Write audio buffer to sound card
+                MMRESULT result = waveOutWrite(hWaveOut, &hdr, sizeof(WAVEHDR));
+                if (result != MMSYSERR_NOERROR) {
+                    std::cout << "[ERROR] waveOutWrite failed with code: " << result << std::endl;
+                }
+                
                 bufferIndex = (bufferIndex + 1) % NUM_BUFFERS;
             }
             std::cout << "[C++] DexedHost::audio_loop: thread finished" << std::endl;
