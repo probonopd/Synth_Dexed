@@ -1,6 +1,7 @@
 #ifndef ARDUINO
 
 #include "main_common.h"
+#include <iostream> // Added iostream for std::cout and std::endl
 #include <CoreAudio/CoreAudio.h>
 #include <AudioUnit/AudioUnit.h>
 #include <CoreMIDI/CoreMIDI.h>
