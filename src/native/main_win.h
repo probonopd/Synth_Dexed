@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #pragma once
 #include "main_common.h"
 #include <vector>
@@ -12,3 +14,5 @@ extern std::vector<WAVEHDR> waveHeaders;
 // Add declarations for audio thread helpers
 void win_prefill_audio_buffers(bool useSynth);
 void win_audio_thread_loop(std::atomic<bool>& running, bool useSynth, PlatformHooks& hooks);
+
+#endif

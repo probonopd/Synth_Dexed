@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "synth_dexed_c_api.h"
 #include "../dexed.h"
 #include <cstdint>
@@ -138,3 +140,6 @@ SYNTHDEXED_API void synth_load_epiano_patch(synth_handle handle) {
 #endif
 
 } // extern "C"
+
+
+#endif

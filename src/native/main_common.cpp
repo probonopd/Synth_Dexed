@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #include "main_common.h"
 #include "dexed.h"
 #include <iostream>
@@ -438,3 +440,5 @@ void debug_audio_buffers(bool useSynth) {
         std::cout << "[DEBUG] synth is nullptr!" << std::endl;
     }
 }
+
+#endif

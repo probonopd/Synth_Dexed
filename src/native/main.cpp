@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #if defined(_WIN32)
 #include "main_win.h"
 #elif defined(__APPLE__)
@@ -17,3 +19,5 @@ int main(int argc, char* argv[]) {
     return main_common_entry(argc, argv, get_linux_hooks());
 #endif
 }
+
+#endif

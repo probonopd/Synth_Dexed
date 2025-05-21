@@ -1,3 +1,5 @@
+#ifndef ARDUINO
+
 #pragma once
 #include <cstdint>
 #ifdef __cplusplus
@@ -22,4 +24,6 @@ SYNTHDEXED_API void synth_load_init_voice(synth_handle handle);
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
