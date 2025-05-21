@@ -2,6 +2,7 @@
 
 #include "main_common.h"
 #include "dexed.h"
+#include "midi_socket_server.h"
 #include <iostream>
 #include <csignal>
 #include <cstring>
@@ -11,6 +12,8 @@
 #include <mutex>
 #include <atomic>
 #include <string> // Add this line
+#include <cstdlib>
+#include <random>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -190,6 +193,39 @@ void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool
             DEBUG_ENABLED = true;
         }
     }
+}
+
+// Helper to find a free TCP port
+int find_free_port() {
+#ifdef _WIN32
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2,2), &wsaData);
+#endif
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return 0;
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = 0; // Let OS pick a free port
+    if (bind(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+#ifdef _WIN32
+        closesocket(sock);
+        WSACleanup();
+#else
+        close(sock);
+#endif
+        return 0;
+    }
+    int len = sizeof(addr);
+    getsockname(sock, (struct sockaddr*)&addr, &len);
+    int port = ntohs(addr.sin_port);
+#ifdef _WIN32
+    closesocket(sock);
+    WSACleanup();
+#else
+    close(sock);
+#endif
+    return port;
 }
 
 void fill_audio_buffers(bool useSynth) {
@@ -396,6 +432,32 @@ bool extract_dx7_voice_data(const std::vector<uint8_t>& sysex, uint8_t* out, siz
     return false;
 }
 
+void stop_socket_server(MidiSocketServer& server, int port) {
+#ifdef _WIN32
+    // Connect to the socket to unblock accept()
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s != INVALID_SOCKET) {
+        sockaddr_in addr = {};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(port);
+        connect(s, (sockaddr*)&addr, sizeof(addr));
+        closesocket(s);
+    }
+#else
+    int s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s >= 0) {
+        sockaddr_in addr = {};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        addr.sin_port = htons(port);
+        connect(s, (sockaddr*)&addr, sizeof(addr));
+        close(s);
+    }
+#endif
+    server.stop();
+}
+
 int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     if (DEBUG_ENABLED) std::cout << "[DEBUG] Entered main_common_entry" << std::endl;
     int audioDev = 0;
@@ -438,6 +500,42 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     linux_prefill_audio_buffers(useSynth, hooks);
 #endif
     hooks.open_midi(midiDev);
+    // Parse --midi-socket-port N from args
+    int midiSocketPort = 0;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--midi-socket-port" || arg == "--midi-port") && i + 1 < argc) {
+            midiSocketPort = std::atoi(argv[++i]);
+        }
+    }
+    if (midiSocketPort == 0) {
+        midiSocketPort = find_free_port();
+        if (midiSocketPort == 0) midiSocketPort = 50007; // fallback
+    }
+    std::cout << "[INFO] MIDI socket server will listen on 127.0.0.1:" << midiSocketPort << std::endl;
+    // Start MIDI UDP server (UDP, localhost:midiSocketPort)
+    MidiUdpServer midiServer(midiSocketPort, [](const uint8_t* data, size_t len) {
+        std::cout << "[MIDI UDP] Received " << len << " bytes: ";
+        for (size_t i = 0; i < len; ++i) std::cout << (int)data[i] << " ";
+        std::cout << std::endl;
+        if (len > 0) {
+            std::lock_guard<std::mutex> lock(synthMutex);
+            if (len >= 3 && data[0] == 0xF0) {
+                // SysEx: send the whole buffer
+                for (auto* s : unisonSynths) {
+                    if (s) s->midiDataHandler(1, const_cast<uint8_t*>(data), (int)len);
+                }
+            } else {
+                // Standard MIDI: process in 3-byte chunks
+                for (size_t i = 0; i + 2 < len; i += 3) {
+                    for (auto* s : unisonSynths) {
+                        if (s) s->midiDataHandler(1, const_cast<uint8_t*>(data + i), 3);
+                    }
+                }
+            }
+        }
+    });
+    midiServer.start();
     std::thread audio([&]() {
         try {
             int bufferIndex = 0;
@@ -490,6 +588,7 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     audio.join();
     hooks.close_audio();
     hooks.close_midi();
+    midiServer.stop();
     cleanup_unison_synths();
     std::cout << "[MAIN THREAD] Program exit." << std::endl;
     if (DEBUG_ENABLED) std::cout << "[DEBUG] main_common_entry: about to return from main_common_entry" << std::endl;

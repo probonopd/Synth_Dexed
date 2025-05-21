@@ -46,6 +46,9 @@ if (WIN32)
     list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/main_win.cpp")
 endif()
 
+# Add the TCP MIDI socket server source file
+list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/midi_socket_server.cpp")
+
 # Always build Synth_Dexed as a shared library
 add_library(Synth_Dexed SHARED ${SYNTH_DEXED_SRC})
 
@@ -59,7 +62,7 @@ else()
 endif()
 
 # Create the executable with main.cpp as the entry point, linking to the Synth_Dexed library
-add_executable(Synth_Dexed_exe ../main.cpp main_common.cpp ${PLATFORM_SOURCES})
+add_executable(Synth_Dexed_exe ../main.cpp main_common.cpp midi_socket_server.cpp ${PLATFORM_SOURCES})
 target_link_libraries(Synth_Dexed_exe PRIVATE Synth_Dexed)
 
 if (WIN32)
