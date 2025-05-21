@@ -165,4 +165,8 @@ PlatformHooks get_linux_hooks() {
     return hooks;
 }
 
+#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
+#define SND_SEQ_EVENT_PROGRAMCHANGE 192
+#endif
+
 #endif // ARDUINO
