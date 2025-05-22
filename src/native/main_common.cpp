@@ -18,14 +18,25 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <mmsystem.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 #endif
 
 #if defined(__linux__)
 #include "main_linux.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #endif
 
 #if defined(__APPLE__)
 #include "main_mac.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 #endif
 
 #ifndef M_PI
