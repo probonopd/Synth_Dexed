@@ -12,6 +12,10 @@
 #include <sched.h>
 #include <thread>
 
+#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
+#define SND_SEQ_EVENT_PROGRAMCHANGE 192
+#endif
+
 extern double global_sine_phase;
 
 static snd_pcm_t* pcm_handle = nullptr;
@@ -58,10 +62,14 @@ void linux_submit_audio_buffer(int bufferIndex) {
 }
 
 void linux_close_audio() {
+    std::cout << "[DEBUG] linux_close_audio called. pcm_handle=" << pcm_handle << std::endl;
     if (pcm_handle) {
         snd_pcm_drain(pcm_handle);
         snd_pcm_close(pcm_handle);
         pcm_handle = nullptr;
+        std::cout << "[DEBUG] ALSA PCM handle closed." << std::endl;
+    } else {
+        std::cout << "[DEBUG] ALSA PCM handle already null." << std::endl;
     }
 }
 
@@ -83,9 +91,13 @@ bool linux_open_midi(int midiDev) {
 }
 
 void linux_close_midi() {
+    std::cout << "[DEBUG] linux_close_midi called. seq_handle=" << seq_handle << std::endl;
     if (seq_handle) {
         snd_seq_close(seq_handle);
         seq_handle = nullptr;
+        std::cout << "[DEBUG] ALSA sequencer handle closed." << std::endl;
+    } else {
+        std::cout << "[DEBUG] ALSA sequencer handle already null." << std::endl;
     }
 }
 
@@ -164,9 +176,5 @@ PlatformHooks get_linux_hooks() {
     hooks.close_midi = linux_close_midi;
     return hooks;
 }
-
-#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
-#define SND_SEQ_EVENT_PROGRAMCHANGE 192
-#endif
 
 #endif // ARDUINO

@@ -15,11 +15,14 @@
 #include <cstdlib>
 #include <random>
 
-#if defined(_WIN32)
-#include <windows.h>
-#include <mmsystem.h>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <mmsystem.h>
 #pragma comment(lib, "ws2_32.lib")
 #endif
 
@@ -73,9 +76,15 @@ uint8_t fmpiano_sysex[156] = {
 double global_sine_phase = 0.0;
 
 void signal_handler(int signal) {
-    if (signal == SIGINT) {
+    static std::atomic_flag handled = ATOMIC_FLAG_INIT;
+    if (signal == SIGINT && !handled.test_and_set()) {
         running = false;
         std::cout << "\n[INFO] Caught Ctrl+C, exiting..." << std::endl;
+        // Force exit after a short delay to ensure all threads terminate
+        std::thread([](){
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            std::exit(0);
+        }).detach();
     }
 }
 
@@ -83,11 +92,15 @@ void setup_unison_synths() {
     std::lock_guard<std::mutex> lock(synthMutex);
     unisonSynths.clear();
     int voices_to_create = (unisonVoices > 1) ? unisonVoices : 1;
-    
     std::cout << "[DEBUG] Setting up " << voices_to_create << " unison synth voices" << std::endl;
-    
     for (int v = 0; v < voices_to_create; ++v) {
         Dexed* s = new Dexed(16, SAMPLE_RATE);
+        // Check for duplicate pointer (should never happen, but for safety)
+        if (std::find(unisonSynths.begin(), unisonSynths.end(), s) != unisonSynths.end()) {
+            std::cout << "[ERROR] Attempt to add duplicate Dexed pointer to unisonSynths!" << std::endl;
+            delete s;
+            continue;
+        }
         s->resetControllers();
         s->setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
         s->loadVoiceParameters(fmpiano_sysex);
@@ -138,8 +151,23 @@ void setup_unison_synths() {
 }
 
 void cleanup_unison_synths() {
+    static bool already_cleaned = false;
+    if (already_cleaned) {
+        std::cout << "[DEBUG] cleanup_unison_synths called more than once!" << std::endl;
+        return;
+    }
+    already_cleaned = true;
     std::lock_guard<std::mutex> lock(synthMutex);
-    for (auto* s : unisonSynths) delete s;
+    std::cout << "[DEBUG] cleanup_unison_synths: deleting " << unisonSynths.size() << " Dexed instances" << std::endl;
+    for (auto*& s : unisonSynths) {
+        if (s) {
+            std::cout << "[DEBUG] deleting Dexed at " << s << std::endl;
+            delete s;
+            s = nullptr;
+        } else {
+            std::cout << "[DEBUG] Dexed pointer already null (possible double free attempt)" << std::endl;
+        }
+    }
     unisonSynths.clear();
     synth = nullptr;
 }
