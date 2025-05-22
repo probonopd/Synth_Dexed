@@ -12,6 +12,10 @@
 #include <sched.h>
 #include <thread>
 
+#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
+#define SND_SEQ_EVENT_PROGRAMCHANGE 192
+#endif
+
 extern double global_sine_phase;
 
 static snd_pcm_t* pcm_handle = nullptr;
@@ -164,9 +168,5 @@ PlatformHooks get_linux_hooks() {
     hooks.close_midi = linux_close_midi;
     return hooks;
 }
-
-#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
-#define SND_SEQ_EVENT_PROGRAMCHANGE 192
-#endif
 
 #endif // ARDUINO

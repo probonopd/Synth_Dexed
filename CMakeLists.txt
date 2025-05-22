@@ -22,6 +22,7 @@ endif()
 # Gather all source files except main.cpp and main_*.cpp
 file(GLOB SYNTH_DEXED_SRC
     "src/*.cpp"
+    "src/native/midi_socket_server.cpp"
 )
 list(REMOVE_ITEM SYNTH_DEXED_SRC
     "${CMAKE_SOURCE_DIR}/src/native/main.cpp"
