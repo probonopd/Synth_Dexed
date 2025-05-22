@@ -227,7 +227,7 @@ int find_free_port() {
 #endif
         return 0;
     }
-    int len = sizeof(addr);
+    socklen_t len = sizeof(addr);
     getsockname(sock, (struct sockaddr*)&addr, &len);
     int port = ntohs(addr.sin_port);
 #ifdef _WIN32
