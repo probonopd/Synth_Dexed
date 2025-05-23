@@ -42,18 +42,16 @@ HWAVEOUT hWaveOut = NULL;
 std::vector<WAVEHDR> waveHeaders;
 
 bool win_open_audio(int audioDev) {
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] win_open_audio called" << std::endl;
+    std::cout << "[DEBUG] win_open_audio called" << std::endl;
     UINT numAudioDevs = waveOutGetNumDevs();
-    if (DEBUG_ENABLED) {
-        std::cout << "Available audio output devices:" << std::endl;
-        for (UINT i = 0; i < numAudioDevs; ++i) {
-            WAVEOUTCAPS caps;
-            waveOutGetDevCaps(i, &caps, sizeof(caps));
-            std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
-        }
+    std::cout << "Available audio output devices:" << std::endl;
+    for (UINT i = 0; i < numAudioDevs; ++i) {
+        WAVEOUTCAPS caps;
+        waveOutGetDevCaps(i, &caps, sizeof(caps));
+        std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
     }
     std::cout << "[INFO] Using audio device: " << audioDev << std::endl;
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] Before waveOutOpen" << std::endl;
+    std::cout << "[DEBUG] Before waveOutOpen" << std::endl;
     WAVEFORMATEX wfx = {};
     wfx.wFormatTag = WAVE_FORMAT_PCM;
     wfx.nChannels = 2;
@@ -66,26 +64,20 @@ bool win_open_audio(int audioDev) {
     if (result != MMSYSERR_NOERROR) {
         std::cout << "[ERROR] waveOutOpen failed with code: " << result << std::endl;
     } else {
-        if (DEBUG_ENABLED) {
-            std::cout << "[DEBUG] After waveOutOpen" << std::endl;
-            std::cout << "[DEBUG] audioBuffers.size() = " << audioBuffers.size() << ", numBuffers = " << numBuffers << ", BUFFER_FRAMES = " << BUFFER_FRAMES << std::endl;
-            std::cout << "[DEBUG] Before buffer preparation loop" << std::endl;
-        }
+        std::cout << "[DEBUG] After waveOutOpen" << std::endl;
+        std::cout << "[DEBUG] audioBuffers.size() = " << audioBuffers.size() << ", numBuffers = " << numBuffers << ", BUFFER_FRAMES = " << BUFFER_FRAMES << std::endl;
+        std::cout << "[DEBUG] Before buffer preparation loop" << std::endl;
     }
     waveHeaders.resize(numBuffers);
     for (int i = 0; i < numBuffers; ++i) {
-        if (DEBUG_ENABLED) {
-            std::cout << "[DEBUG] Preparing buffer " << i << ", audioBuffers[i].size() = " << (i < (int)audioBuffers.size() ? audioBuffers[i].size() : -1) << std::endl;
-        }
+        std::cout << "[DEBUG] Preparing buffer " << i << ", audioBuffers[i].size() = " << (i < (int)audioBuffers.size() ? audioBuffers[i].size() : -1) << std::endl;
         waveHeaders[i] = {};
         waveHeaders[i].lpData = reinterpret_cast<LPSTR>(audioBuffers[i].data());
         waveHeaders[i].dwBufferLength = BUFFER_FRAMES * 2 * sizeof(short);
         waveOutPrepareHeader(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
     }
-    if (DEBUG_ENABLED) {
-        std::cout << "[DEBUG] After buffer preparation loop" << std::endl;
-        std::cout << "[DEBUG] win_open_audio completed successfully" << std::endl;
-    }
+    std::cout << "[DEBUG] After buffer preparation loop" << std::endl;
+    std::cout << "[DEBUG] win_open_audio completed successfully" << std::endl;
     return true;
 }
 
@@ -197,22 +189,17 @@ void CALLBACK midiInProc(HMIDIIN hMidiIn, UINT wMsg, DWORD_PTR dwInstance, DWORD
 }
 
 bool win_open_midi(int midiDev) {
-    // Check if we're being called from Python - environment variable will be set by Python script
     if (std::getenv("DEXED_PYTHON_HOST") != nullptr) {
         std::cout << "[INFO] Running under Python - MIDI will be handled by Python script" << std::endl;
-        return true; // Return success but don't actually open MIDI port
+        return true;
     }
-
-    // Only reach here if not running under Python
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] win_open_midi called" << std::endl;
+    std::cout << "[DEBUG] win_open_midi called" << std::endl;
     UINT numMidiDevs = midiInGetNumDevs();
-    if (DEBUG_ENABLED) {
-        std::cout << "Available MIDI input devices:" << std::endl;
-        for (UINT i = 0; i < numMidiDevs; ++i) {
-            MIDIINCAPS caps;
-            midiInGetDevCaps(i, &caps, sizeof(caps));
-            std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
-        }
+    std::cout << "Available MIDI input devices:" << std::endl;
+    for (UINT i = 0; i < numMidiDevs; ++i) {
+        MIDIINCAPS caps;
+        midiInGetDevCaps(i, &caps, sizeof(caps));
+        std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
     }
     std::cout << "[INFO] Using MIDI input device: " << midiDev << std::endl;
     HMIDIIN hMidiIn = nullptr;

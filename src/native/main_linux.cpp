@@ -26,16 +26,12 @@ static snd_seq_t* seq_handle = nullptr;
 static int midi_in_port = -1;
 
 bool linux_open_audio(int audioDev) {
-    if (DEBUG_ENABLED) {
-        std::cout << "[DEBUG] linux_open_audio called" << std::endl;
-    }
+    std::cout << "[DEBUG] linux_open_audio called" << std::endl;
     void **hints;
     std::vector<std::string> deviceNames, deviceDescs;
     if (snd_device_name_hint(-1, "pcm", &hints) >= 0) {
         void **n = hints;
-        if (DEBUG_ENABLED) {
-            std::cout << "Available audio output devices:" << std::endl;
-        }
+        std::cout << "Available audio output devices:" << std::endl;
         int idx = 0;
         while (*n != nullptr) {
             char *name = snd_device_name_get_hint(*n, "NAME");
@@ -43,7 +39,7 @@ bool linux_open_audio(int audioDev) {
             if (name && std::string(name) != "null" && std::string(name).find("_voice") == std::string::npos) {
                 deviceNames.push_back(name);
                 deviceDescs.push_back(desc ? desc : name);
-                if (DEBUG_ENABLED) std::cout << "  [" << idx << "] " << (desc ? desc : name) << " (" << name << ")" << std::endl;
+                std::cout << "  [" << idx << "] " << (desc ? desc : name) << " (" << name << ")" << std::endl;
                 ++idx;
             }
             if (name) free(name);
@@ -94,6 +90,7 @@ bool linux_open_midi(int midiDev) {
         std::cerr << "[ERROR] Failed to create ALSA MIDI input port." << std::endl;
         return false;
     }
+    std::cout << "Available MIDI input devices: (connect with aconnect or your ALSA tool)" << std::endl;
     // Optionally connect to a MIDI source here
     return true;
 }

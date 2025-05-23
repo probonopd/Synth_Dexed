@@ -729,9 +729,9 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     std::thread audio([&]() {
         try {
             int bufferIndex = 0;
-            if (DEBUG_ENABLED) std::cout << "[AUDIO THREAD] Starting audio thread loop." << std::endl;
+            // std::cout << "[AUDIO THREAD] Starting audio thread loop." << std::endl;
             while (running) {
-                if (DEBUG_ENABLED) std::cout << "[AUDIO THREAD] Top of loop, bufferIndex=" << bufferIndex << std::endl;
+                // std::cout << "[AUDIO THREAD] Top of loop, bufferIndex=" << bufferIndex << std::endl;
 #if defined(_WIN32)
                 extern std::vector<WAVEHDR> waveHeaders;
                 while (waveHeaders[bufferIndex].dwFlags & WHDR_INQUEUE) {
@@ -740,12 +740,12 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
                 }
 #endif
                 fill_audio_buffer(bufferIndex, useSynth);
-                if (DEBUG_ENABLED) std::cout << "[AUDIO THREAD] After fill_audio_buffer." << std::endl;
+                // std::cout << "[AUDIO THREAD] After fill_audio_buffer." << std::endl;
                 hooks.submit_audio_buffer(bufferIndex);
-                if (DEBUG_ENABLED) std::cout << "[AUDIO THREAD] After submit_audio_buffer." << std::endl;
+                // std::cout << "[AUDIO THREAD] After submit_audio_buffer." << std::endl;
                 bufferIndex = (bufferIndex + 1) % numBuffers;
             }
-            if (DEBUG_ENABLED) std::cout << "[AUDIO THREAD] Exiting audio thread loop." << std::endl;
+            // std::cout << "[AUDIO THREAD] Exiting audio thread loop." << std::endl;
         } catch (const std::exception& ex) {
             std::cerr << "[AUDIO THREAD EXCEPTION] " << ex.what() << std::endl;
             running = false;

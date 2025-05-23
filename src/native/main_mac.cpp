@@ -23,9 +23,9 @@ MIDIEndpointRef midiIn;
 void mac_midi_input_callback(const MIDIPacketList* pktlist, void* readProcRefCon, void* srcConnRefCon);
 
 bool mac_open_audio(int audioDev) {
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] mac_open_audio called" << std::endl;
+    std::cout << "[DEBUG] mac_open_audio called" << std::endl;
     // List and select audio device (optional, can be expanded)
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] Using audio device: " << audioDev << std::endl;
+    std::cout << "[DEBUG] Using audio device: " << audioDev << std::endl;
     AudioComponentDescription desc = { kAudioUnitType_Output, kAudioUnitSubType_DefaultOutput, kAudioUnitManufacturer_Apple, 0, 0 };
     AudioComponent comp = AudioComponentFindNext(nullptr, &desc);
     AudioComponentInstanceNew(comp, &audioUnit);
@@ -63,6 +63,7 @@ bool mac_open_midi(int midiDev) {
     // Register the callback for incoming MIDI
     MIDIInputPortCreate(midiClient, CFSTR("Input"), mac_midi_input_callback, nullptr, &inPort);
     MIDIPortConnectSource(inPort, midiIn, nullptr);
+    std::cout << "Available MIDI input devices: (see Audio MIDI Setup for details)" << std::endl;
     return true;
 }
 
