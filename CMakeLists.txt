@@ -19,6 +19,15 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     add_compile_options(-std=c++17)
 endif()
 
+# Optimize for performance and low latency
+if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    add_compile_options(/O2 /fp:fast /arch:AVX2 /Ob2 /DNDEBUG)
+    # Optionally: add_compile_options(/GS-)
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    add_compile_options(-O3 -ffast-math -march=native -funroll-loops -fomit-frame-pointer -DNDEBUG)
+    # Optionally: add_link_options(-flto)
+endif()
+
 # Gather all source files except main.cpp and main_*.cpp
 file(GLOB SYNTH_DEXED_SRC
     "src/*.cpp"
