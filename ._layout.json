@@ -1,0 +1,66 @@
+{
+    "items": {
+        "CMakeLists.txt": [
+            0.0,
+            0.0
+        ],
+        "LICENSE-APACHE2.txt": [
+            100.0,
+            0.0
+        ],
+        "LICENSE-GPL3.txt": [
+            200.0,
+            0.0
+        ],
+        "README.md": [
+            300.0,
+            0.0
+        ],
+        "bildlx": [
+            400.0,
+            0.0
+        ],
+        "build": [
+            500.0,
+            0.0
+        ],
+        "buildlinux": [
+            600.0,
+            0.0
+        ],
+        "examples": [
+            0.0,
+            60.0
+        ],
+        "keywords.txt": [
+            100.0,
+            60.0
+        ],
+        "library.properties": [
+            200.0,
+            60.0
+        ],
+        "name.c": [
+            300.0,
+            60.0
+        ],
+        "platformio.ini": [
+            400.0,
+            60.0
+        ],
+        "python": [
+            500.0,
+            60.0
+        ],
+        "src": [
+            600.0,
+            60.0
+        ],
+        "tools": [
+            0.0,
+            120.0
+        ]
+    },
+    "window_geometry": "AdnQywADAAAAAABkAAAARQAAA4MAAAK7AAAAZAAAAGQAAAODAAACuwAAAAAAAAAAB4AAAABkAAAAZAAAA4MAAAK7",
+    "app.snap_to_grid": false
+}

@@ -88,3 +88,23 @@ if (BUILD_PYTHON_BINDINGS)
     add_library(dexed_pybind MODULE src/dexed_pybind.cpp)
     target_link_libraries(dexed_pybind PRIVATE pybind11::module)
 endif()
+
+# Add a DLL target for Dexed
+add_library(dexed SHARED
+    src/dexed.cpp
+    src/dx7note.cpp
+    src/EngineMkI.cpp
+    src/EngineMsfa.cpp
+    src/EngineOpl.cpp
+    src/env.cpp
+    src/exp2.cpp
+    src/fm_core.cpp
+    src/fm_op_kernel.cpp
+    src/freqlut.cpp
+    src/lfo.cpp
+    src/pitchenv.cpp
+    src/porta.cpp
+    src/sin.cpp
+)
+target_compile_definitions(dexed PRIVATE SYNTH_DEXED_EXPORTS)
+target_include_directories(dexed PUBLIC ${CMAKE_SOURCE_DIR}/src)

@@ -1,0 +1,86 @@
+{
+    "items": {
+        "CMakeLists.txt": [
+            0.0,
+            0.0
+        ],
+        "build": [
+            100.0,
+            0.0
+        ],
+        "buildlinux": [
+            200.0,
+            0.0
+        ],
+        "main.cpp": [
+            300.0,
+            0.0
+        ],
+        "main.py": [
+            400.0,
+            0.0
+        ],
+        "main_common.cpp": [
+            500.0,
+            0.0
+        ],
+        "main_common.h": [
+            600.0,
+            0.0
+        ],
+        "main_linux.cpp": [
+            0.0,
+            60.0
+        ],
+        "main_linux.h": [
+            100.0,
+            60.0
+        ],
+        "main_mac.cpp": [
+            200.0,
+            60.0
+        ],
+        "main_mac.h": [
+            300.0,
+            60.0
+        ],
+        "main_win.cpp": [
+            400.0,
+            60.0
+        ],
+        "main_win.h": [
+            500.0,
+            60.0
+        ],
+        "midi_socket_server.cpp": [
+            600.0,
+            60.0
+        ],
+        "midi_socket_server.h": [
+            0.0,
+            120.0
+        ],
+        "pipe_win.py": [
+            100.0,
+            120.0
+        ],
+        "synth_dexed_c_api.cpp": [
+            200.0,
+            120.0
+        ],
+        "synth_dexed_c_api.h": [
+            300.0,
+            120.0
+        ],
+        "test_socket.py": [
+            400.0,
+            120.0
+        ],
+        "vst3": [
+            500.0,
+            120.0
+        ]
+    },
+    "window_geometry": "AdnQywADAAAAAABkAAAARQAAA4MAAAK7AAAAZAAAAGQAAAODAAACuwAAAAAAAAAAB4AAAABkAAAAZAAAA4MAAAK7",
+    "app.snap_to_grid": false
+}

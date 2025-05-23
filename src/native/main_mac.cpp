@@ -19,6 +19,9 @@ AudioUnit audioUnit;
 MIDIClientRef midiClient;
 MIDIEndpointRef midiIn;
 
+// Forward declaration for MIDI callback
+void mac_midi_input_callback(const MIDIPacketList* pktlist, void* readProcRefCon, void* srcConnRefCon);
+
 bool mac_open_audio(int audioDev) {
     if (DEBUG_ENABLED) std::cout << "[DEBUG] mac_open_audio called" << std::endl;
     // List and select audio device (optional, can be expanded)
@@ -91,7 +94,11 @@ void mac_midi_input_callback(const MIDIPacketList* pktlist, void* readProcRefCon
             int channel_one_based = msg_channel_zero_based + 1;
             if (channel_one_based == 16) { // OMNI
                 for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
-                    uint8_t modified_msg[3] = { (uint8_t)(msg_type_nibble | module_idx), len > 1 ? data[1] : 0, len > 2 ? data[2] : 0 };
+                    uint8_t modified_msg[3] = {
+                        static_cast<uint8_t>(msg_type_nibble | module_idx),
+                        static_cast<uint8_t>(len > 1 ? data[1] : 0),
+                        static_cast<uint8_t>(len > 2 ? data[2] : 0)
+                    };
                     for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
                         int synth_idx = module_idx * unisonVoices + voice_idx;
                         if (synth_idx < allSynths.size() && allSynths[synth_idx]) {

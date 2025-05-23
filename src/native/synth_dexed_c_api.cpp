@@ -68,8 +68,8 @@ synth_handle synth_create(uint32_t sample_rate, uint8_t max_notes) {
     }
     std::cout << "[DEBUG] synth_create: after audioBuffers resize, audioBuffers.size()=" << audioBuffers.size() << std::endl;
     std::cout << "[DEBUG] synth_create: synth=" << synth << ", SAMPLE_RATE=" << SAMPLE_RATE << ", BUFFER_FRAMES=" << BUFFER_FRAMES << ", numBuffers=" << numBuffers << std::endl;
-    setup_unison_synths();
-    std::cout << "[DEBUG] synth_create: after setup_unison_synths, audioBuffers.size()=" << audioBuffers.size() << std::endl;
+    setup_all_synths();
+    std::cout << "[DEBUG] synth_create: after setup_all_synths, audioBuffers.size()=" << audioBuffers.size() << std::endl;
     return reinterpret_cast<synth_handle>(wrapper);
 }
 
@@ -77,7 +77,7 @@ void synth_destroy(synth_handle handle) {
     if (!handle) return;
     auto* wrapper = reinterpret_cast<SynthWrapper*>(handle);
     synth_stop_audio(handle);
-    cleanup_unison_synths();
+    cleanup_all_synths();
     delete wrapper->synth;
     delete wrapper;
 }
