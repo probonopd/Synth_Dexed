@@ -46,11 +46,12 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+int num_modules = 1; // Number of synth modules, each on its own MIDI channel
 std::vector<uint8_t> customVoiceSysex; // Added for custom voice
 int unisonVoices = 1;
 float unisonSpread = 0.0f;
 float unisonDetune = 0.0f;
-std::vector<Dexed*> unisonSynths;
+std::vector<Dexed*> allSynths; // Changed from unisonSynths
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024;
 int numBuffers = 4;
@@ -88,78 +89,89 @@ void signal_handler(int signal) {
     }
 }
 
-void setup_unison_synths() {
+void setup_all_synths() { // Renamed from setup_unison_synths
     std::lock_guard<std::mutex> lock(synthMutex);
-    unisonSynths.clear();
-    int voices_to_create = (unisonVoices > 1) ? unisonVoices : 1;
-    std::cout << "[DEBUG] Setting up " << voices_to_create << " unison synth voices" << std::endl;
-    for (int v = 0; v < voices_to_create; ++v) {
-        Dexed* s = new Dexed(16, SAMPLE_RATE);
-        // Check for duplicate pointer (should never happen, but for safety)
-        if (std::find(unisonSynths.begin(), unisonSynths.end(), s) != unisonSynths.end()) {
-            std::cout << "[ERROR] Attempt to add duplicate Dexed pointer to unisonSynths!" << std::endl;
-            delete s;
-            continue;
-        }
-        s->resetControllers();
-        s->setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
-        s->loadVoiceParameters(fmpiano_sysex);
-        s->setTranspose(36); // Match old working example
-        
-        // Explicitly activate the synthesizer
-        s->activate();
-        
-        // Debug: Play a test note to ensure the synth is producing sound
-        if (v == 0) {
-            std::cout << "[DEBUG] Playing test note on synth " << v << std::endl;
-            s->keydown(60, 100);  // Note on, middle C, velocity 100
-            std::cout << "[DEBUG] After test note, notes playing: " << s->getNumNotesPlaying() << std::endl;
-        }
-        
-        float detuneCents = 0.0f;
-        if (unisonVoices > 1) {
-            if (unisonVoices == 2) detuneCents = (v == 0 ? -1.0f : 1.0f) * (unisonDetune / 2.0f);
-            else if (unisonVoices == 3) detuneCents = (v - 1) * (unisonDetune / 1.0f);
-            else if (unisonVoices == 4) detuneCents = (v - 1.5f) * (unisonDetune / 1.5f);
-        }
-        int8_t masterTune = static_cast<int8_t>(detuneCents);
-        s->setMasterTune(masterTune);
-        int detuneValue = 7;
-        if (unisonVoices > 1) {
-            if (unisonVoices == 2) detuneValue = (v == 0) ? 0 : 14;
-            else if (unisonVoices == 3) detuneValue = v * 7;
-            else if (unisonVoices == 4) detuneValue = v * 5;
-        }
-        for (int op = 0; op < 6; ++op) s->setOPDetune(op, detuneValue);
-        
-        // Ensure gain is properly set to a value that will produce audible output
-        s->setGain(2.0f);
+    allSynths.clear(); // Changed from unisonSynths
+    
+    std::cout << "[DEBUG] Setting up " << num_modules << " modules, each with " << unisonVoices << " unison synth voices" << std::endl;
 
-        // Enable pitch bend and mod wheel by default
-        s->setPitchbendRange(2);    // ±2 semitones for pitch bend
-        s->setModWheelRange(99);    // Full range for mod wheel
-        s->setModWheelTarget(1);    // 1=pitch, 2=amp, 4=EG, or combinations
+    for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+        int midi_channel_for_module = module_idx + 1; // Module 0 -> Channel 1, etc.
+        std::cout << "[DEBUG] Setting up module " << module_idx << " for MIDI channel " << midi_channel_for_module << std::endl;
 
-        unisonSynths.push_back(s);
+        for (int v = 0; v < unisonVoices; ++v) {
+            Dexed* s = new Dexed(16, SAMPLE_RATE); // Max 16 notes polyphony per instance
+            // Check for duplicate pointer (should never happen, but for safety)
+            if (std::find(allSynths.begin(), allSynths.end(), s) != allSynths.end()) { // Changed from unisonSynths
+                std::cout << "[ERROR] Attempt to add duplicate Dexed pointer to allSynths!" << std::endl;
+                delete s;
+                continue;
+            }
+            // s->setMidiChannel(midi_channel_for_module); // REMOVED: Dexed instances don't have a persistent MIDI channel property
+            s->resetControllers();
+            s->setVelocityScale(MIDI_VELOCITY_SCALING_OFF);
+            s->loadVoiceParameters(fmpiano_sysex);
+            s->setTranspose(36); // Match old working example
+            
+            // Explicitly activate the synthesizer
+            s->activate();
+            
+            // Debug: Play a test note on the first voice of the first module
+            if (module_idx == 0 && v == 0) {
+                std::cout << "[DEBUG] Playing test note on module " << module_idx << ", voice " << v << std::endl;
+                s->keydown(60, 100);  // Note on, middle C, velocity 100
+                std::cout << "[DEBUG] After test note, notes playing: " << s->getNumNotesPlaying() << std::endl;
+            }
+            
+            float detuneCents = 0.0f;
+            if (unisonVoices > 1) {
+                if (unisonVoices == 2) detuneCents = (v == 0 ? -1.0f : 1.0f) * (unisonDetune / 2.0f);
+                else if (unisonVoices == 3) detuneCents = (v - 1) * (unisonDetune / 1.0f); // e.g., -1, 0, 1 scaled
+                else if (unisonVoices == 4) detuneCents = (v - 1.5f) * (unisonDetune / 1.5f); // e.g., -1.5, -0.5, 0.5, 1.5 scaled
+            }
+            int8_t masterTune = static_cast<int8_t>(detuneCents);
+            s->setMasterTune(masterTune);
+            
+            // Operator detune can also be used for unison effect if desired,
+            // but masterTune is more direct for overall detuning of a voice.
+            // Example for OP detune (can be kept or removed based on desired sound):
+            // int detuneValue = 7; // Neutral
+            // if (unisonVoices > 1) {
+            //    if (unisonVoices == 2) detuneValue = (v == 0) ? 0 : 14;
+            //    else if (unisonVoices == 3) detuneValue = v * 7; // 0, 7, 14
+            //    else if (unisonVoices == 4) detuneValue = v * 5; // 0, 5, 10, 15 (approx)
+            // }
+            // for (int op = 0; op < 6; ++op) s->setOPDetune(op, detuneValue);
+            
+            s->setGain(3.0f);
+
+            s->setPitchbendRange(2);
+            s->setModWheelRange(99);
+            s->setModWheelTarget(1);
+
+            allSynths.push_back(s); // Changed from unisonSynths
+        }
     }
     
-    // Make the global synth pointer point to the first unison voice
-    if (!unisonSynths.empty()) {
-        synth = unisonSynths[0];
-        std::cout << "[DEBUG] Global synth pointer set to " << synth << std::endl;
+    // Make the global synth pointer point to the first synth instance if any
+    if (!allSynths.empty()) { // Changed from unisonSynths
+        synth = allSynths[0]; // Changed from unisonSynths
+        std::cout << "[DEBUG] Global synth pointer set to " << synth << " (first synth of first module)" << std::endl;
+    } else {
+        synth = nullptr;
     }
 }
 
-void cleanup_unison_synths() {
+void cleanup_all_synths() { // Renamed from cleanup_unison_synths
     static bool already_cleaned = false;
     if (already_cleaned) {
-        std::cout << "[DEBUG] cleanup_unison_synths called more than once!" << std::endl;
+        std::cout << "[DEBUG] cleanup_all_synths called more than once!" << std::endl;
         return;
     }
     already_cleaned = true;
     std::lock_guard<std::mutex> lock(synthMutex);
-    std::cout << "[DEBUG] cleanup_unison_synths: deleting " << unisonSynths.size() << " Dexed instances" << std::endl;
-    for (auto*& s : unisonSynths) {
+    std::cout << "[DEBUG] cleanup_all_synths: deleting " << allSynths.size() << " Dexed instances" << std::endl; // Changed from unisonSynths
+    for (auto*& s : allSynths) { // Changed from unisonSynths
         if (s) {
             std::cout << "[DEBUG] deleting Dexed at " << s << std::endl;
             delete s;
@@ -168,7 +180,7 @@ void cleanup_unison_synths() {
             std::cout << "[DEBUG] Dexed pointer already null (possible double free attempt)" << std::endl;
         }
     }
-    unisonSynths.clear();
+    allSynths.clear(); // Changed from unisonSynths
     synth = nullptr;
 }
 
@@ -187,7 +199,8 @@ void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool
                       << "  --num-buffers N      Set number of audio buffers (default: 4)\n"
                       << "  --sine               Output test sine wave instead of synth\n"
                       << "  --synth              Use synth (default)\n"
-                      << "  --unison-voices N    Set number of unison voices (1-4, default: 1)\n"
+                      << "  --modules N          Set number of synth modules (1-16, default: 1), each on its own MIDI channel\n"
+                      << "  --unison-voices N    Set number of unison voices per module (1-4, default: 1)\n"
                       << "  --unison-spread N    Set unison spread (0-99, default: 0)\n"
                       << "  --unison-detune N    Set unison detune (cents, default: 0)\n"
                       << "  --midi-data HEX_STRING   Load custom voice from sysex hex string\n"
@@ -207,6 +220,8 @@ void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool
             useSynth = false;
         } else if (arg == "--synth") {
             useSynth = true;
+        } else if (arg == "--modules" && i + 1 < argc) {
+            num_modules = std::clamp(std::atoi(argv[++i]), 1, 16);
         } else if (arg == "--unison-voices" && i + 1 < argc) {
             unisonVoices = std::clamp(std::atoi(argv[++i]), 1, 4);
         } else if (arg == "--unison-spread" && i + 1 < argc) {
@@ -269,8 +284,9 @@ int find_free_port() {
 
 void fill_audio_buffers(bool useSynth) {
     static bool forceSine = (std::getenv("DEXED_TEST_SINE") != nullptr);
-    std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
-    std::vector<std::vector<int16_t>> unisonBuffers(unisonVoices, std::vector<int16_t>(BUFFER_FRAMES));
+    std::vector<int16_t> monoBuffer(BUFFER_FRAMES); // This might be unused if direct stereo fill is done
+    // std::vector<std::vector<int16_t>> unisonBuffers(unisonVoices, std::vector<int16_t>(BUFFER_FRAMES)); // This was per-module, handled in fill_audio_buffer now
+
     for (int i = 0; i < numBuffers; ++i) {
         if (forceSine) {
             double freq = 440.0;
@@ -285,43 +301,65 @@ void fill_audio_buffers(bool useSynth) {
             }
         } else if (useSynth) {
             std::lock_guard<std::mutex> lock(synthMutex);
-            std::vector<float> left(BUFFER_FRAMES, 0.0f), right(BUFFER_FRAMES, 0.0f);
-            for (int v = 0; v < unisonVoices; ++v) {
-                if (DEBUG_ENABLED) std::cout << "[DEBUG] Calling getSamples for unison voice " << v << std::endl;
-                unisonSynths[v]->getSamples(unisonBuffers[v].data(), BUFFER_FRAMES);
-                if (DEBUG_ENABLED) {
-                    std::cout << "[DEBUG] unisonBuffers[" << v << "]: ";
-                    for (int k = 0; k < 8; ++k) std::cout << unisonBuffers[v][k] << " ";
-                    std::cout << std::endl;
+            if (allSynths.empty()) { // Early exit if no synths
+                 for (int j = 0; j < BUFFER_FRAMES; ++j) {
+                    audioBuffers[i][2*j] = 0;
+                    audioBuffers[i][2*j+1] = 0;
                 }
-                float pan = 0.0f;
-                if (unisonVoices == 2) pan = (v == 0 ? -1.0f : 1.0f) * (unisonSpread / 99.0f);
-                else if (unisonVoices == 3) pan = (v - 1) * (unisonSpread / 99.0f);
-                else if (unisonVoices == 4) pan = (v - 1.5f) * (unisonSpread / 99.0f);
-                float panL = std::cos((pan * 0.5f + 0.5f) * M_PI / 2.0f);
-                float panR = std::sin((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                continue;
+            }
+
+            std::vector<float> final_left(BUFFER_FRAMES, 0.0f);
+            std::vector<float> final_right(BUFFER_FRAMES, 0.0f);
+            std::vector<int16_t> single_synth_mono_output(BUFFER_FRAMES);
+
+            for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+                std::vector<float> module_left(BUFFER_FRAMES, 0.0f);
+                std::vector<float> module_right(BUFFER_FRAMES, 0.0f);
+
+                for (int voice_in_module_idx = 0; voice_in_module_idx < unisonVoices; ++voice_in_module_idx) {
+                    int overall_synth_idx = module_idx * unisonVoices + voice_in_module_idx;
+                    if (overall_synth_idx >= allSynths.size() || !allSynths[overall_synth_idx]) continue;
+
+                    allSynths[overall_synth_idx]->getSamples(single_synth_mono_output.data(), BUFFER_FRAMES);
+                    
+                    float pan = 0.0f;
+                    if (unisonVoices > 1) { // Ensure unisonVoices > 1 for panning logic
+                        if (unisonVoices == 2) pan = (voice_in_module_idx == 0 ? -1.0f : 1.0f) * (unisonSpread / 99.0f);
+                        else if (unisonVoices == 3) pan = (voice_in_module_idx - 1.0f) * (unisonSpread / 99.0f); // -1, 0, 1 scaled
+                        else if (unisonVoices == 4) pan = (voice_in_module_idx - 1.5f) * (unisonSpread / 99.0f); // -1.5, -0.5, 0.5, 1.5 scaled
+                        pan = std::clamp(pan, -1.0f, 1.0f); // Ensure pan is within [-1, 1]
+                    }
+
+                    float panL_factor = std::cos((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                    float panR_factor = std::sin((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+
+                    for (int j = 0; j < BUFFER_FRAMES; ++j) {
+                        float current_sample = static_cast<float>(single_synth_mono_output[j]);
+                        module_left[j] += current_sample * panL_factor;
+                        module_right[j] += current_sample * panR_factor;
+                    }
+                }
                 for (int j = 0; j < BUFFER_FRAMES; ++j) {
-                    left[j] += unisonBuffers[v][j] * panL;
-                    right[j] += unisonBuffers[v][j] * panR;
+                    final_left[j] += module_left[j];
+                    final_right[j] += module_right[j];
                 }
             }
+            
             if (DEBUG_ENABLED) {
-                std::cout << "[DEBUG] mixed left: ";
-                for (int k = 0; k < 8; ++k) std::cout << left[k] << " ";
+                std::cout << "[DEBUG] mixed final_left: ";
+                for (int k = 0; k < 8; ++k) std::cout << final_left[k] << " ";
                 std::cout << std::endl;
-                std::cout << "[DEBUG] mixed right: ";
-                for (int k = 0; k < 8; ++k) std::cout << right[k] << " ";
+                std::cout << "[DEBUG] mixed final_right: ";
+                for (int k = 0; k < 8; ++k) std::cout << final_right[k] << " ";
                 std::cout << std::endl;
             }
+            // Fill the stereo audioBuffers directly
             for (int j = 0; j < BUFFER_FRAMES; ++j) {
-                audioBuffers[i][2*j] = std::clamp((int)left[j], -32768, 32767);
-                audioBuffers[i][2*j+1] = std::clamp((int)right[j], -32768, 32767);
+                audioBuffers[i][2*j]   = std::clamp(static_cast<int>(final_left[j]), -32768, 32767);
+                audioBuffers[i][2*j+1] = std::clamp(static_cast<int>(final_right[j]), -32768, 32767);
             }
-            if (DEBUG_ENABLED) {
-                std::cout << "[DEBUG] audioBuffers[" << i << "]: ";
-                for (int k = 0; k < 16; ++k) std::cout << audioBuffers[i][k] << " ";
-                std::cout << std::endl;
-            }
+
         } else {
             double freq = 440.0;
             double phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
@@ -341,13 +379,13 @@ void fill_audio_buffers(bool useSynth) {
 void fill_audio_buffer(int i, bool useSynth) {
     static bool forceSine = (std::getenv("DEXED_TEST_SINE") != nullptr);
     static bool noAutoNotes = (std::getenv("DEXED_NO_AUTO_NOTES") != nullptr);
-    std::vector<int16_t> monoBuffer(BUFFER_FRAMES);
-    std::vector<std::vector<int16_t>> unisonBuffers(unisonVoices, std::vector<int16_t>(BUFFER_FRAMES));
-    
+    // std::vector<int16_t> monoBuffer(BUFFER_FRAMES); // No longer needed for final output if stereo
+    // std::vector<std::vector<int16_t>> unisonBuffers(unisonVoices, std::vector<int16_t>(BUFFER_FRAMES)); // Replaced by single_synth_mono_output logic
+
     #ifdef DEBUG_ENABLED
     std::cout << "[AUDIO DEBUG] fill_audio_buffer: buffer=" << i 
               << ", useSynth=" << (useSynth ? "true" : "false") 
-              << ", synth=" << synth 
+              << ", num_modules=" << num_modules
               << ", unisonVoices=" << unisonVoices << std::endl;
     #endif
     
@@ -363,78 +401,114 @@ void fill_audio_buffer(int i, bool useSynth) {
             int16_t sample = (int16_t)(std::sin(phase) * amplitude);
             phase += 2.0 * M_PI * freq / SAMPLE_RATE;
             if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
-            monoBuffer[j] = sample;
+            audioBuffers[i][2*j] = sample;     // Left channel
+            audioBuffers[i][2*j+1] = sample;   // Right channel (same as left for mono sine)
         }
     } else if (useSynth) {
         std::lock_guard<std::mutex> lock(synthMutex);
-        std::vector<float> left(BUFFER_FRAMES, 0.0f), right(BUFFER_FRAMES, 0.0f);
-        
-        // Get samples from all unison voices and mix them
-        for (int v = 0; v < unisonVoices; ++v) {
-            #ifdef DEBUG_ENABLED
-            std::cout << "[AUDIO DEBUG] Calling getSamples for unison voice " << v
-                     << ", synth pointer=" << unisonSynths[v] 
-                     << ", notes playing=" << unisonSynths[v]->getNumNotesPlaying() 
-                     << std::endl;
-            #endif
+        if (allSynths.empty()) { // Early exit if no synths
+             for (int j = 0; j < BUFFER_FRAMES; ++j) {
+                audioBuffers[i][2*j] = 0;
+                audioBuffers[i][2*j+1] = 0;
+            }
+            return; // Exit function early
+        }
+
+        std::vector<float> final_mixed_left(BUFFER_FRAMES, 0.0f);
+        std::vector<float> final_mixed_right(BUFFER_FRAMES, 0.0f);
+        std::vector<int16_t> single_synth_mono_output(BUFFER_FRAMES);
+
+        for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+            std::vector<float> current_module_left(BUFFER_FRAMES, 0.0f);
+            std::vector<float> current_module_right(BUFFER_FRAMES, 0.0f);
+
+            // Calculate gain compensation for unison voices only (per module)
+            float unison_gain = 1.0f;
+            if (unisonVoices > 1) {
+                unison_gain = 1.0f / sqrtf(static_cast<float>(unisonVoices));
+            }
+
+            for (int voice_in_module_idx = 0; voice_in_module_idx < unisonVoices; ++voice_in_module_idx) {
+                int overall_synth_idx = module_idx * unisonVoices + voice_in_module_idx;
+                if (overall_synth_idx >= allSynths.size() || !allSynths[overall_synth_idx]) {
+                    #ifdef DEBUG_ENABLED
+                    std::cout << "[AUDIO DEBUG] Skipping synth index " << overall_synth_idx << " (out of bounds or null)" << std::endl;
+                    #endif
+                    continue;
+                }
+                Dexed* current_synth = allSynths[overall_synth_idx];
+                #ifdef DEBUG_ENABLED
+                std::cout << "[AUDIO DEBUG] Module " << module_idx << ", Voice " << voice_in_module_idx 
+                          << " (Overall Idx " << overall_synth_idx << ", Ptr " << current_synth 
+                          << "): Calling getSamples. Notes playing: " << current_synth->getNumNotesPlaying() << std::endl;
+                #endif
+                
+                current_synth->getSamples(single_synth_mono_output.data(), BUFFER_FRAMES);
+                
+                #ifdef DEBUG_ENABLED
+                // std::cout << "[AUDIO DEBUG] single_synth_mono_output first 8: ";
+                // for (int k = 0; k < 8 && k < BUFFER_FRAMES; ++k) std::cout << single_synth_mono_output[k] << " ";
+                // std::cout << std::endl;
+                #endif
+                
+                float pan = 0.0f;
+                 if (unisonVoices > 1) { // Panning only if multiple unison voices
+                    if (unisonVoices == 2) pan = (voice_in_module_idx == 0 ? -1.0f : 1.0f) * (unisonSpread / 99.0f);
+                    else if (unisonVoices == 3) pan = (voice_in_module_idx - 1.0f) * (unisonSpread / 99.0f); // Results in -1, 0, 1 scaled
+                    else if (unisonVoices == 4) pan = (voice_in_module_idx - 1.5f) * (unisonSpread / 99.0f); // Results in -1.5, -0.5, 0.5, 1.5 scaled
+                    pan = std::clamp(pan, -1.0f, 1.0f); // Ensure pan is within [-1, 1]
+                }
+
+                float panL_factor = std::cos((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+                float panR_factor = std::sin((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+
+                for (int j = 0; j < BUFFER_FRAMES; ++j) {
+                    float current_sample_float = static_cast<float>(single_synth_mono_output[j]);
+                    current_sample_float *= unison_gain; // Apply gain compensation only for unison voices
+                    current_module_left[j] += current_sample_float * panL_factor;
+                    current_module_right[j] += current_sample_float * panR_factor;
+                }
+            }
             
-            // Get audio samples from the synth
-            unisonSynths[v]->getSamples(unisonBuffers[v].data(), BUFFER_FRAMES);
-            
-            #ifdef DEBUG_ENABLED
-            std::cout << "[AUDIO DEBUG] unisonBuffers[" << v << "] first 8 samples: ";
-            for (int k = 0; k < 8 && k < BUFFER_FRAMES; ++k) std::cout << unisonBuffers[v][k] << " ";
-            std::cout << std::endl;
-            #endif
-            
-            float pan = 0.0f;
-            if (unisonVoices == 2) pan = (v == 0 ? -1.0f : 1.0f) * (unisonSpread / 99.0f);
-            else if (unisonVoices == 3) pan = (v - 1) * (unisonSpread / 99.0f);
-            else if (unisonVoices == 4) pan = (v - 1.5f) * (unisonSpread / 99.0f);
-            float panL = std::cos((pan * 0.5f + 0.5f) * M_PI / 2.0f);
-            float panR = std::sin((pan * 0.5f + 0.5f) * M_PI / 2.0f);
+            // Add this module's stereo output to the final mix
             for (int j = 0; j < BUFFER_FRAMES; ++j) {
-                left[j] += unisonBuffers[v][j] * panL;
-                right[j] += unisonBuffers[v][j] * panR;
+                final_mixed_left[j] += current_module_left[j];
+                final_mixed_right[j] += current_module_right[j];
             }
         }
         
         #ifdef DEBUG_ENABLED
-        std::cout << "[AUDIO DEBUG] mixed left channel first 8 samples: ";
-        for (int k = 0; k < 8 && k < BUFFER_FRAMES; ++k) std::cout << left[k] << " ";
-        std::cout << std::endl;
-        
-        std::cout << "[AUDIO DEBUG] mixed right channel first 8 samples: ";
-        for (int k = 0; k < 8 && k < BUFFER_FRAMES; ++k) std::cout << right[k] << " ";
-        std::cout << std::endl;
+        // std::cout << "[AUDIO DEBUG] final_mixed_left first 8: ";
+        // for (int k = 0; k < 8 && k < BUFFER_FRAMES; ++k) std::cout << final_mixed_left[k] << " ";
+        // std::cout << std::endl;
+        // std::cout << "[AUDIO DEBUG] final_mixed_right first 8: ";
+        // for (int k = 0; k < 8 && k < BUFFER_FRAMES; ++k) std::cout << final_mixed_right[k] << " ";
+        // std::cout << std::endl;
         #endif        
 
+        // Fill the stereo audioBuffers directly
         for (int j = 0; j < BUFFER_FRAMES; ++j) {
-            monoBuffer[j] = std::clamp((int)left[j], -32768, 32767);
+            audioBuffers[i][2*j]   = std::clamp(static_cast<int>(final_mixed_left[j]), -32768, 32767);
+            audioBuffers[i][2*j+1] = std::clamp(static_cast<int>(final_mixed_right[j]), -32768, 32767);
         }
-    } else {
-        // Default fallback case
-        static double phase = 0.0;
-        double freq = 440.0;
-        double phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
+
+    } else { // Fallback: silent buffer if not sine and not synth (should not happen with default useSynth=true)
         for (int j = 0; j < BUFFER_FRAMES; ++j) {
-            int16_t sample = (int16_t)(std::sin(phase) * 16000.0);
-            phase += phaseInc;
-            if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
-            monoBuffer[j] = sample;
+            audioBuffers[i][2*j] = 0;
+            audioBuffers[i][2*j+1] = 0;
         }
     }
     
-    // Transfer from mono buffer to final stereo output buffer
-    for (int j = 0; j < BUFFER_FRAMES; ++j) {
-        audioBuffers[i][2*j] = monoBuffer[j];
-        audioBuffers[i][2*j+1] = monoBuffer[j];
-    }
+    // The old monoBuffer transfer is removed as we fill stereo directly.
+    // for (int j = 0; j < BUFFER_FRAMES; ++j) {
+    //    audioBuffers[i][2*j] = monoBuffer[j];
+    //    audioBuffers[i][2*j+1] = monoBuffer[j];
+    // }
     
     #ifdef DEBUG_ENABLED
-    std::cout << "[AUDIO OUTPUT] Buffer " << i << " first 8 samples: ";
-    for (int k = 0; k < 8; ++k) std::cout << audioBuffers[i][2*k] << " ";
-    std::cout << std::endl;
+    // std::cout << "[AUDIO OUTPUT] Buffer " << i << " first 8 stereo samples (L/R pairs): ";
+    // for (int k = 0; k < 4 && k < BUFFER_FRAMES; ++k) std::cout << audioBuffers[i][2*k] << "/" << audioBuffers[i][2*k+1] << " ";
+    // std::cout << std::endl;
     #endif
 }
 
@@ -506,6 +580,9 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     if (DEBUG_ENABLED) std::cout << "[DEBUG] Before parse_common_args" << std::endl;
     parse_common_args(argc, argv, audioDev, midiDev, useSynth);
     if (DEBUG_ENABLED) std::cout << "[DEBUG] After parse_common_args" << std::endl;
+    std::cout << "[INFO] Number of modules: " << num_modules << std::endl;
+    std::cout << "[INFO] Unison voices per module: " << unisonVoices << std::endl;
+
 
     // Load custom voice if provided
     if (!customVoiceSysex.empty()) {
@@ -518,9 +595,9 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
         std::cout << std::endl;
     }
 
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] Before setup_unison_synths" << std::endl;
-    setup_unison_synths();
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] After setup_unison_synths" << std::endl;
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] Before setup_all_synths" << std::endl;
+    setup_all_synths(); // Changed from setup_unison_synths
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] After setup_all_synths" << std::endl;
     // Allocate audio buffers ONCE at startup
     audioBuffers.resize(numBuffers);
     for (int i = 0; i < numBuffers; ++i) {
@@ -551,21 +628,98 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     std::cout << "[INFO] MIDI UDP server will listen on 127.0.0.1:" << midiSocketPort << std::endl;
     // Start MIDI UDP server (UDP, localhost:midiSocketPort)
     MidiUdpServer midiServer(midiSocketPort, [](const uint8_t* data, size_t len) {
-        std::cout << "[MIDI UDP] Received " << len << " bytes: ";
-        for (size_t i = 0; i < len; ++i) std::cout << (int)data[i] << " ";
-        std::cout << std::endl;
+        printf("[DEBUG] UDP callback triggered, len=%zu\n", len);
+        if (len > 0) {
+            printf("[DEBUG] First byte: 0x%02X\n", data[0]);
+        }
         if (len > 0) {
             std::lock_guard<std::mutex> lock(synthMutex);
-            if (len >= 3 && data[0] == 0xF0) {
-                // SysEx: send the whole buffer
-                for (auto* s : unisonSynths) {
-                    if (s) s->midiDataHandler(1, const_cast<uint8_t*>(data), (int)len);
+            if (allSynths.empty() || num_modules == 0) return;
+
+            uint8_t status_byte = data[0];
+            if (status_byte == 0xF0) { // SysEx Start
+                if (len > 1 && data[len - 1] == 0xF7) // Check for EOX (End of SysEx)
+                {
+                    int target_channel_one_based = 1; // Default to channel 1 for SysEx messages
+                    if (len >= 3 && data[1] == 0x43) { // Yamaha Manufacturer ID
+                        uint8_t yamaha_substatus_byte = data[2];
+                        if ((yamaha_substatus_byte & 0xF0) == 0x10) { // Channel is specified in sub-status
+                            target_channel_one_based = (yamaha_substatus_byte & 0x0F) + 1;
+                        }
+                    }
+
+                    if (target_channel_one_based >= 1 && target_channel_one_based <= num_modules) {
+                        int target_module_idx = target_channel_one_based - 1;
+                        for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                            int synth_idx = target_module_idx * unisonVoices + voice_idx;
+                            if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                                allSynths[synth_idx]->midiDataHandler(target_channel_one_based, const_cast<uint8_t*>(data), static_cast<int>(len));
+                            }
+                        }
+                    }
                 }
-            } else {
-                // Standard MIDI: process in 3-byte chunks
-                for (size_t i = 0; i + 2 < len; i += 3) {
-                    for (auto* s : unisonSynths) {
-                        if (s) s->midiDataHandler(1, const_cast<uint8_t*>(data + i), 3);
+            } else if (status_byte >= 0xF1 && status_byte <= 0xFF && status_byte != 0xF7) { 
+                for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+                    int module_listen_channel = module_idx + 1;
+                    for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                        int synth_idx = module_idx * unisonVoices + voice_idx;
+                        if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                            allSynths[synth_idx]->midiDataHandler(module_listen_channel, const_cast<uint8_t*>(data), static_cast<int>(len));
+                        }
+                    }
+                }
+            } else { // Channel messages (0x8n to 0xEn)
+                for (size_t i = 0; i < len; ) {
+                    if (i + 1 > len) break; 
+                    uint8_t current_msg_status_byte = data[i];
+                    uint8_t msg_type_nibble = current_msg_status_byte & 0xF0;
+                    int current_msg_len = 0;
+                    if (msg_type_nibble >= 0x80 && msg_type_nibble <= 0xE0) {
+                        if (msg_type_nibble == 0xC0 || msg_type_nibble == 0xD0) {
+                            current_msg_len = 2;
+                        } else { 
+                            current_msg_len = 3;
+                        }
+                        if (i + current_msg_len > len) break;
+                        int msg_midi_channel_zero_based = current_msg_status_byte & 0x0F;
+                        int incoming_channel_one_based = msg_midi_channel_zero_based + 1;
+                        printf("[DEBUG] Channel message: status=0x%02X, channel(one-based)=%d\n", current_msg_status_byte, incoming_channel_one_based);
+
+                        if (incoming_channel_one_based == 16) { // Omni Channel (16)
+                            uint8_t original_msg_type = current_msg_status_byte & 0xF0;
+                            for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+                                int module_channel_zero_based = module_idx;
+                                uint8_t modified_midi_message[3];
+                                memcpy(modified_midi_message, data + i, current_msg_len);
+                                modified_midi_message[0] = original_msg_type | module_channel_zero_based;
+                                printf("[DEBUG] OMNI: module %d, midiDataHandler ch=%d, status=0x%02X, d1=%d, d2=%d, len=%d\n",
+                                    module_idx + 1, module_idx + 1, modified_midi_message[0],
+                                    current_msg_len > 1 ? modified_midi_message[1] : -1,
+                                    current_msg_len > 2 ? modified_midi_message[2] : -1,
+                                    current_msg_len);
+                                for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                                    int synth_idx = module_idx * unisonVoices + voice_idx;
+                                    if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                                        allSynths[synth_idx]->midiDataHandler(module_idx + 1, modified_midi_message, current_msg_len);
+                                    }
+                                }
+                            }
+                        } else { // Specific Channel (1-15)
+                            if (incoming_channel_one_based >= 1 && incoming_channel_one_based <= num_modules) {
+                                int target_module_idx = incoming_channel_one_based - 1;
+                                for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                                    int synth_idx = target_module_idx * unisonVoices + voice_idx;
+                                    if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                                        uint8_t* temp_midi_data_ptr = const_cast<uint8_t*>(data + i);
+                                        allSynths[synth_idx]->midiDataHandler(incoming_channel_one_based, temp_midi_data_ptr, current_msg_len);
+                                    }
+                                }
+                            }
+                        }
+                        i += current_msg_len;
+                    } else {
+                        i++;
+                        continue;
                     }
                 }
             }
@@ -611,9 +765,16 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     // Send custom MIDI data if provided
     if (!customVoiceSysex.empty()) {
         std::cout << "[INFO] Sending custom MIDI data from --midi-data argument (" << customVoiceSysex.size() << " bytes) to synth engine." << std::endl;
-        // Send to all unison synths (or just the first if you prefer)
-        for (auto* s : unisonSynths) {
-            if (s) s->midiDataHandler(0, customVoiceSysex.data(), (int)customVoiceSysex.size());
+        // Send to all voices of the first module (channel 1) by default for custom voice loading.
+        // Or, this could be broadcast if the SysEx is general.
+        // For now, let's send it to module 0 (channel 1).
+        if (num_modules > 0) {
+            for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                 int synth_idx = 0 * unisonVoices + voice_idx; // First module
+                 if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                    allSynths[synth_idx]->midiDataHandler(1, customVoiceSysex.data(), (int)customVoiceSysex.size());
+                 }
+            }
         }
     }
     while (running) {
@@ -625,7 +786,7 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
     hooks.close_audio();
     hooks.close_midi();
     midiServer.stop();
-    cleanup_unison_synths();
+    cleanup_all_synths(); // Changed from cleanup_unison_synths
     std::cout << "[MAIN THREAD] Program exit." << std::endl;
     if (DEBUG_ENABLED) std::cout << "[DEBUG] main_common_entry: about to return from main_common_entry" << std::endl;
     return 0;

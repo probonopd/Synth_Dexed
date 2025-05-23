@@ -28,22 +28,32 @@ constexpr const T& clamp(const T& v, const T& lo, const T& hi) {
 // --- Shared code moved to main_common.h / main_common.cpp ---
 #include "main_common.h"
 
+extern std::vector<std::vector<short>> audioBuffers;
+extern unsigned int BUFFER_FRAMES;
+extern int numBuffers;
+extern std::atomic<bool> running;
+extern std::vector<Dexed*> allSynths; // Changed from unisonSynths
+extern std::mutex synthMutex;
+extern int num_modules;      // Added
+extern int unisonVoices;     // Added
+
 // Windows-specific audio and MIDI hooks
-HWAVEOUT hWaveOut = nullptr;
+HWAVEOUT hWaveOut = NULL;
 std::vector<WAVEHDR> waveHeaders;
 
 bool win_open_audio(int audioDev) {
-    // Always print device list and info
-    std::cout << "[DEBUG] win_open_audio called" << std::endl;
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] win_open_audio called" << std::endl;
     UINT numAudioDevs = waveOutGetNumDevs();
-    std::cout << "Available audio output devices:" << std::endl;
-    for (UINT i = 0; i < numAudioDevs; ++i) {
-        WAVEOUTCAPS caps;
-        waveOutGetDevCaps(i, &caps, sizeof(caps));
-        std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
+    if (DEBUG_ENABLED) {
+        std::cout << "Available audio output devices:" << std::endl;
+        for (UINT i = 0; i < numAudioDevs; ++i) {
+            WAVEOUTCAPS caps;
+            waveOutGetDevCaps(i, &caps, sizeof(caps));
+            std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
+        }
     }
     std::cout << "[INFO] Using audio device: " << audioDev << std::endl;
-    std::cout << "[DEBUG] Before waveOutOpen" << std::endl;
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] Before waveOutOpen" << std::endl;
     WAVEFORMATEX wfx = {};
     wfx.wFormatTag = WAVE_FORMAT_PCM;
     wfx.nChannels = 2;
@@ -56,9 +66,11 @@ bool win_open_audio(int audioDev) {
     if (result != MMSYSERR_NOERROR) {
         std::cout << "[ERROR] waveOutOpen failed with code: " << result << std::endl;
     } else {
-        std::cout << "[DEBUG] After waveOutOpen" << std::endl;
-        std::cout << "[DEBUG] audioBuffers.size() = " << audioBuffers.size() << ", numBuffers = " << numBuffers << ", BUFFER_FRAMES = " << BUFFER_FRAMES << std::endl;
-        std::cout << "[DEBUG] Before buffer preparation loop" << std::endl;
+        if (DEBUG_ENABLED) {
+            std::cout << "[DEBUG] After waveOutOpen" << std::endl;
+            std::cout << "[DEBUG] audioBuffers.size() = " << audioBuffers.size() << ", numBuffers = " << numBuffers << ", BUFFER_FRAMES = " << BUFFER_FRAMES << std::endl;
+            std::cout << "[DEBUG] Before buffer preparation loop" << std::endl;
+        }
     }
     waveHeaders.resize(numBuffers);
     for (int i = 0; i < numBuffers; ++i) {
@@ -93,37 +105,92 @@ void win_close_audio() {
 }
 
 // MIDI input callback
-void CALLBACK midiInProc(HMIDIIN, UINT uMsg, DWORD_PTR, DWORD_PTR dwParam1, DWORD_PTR, DWORD_PTR) {
-    if (DEBUG_ENABLED)
-        std::cout << "[MIDI DEBUG] Entered midiInProc, uMsg=" << uMsg << std::endl;
-    std::lock_guard<std::mutex> lock(synthMutex);
-    if (unisonSynths.empty()) return;
-    if (uMsg == MIM_DATA) {
-        DWORD msg = (DWORD)dwParam1;
-        uint8_t status = msg & 0xF0;
-        uint8_t channel = msg & 0x0F;
-        uint8_t data1 = (msg >> 8) & 0x7F;
-        uint8_t data2 = (msg >> 16) & 0x7F;
-        uint8_t midi_bytes[3] = { static_cast<uint8_t>(status | channel), data1, data2 };
-        for (size_t v = 0; v < unisonSynths.size(); ++v) {
-            if (DEBUG_ENABLED)
-                std::cout << "[MIDI DEBUG] Passing to Dexed instance " << v << " at " << unisonSynths[v] << std::endl;
-            unisonSynths[v]->midiDataHandler(channel + 1, midi_bytes, 3);
+void CALLBACK midiInProc(HMIDIIN hMidiIn, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
+    if (wMsg == MIM_DATA) {
+        if (DEBUG_ENABLED) printf("[DEBUG MIDI] midiInProc: wMsg=MIM_DATA, dwParam1=0x%lX, dwParam2=0x%lX\n", dwParam1, dwParam2);
+
+        std::lock_guard<std::mutex> lock(synthMutex);
+        if (allSynths.empty() || num_modules == 0) {
+            if (DEBUG_ENABLED) printf("[DEBUG MIDI] No synths or modules initialized, ignoring MIDI.\n");
+            return;
         }
-    } else if (uMsg == MIM_LONGDATA) {
-        MIDIHDR* midiHdr = (MIDIHDR*)dwParam1;
-        if (midiHdr && midiHdr->dwBytesRecorded > 0) {
-            uint8_t* sysex = (uint8_t*)midiHdr->lpData;
-            uint16_t len = (uint16_t)midiHdr->dwBytesRecorded;
-            if (DEBUG_ENABLED) {
-                std::cout << "[MIDI DEBUG] Sysex msg: len=" << len << ", first bytes: ";
-                for (int i = 0; i < std::min(8, (int)len); ++i) std::cout << std::hex << (int)sysex[i] << " ";
-                std::cout << std::dec << std::endl;
+
+        uint8_t status_byte = dwParam1 & 0xFF;
+        uint8_t data1 = (dwParam1 >> 8) & 0xFF;
+        uint8_t data2 = (dwParam1 >> 16) & 0xFF;
+        
+        if (DEBUG_ENABLED) printf("[DEBUG MIDI] Raw Data: Status=0x%02X, Data1=0x%02X, Data2=0x%02X\n", status_byte, data1, data2);
+
+        uint8_t midi_data[3] = {status_byte, data1, data2};
+        int len = 3;
+
+        // Determine message length based on status byte
+        if ((status_byte & 0xF0) == 0xC0 || (status_byte & 0xF0) == 0xD0) { // Program Change, Channel Pressure
+            len = 2;
+        }
+        if (DEBUG_ENABLED) printf("[DEBUG MIDI] Determined message length: %d\n", len);
+
+        if (status_byte >= 0xF0) { // System messages (SysEx, System Common, System Real-Time)
+            if (DEBUG_ENABLED) printf("[DEBUG MIDI] System Message received.\n");
+            // For system messages, it's a bit more complex as they don't have a channel in the status byte
+            // and dwParam1 might contain the whole message or part of it for SysEx.
+            // This simplistic handling might need to be improved for full SysEx support via native MIDI.
+            // For now, broadcast to all modules with their respective channels.
+            for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+                int module_channel_one_based = module_idx + 1;
+                for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                    int synth_idx = module_idx * unisonVoices + voice_idx;
+                    if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                        // For system messages, pass the original channel (or 0 if not applicable)
+                        // and the original midi_data.
+                        // Dexed's midiDataHandler might not use the channel for system messages,
+                        // but we pass it for consistency.
+                        allSynths[synth_idx]->midiDataHandler(0, midi_data, len);
+                    }
+                }
             }
-            for (size_t v = 0; v < unisonSynths.size(); ++v) {
-                if (DEBUG_ENABLED)
-                    std::cout << "[MIDI DEBUG] Passing sysex to Dexed instance " << v << " at " << unisonSynths[v] << std::endl;
-                unisonSynths[v]->midiDataHandler(0, sysex, len);
+        } else { // Channel messages
+            int msg_midi_channel_zero_based = status_byte & 0x0F;
+            int incoming_channel_one_based = msg_midi_channel_zero_based + 1;
+            if (DEBUG_ENABLED) printf("[DEBUG MIDI] Channel Message: Extracted incoming_channel_one_based = %d\n", incoming_channel_one_based);
+
+            if (incoming_channel_one_based == 16) { // OMNI Channel (16)
+                if (DEBUG_ENABLED) printf("[DEBUG MIDI] OMNI Detected (Channel 16)\n");
+                uint8_t original_msg_type = status_byte & 0xF0; // e.g., 0x90 for Note On, 0x80 for Note Off
+
+                for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+                    int module_channel_zero_based = module_idx; // Module 0, 1, 2...
+                    uint8_t modified_status_byte = original_msg_type | module_channel_zero_based;
+                    
+                    uint8_t modified_midi_message[3];
+                    modified_midi_message[0] = modified_status_byte;
+                    modified_midi_message[1] = data1;
+                    modified_midi_message[2] = data2;
+                    
+                    // The first argument to midiDataHandler is the 1-based channel for the module
+                    int module_target_channel_one_based = module_idx + 1;
+
+                    if (DEBUG_ENABLED) printf("[DEBUG MIDI] OMNI: Routing to module %d (channel %d) with Status=0x%02X, D1=0x%02X, D2=0x%02X, Len=%d\n",
+                           module_idx, module_target_channel_one_based, modified_status_byte, data1, data2, len);
+
+                    for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                        int synth_idx = module_idx * unisonVoices + voice_idx;
+                        if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                            allSynths[synth_idx]->midiDataHandler(module_target_channel_one_based, modified_midi_message, len);
+                        }
+                    }
+                }
+            } else if (incoming_channel_one_based >= 1 && incoming_channel_one_based <= num_modules) {
+                if (DEBUG_ENABLED) printf("[DEBUG MIDI] Specific Channel: Routing to module_idx %d (channel %d)\n", incoming_channel_one_based - 1, incoming_channel_one_based);
+                int target_module_idx = incoming_channel_one_based - 1;
+                for (int voice_idx = 0; voice_idx < unisonVoices; ++voice_idx) {
+                    int synth_idx = target_module_idx * unisonVoices + voice_idx;
+                    if (synth_idx < allSynths.size() && allSynths[synth_idx]) {
+                        allSynths[synth_idx]->midiDataHandler(incoming_channel_one_based, midi_data, len);
+                    }
+                }
+            } else {
+                if (DEBUG_ENABLED) printf("[DEBUG MIDI] Channel Message for channel %d is outside the configured num_modules (%d) or not OMNI. Ignoring.\n", incoming_channel_one_based, num_modules);
             }
         }
     }
@@ -137,13 +204,15 @@ bool win_open_midi(int midiDev) {
     }
 
     // Only reach here if not running under Python
-    std::cout << "[DEBUG] win_open_midi called" << std::endl;
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] win_open_midi called" << std::endl;
     UINT numMidiDevs = midiInGetNumDevs();
-    std::cout << "Available MIDI input devices:" << std::endl;
-    for (UINT i = 0; i < numMidiDevs; ++i) {
-        MIDIINCAPS caps;
-        midiInGetDevCaps(i, &caps, sizeof(caps));
-        std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
+    if (DEBUG_ENABLED) {
+        std::cout << "Available MIDI input devices:" << std::endl;
+        for (UINT i = 0; i < numMidiDevs; ++i) {
+            MIDIINCAPS caps;
+            midiInGetDevCaps(i, &caps, sizeof(caps));
+            std::wcout << L"  [" << i << L"] " << caps.szPname << std::endl;
+        }
     }
     std::cout << "[INFO] Using MIDI input device: " << midiDev << std::endl;
     HMIDIIN hMidiIn = nullptr;
@@ -189,7 +258,7 @@ void win_audio_thread_loop(std::atomic<bool>& running, bool useSynth, PlatformHo
         std::cout << "[DEBUG] Setting sine wave test mode from command line parameter" << std::endl;
     }
     
-    std::cout << "[DEBUG] Starting win_audio_thread_loop with useSynth=" << (useSynth ? "true" : "false") << std::endl;
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] Starting win_audio_thread_loop with useSynth=" << (useSynth ? "true" : "false") << std::endl;
     
     while (running) {
         WAVEHDR& hdr = waveHeaders[bufferIndex];
@@ -214,33 +283,22 @@ void win_prefill_audio_buffers(bool useSynth) {
     // Only enable sine wave test if synth mode is disabled
     if (!useSynth) {
         _putenv_s("DEXED_TEST_SINE", "1");
-        std::cout << "[DEBUG] Setting sine wave test mode for prefill" << std::endl;
+        if (DEBUG_ENABLED) std::cout << "[DEBUG] Setting sine wave test mode for prefill" << std::endl;
     } else {
-        // Ensure the environment variable is cleared if synth mode is enabled
         _putenv_s("DEXED_TEST_SINE", "");
     }
-    
-    std::cout << "[DEBUG] win_prefill_audio_buffers: Filling " << numBuffers << " buffers with useSynth=" << (useSynth ? "true" : "false") << std::endl;
-    
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] win_prefill_audio_buffers: Filling " << numBuffers << " buffers with useSynth=" << (useSynth ? "true" : "false") << std::endl;
     for (int i = 0; i < numBuffers; ++i) {
-        // Use our enhanced fill_audio_buffer function with detailed diagnostics
         fill_audio_buffer(i, useSynth);
-        
-        // Verify buffer has data before submission
         int zeroCount = 0;
         for (int j = 0; j < 32 && j*2 < audioBuffers[i].size(); j++) {
             if (audioBuffers[i][j*2] == 0) zeroCount++;
         }
-        
-        std::cout << "[DEBUG] Buffer " << i << " has " << zeroCount << "/32 zero samples before submission" << std::endl;
-        
-        // Submit buffer to sound card
+        if (DEBUG_ENABLED) std::cout << "[DEBUG] Buffer " << i << " has " << zeroCount << "/32 zero samples before submission" << std::endl;
         waveOutWrite(hWaveOut, &waveHeaders[i], sizeof(WAVEHDR));
-        
-        std::cout << "[DEBUG] Buffer " << i << " submitted to sound card" << std::endl;
+        if (DEBUG_ENABLED) std::cout << "[DEBUG] Buffer " << i << " submitted to sound card" << std::endl;
     }
-    
-    std::cout << "[DEBUG] All buffers initialized and submitted" << std::endl;
+    if (DEBUG_ENABLED) std::cout << "[DEBUG] All buffers initialized and submitted" << std::endl;
 }
 
 // Remove the main() function from this file to avoid duplicate symbol errors.

@@ -21,8 +21,8 @@ extern uint8_t fmpiano_sysex[156];
 extern bool DEBUG_ENABLED;
 
 void signal_handler(int signal);
-void setup_unison_synths();
-void cleanup_unison_synths();
+void setup_all_synths(); // Renamed from setup_unison_synths
+void cleanup_all_synths(); // Renamed from cleanup_unison_synths
 void parse_common_args(int argc, char* argv[], int& audioDev, int& midiDev, bool& useSynth);
 void fill_audio_buffers(bool useSynth);
 void fill_audio_buffer(int bufferIndex, bool useSynth);
