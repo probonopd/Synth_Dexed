@@ -253,6 +253,15 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
     }
 }
 
+void Module::processSysex(const uint8_t* data, int len) {
+    // Forward SysEx to all FM engines (Dexed instances)
+    for (auto& engine : fmEngines_) {
+        if (engine) {
+            engine->midiDataHandler(midiChannel_, const_cast<uint8_t*>(data), len);
+        }
+    }
+}
+
 bool Module::isActive() const {
     if (!enabled_) return false;
     

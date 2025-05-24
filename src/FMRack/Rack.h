@@ -31,6 +31,9 @@ public:
     int getEnabledPartCount() const;
     std::string getControllerTargetName(uint8_t target) const;
 
+    // SysEx routing
+    void routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_channel);
+
 private:
     bool initialized;
     float sampleRate_;

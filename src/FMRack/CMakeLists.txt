@@ -42,7 +42,7 @@ set(DEXED_SOURCES
 )
 
 # Create the executable
-add_executable(FMRack ${FMRACK_SOURCES} ${FMRACK_HEADERS} ${DEXED_SOURCES})
+add_executable(FMRack ${FMRACK_SOURCES} ${FMRACK_HEADERS} ${DEXED_SOURCES} UdpServer.cpp)
 
 # Platform-specific configurations
 if(WIN32)

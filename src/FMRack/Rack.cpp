@@ -285,4 +285,12 @@ std::string Rack::getControllerTargetName(uint8_t target) const {
     }
 }
 
+void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_channel) {
+    for (auto& module : modules_) {
+        if (sysex_channel == 0 || module->getMIDIChannel() == sysex_channel) {
+            module->processSysex(data, len);
+        }
+    }
+}
+
 } // namespace FMRack

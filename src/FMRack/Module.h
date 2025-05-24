@@ -31,6 +31,9 @@ public:
     
     void setOutputGain(float gain);
     
+    // Add SysEx handler
+    void processSysex(const uint8_t* data, int len);
+    
 private:
     float sampleRate_;
     uint8_t midiChannel_;
