@@ -1,4 +1,5 @@
 #include "Rack.h"
+#include "UdpServer.h"
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -6,6 +7,7 @@
 #include <chrono>
 #include <algorithm>
 #include <cmath>  // Add for M_PI and sin functions
+#include <memory>
 
 // Define M_PI if not available (common on Windows)
 #ifndef M_PI
@@ -45,6 +47,12 @@ static int numBuffers = 4;                // Match native default
 static int audioDev = 0;                  // Audio device ID
 static int midiDev = 0;                   // MIDI device ID
 static bool useSine = false;              // Sine wave test mode
+
+// Add global UDP server pointer
+static std::unique_ptr<UdpServer> g_udpServer;
+
+// Add UDP port definition
+int udpPort = 50007; // Default UDP port, can be made configurable
 
 #ifdef _WIN32
 // Windows MIDI callback
@@ -466,6 +474,48 @@ int main(int argc, char* argv[]) {
 #endif
 #endif
         
+        std::cout << "[DEBUG] About to start UDP server on port " << udpPort << std::endl;
+        // Start UDP server for raw UDP handling
+        g_udpServer = std::make_unique<UdpServer>(udpPort, [](const uint8_t* data, int len) {
+            if (!g_rack) return;
+            // Handle standard 3-byte MIDI messages
+            if (len == 3) {
+                uint8_t status = data[0];
+                uint8_t data1 = data[1];
+                uint8_t data2 = data[2];
+                g_rack->processMidiMessage(status, data1, data2);
+            } else if (len > 0) {
+                int i = 0;
+                while (i < len) {
+                    uint8_t status = data[i];
+                    if (status == 0xF0) { // SysEx start
+                        int sysex_end = i + 1;
+                        while (sysex_end < len && data[sysex_end] != 0xF7) sysex_end++;
+                        if (sysex_end < len && data[sysex_end] == 0xF7) sysex_end++;
+                        int sysex_len = sysex_end - i;
+                        if (sysex_len >= 2) {
+                            // Yamaha format: F0 43 cc ... F7, where cc = channel (0x00 = ch1, 0x0F = ch16)
+                            uint8_t sysex_channel = 0; // Default: OMNI
+                            if (sysex_len > 2 && data[i+1] == 0x43) {
+                                sysex_channel = (data[i+2] & 0x0F) + 1; // 1-16
+                            }
+                            g_rack->routeSysexToModules(&data[i], sysex_len, sysex_channel);
+                        }
+                        i = sysex_end;
+                    } else if ((status & 0xF0) >= 0x80 && (status & 0xF0) <= 0xE0 && (i + 2) < len) {
+                        g_rack->processMidiMessage(data[i], data[i+1], data[i+2]);
+                        i += 3;
+                    } else if (status >= 0xF8 && status <= 0xFF) {
+                        g_rack->processMidiMessage(status, 0, 0);
+                        i += 1;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+        });
+        g_udpServer->start();
+        
         std::cout << "Audio/MIDI interface started.\n";
         std::cout << "Current settings:\n";
         std::cout << "  SAMPLE_RATE: " << SAMPLE_RATE << "\n";
@@ -477,6 +527,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  t - Send test MIDI note\n";
         std::cout << "  q - Quit\n";
         std::cout << "> ";
+        std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
         
         // Interactive command loop
         char command;
@@ -501,6 +552,7 @@ int main(int argc, char* argv[]) {
         
         // Cleanup
         g_running = false;
+        if (g_udpServer) g_udpServer->stop();
         
 #ifdef _WIN32
         // Cleanup Windows audio

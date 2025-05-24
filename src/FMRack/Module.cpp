@@ -84,7 +84,6 @@ void Module::setupUnison(uint8_t voices, float detune, float spread) {
     // Create engines with detuning and panning
     for (uint8_t i = 0; i < voices; ++i) {
         auto engine = std::make_unique<Dexed>(16, static_cast<uint16_t>(sampleRate_));
-        engine->activate();
         fmEngines_.push_back(std::move(engine));
         
         // Calculate detune and pan for this voice
@@ -228,7 +227,7 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
         float rightGain = std::sqrt(voicePan);
         
         // Convert int16_t to float and apply panning
-        const float scale = 1.0f / 32768.0f; // Convert int16_t to float
+        const float scale = 1.0f / 2000.0f; // Convert int16_t to float; 2000 is a rough scale factor for Dexed output
         for (int i = 0; i < numSamples; ++i) {
             float sample = tempBuffer_[i] * scale;
             leftOut[i] += sample * leftGain;
