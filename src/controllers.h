@@ -51,7 +51,7 @@ class FmMod {
 
     void setRange(uint8_t r)
     {
-      range = r < 0 || r > 99 ? 0 : r;
+      range = r > 99 ? 0 : r;
     }
 
     uint8_t getRange(void)
@@ -61,7 +61,7 @@ class FmMod {
 
     void setTarget(uint8_t assign)
     {
-      assign = assign < 0 || assign > 7 ? 0 : assign;
+      assign = assign > 7 ? 0 : assign;
       pitch = assign & 1; // PITCH
       amp = assign & 2; // AMP
       eg = assign & 4; // EG
