@@ -37,6 +37,5 @@ jobs:
         with:
           name: Synth_Dexed-${{ matrix.os }}
           path: |
-                build/Release/FMR*
-                build/FMR*
-                FMR*
+                build/bin/Release/FMRack*
+                FMRack
