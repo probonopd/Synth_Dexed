@@ -19,10 +19,6 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu')
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
 
-#      - name: Install dependencies (macOS)
-#        if: startsWith(matrix.os, 'macos')
-#        run: brew install --cask cmake
-
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
         uses: lukka/get-cmake@latest
@@ -31,13 +27,6 @@ jobs:
         run: cmake -S . -B build
         env:
           CMAKE_BUILD_TYPE: Release
-          
-      - name: Build Python wheels with cibuildwheel
-        uses: pypa/cibuildwheel@v2.16.5
-        with:
-          package-dir: python
-        env:
-          CIBW_BUILD: cp3*-* # build for all CPython versions
 
       - name: Build C++ project
         run: |
@@ -51,6 +40,3 @@ jobs:
                 build/Release/Synth_*
                 build/Synth_*
                 Synth_*
-                wheelhouse/*.whl
-                python/main_python.py
-                python/test_dexed.py
