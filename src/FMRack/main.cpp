@@ -61,6 +61,10 @@ void CALLBACK midiInProc(HMIDIIN hmi, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR
 
 // Windows audio thread function
 void audioThread() {
+    // Set audio thread to high priority
+    HANDLE hThread = GetCurrentThread();
+    SetThreadPriority(hThread, THREAD_PRIORITY_HIGHEST);
+    
     std::vector<float> leftBuffer(BUFFER_FRAMES);
     std::vector<float> rightBuffer(BUFFER_FRAMES);
     float outputGain = 1.0f; // Add this line to define outputGain, adjust as needed
@@ -253,6 +257,11 @@ bool initializeAudioMidi() {
 #elif __linux__
 // Linux ALSA audio thread - updated to use BUFFER_FRAMES
 void audioThread() {
+    // Set audio thread to high priority
+    struct sched_param sch_params;
+    sch_params.sched_priority = 20;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params);
+    
     snd_pcm_t* pcm_handle;
     int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0) {
