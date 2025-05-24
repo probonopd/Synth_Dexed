@@ -173,7 +173,7 @@ This section describes the main classes and their relationships.
 |    FMEngine     |
 |-----------------|
 | - patch_params  |
-| - note_range    |--------------+
+| - note_range    |
 | - mono_mode     |
 | - voice_detune  |
 | - voice_pan     |
