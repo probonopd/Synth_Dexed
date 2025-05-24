@@ -258,7 +258,17 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
 }
 
 void Module::processSysex(const uint8_t* data, int len) {
-    // Forward SysEx to all FM engines (Dexed instances)
+    // Yamaha SysEx: F0 43 1n 01 1B vv F7 (operator ON/OFF mask)
+    // NOTE: Apparently Dexed cannot handle this directly on its own, so we have to handle it here.
+    if (len == 7 && data[0] == 0xF0 && data[1] == 0x43 && data[3] == 0x01 && data[4] == 0x1B && data[6] == 0xF7) {
+        uint8_t opMask = data[5];
+        std::cout << "[SYSEX] Operator ON/OFF mask received: 0x" << std::hex << (int)opMask << std::dec << std::endl;
+        for (auto& engine : fmEngines_) {
+            engine->setOPAll(opMask);
+        }
+        return;
+    }
+    // Forward all other SysEx to all FM engines (Dexed instances)
     for (auto& engine : fmEngines_) {
         if (engine) {
             engine->midiDataHandler(midiChannel_, const_cast<uint8_t*>(data), len);
