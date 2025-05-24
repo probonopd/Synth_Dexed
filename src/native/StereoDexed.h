@@ -111,4 +111,6 @@ public:
     bool midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midiData1, uint8_t midiData2) { return dexed->midiDataHandler(midiChannel, midiState, midiData1, midiData2); }
     bool midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len) { return dexed->midiDataHandler(midiChannel, midiData, len); }
     void getSamples(int16_t* buffer, uint16_t n_samples) { dexed->getSamples(buffer, n_samples); }
+    void getSamplesStereo(int16_t* left, int16_t* right, int n, const uint8_t* midiNotes);
+    void getSamplesStereo(int16_t* left, int16_t* right, int n);
 };

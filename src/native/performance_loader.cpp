@@ -65,6 +65,12 @@ bool load_performance_ini(const std::string& filename, StereoDexed* synth, int p
     if (debug) std::cout << "[DEBUG] Loading INI file: " << filename << " for module " << partIndex << std::endl;
     auto kv = parse_simple_ini(filename, debug);
     std::string idx = std::to_string(partIndex);
+    // Check MIDI channel (1-indexed in ini, 0 means do not create)
+    int midiCh = kv.count("MIDIChannel" + idx) ? std::stoi(kv["MIDIChannel" + idx]) : -1;
+    if (midiCh == 0) {
+        if (debug) std::cout << "[DEBUG] [Module " << partIndex << "] MIDIChannel is 0, skipping module creation." << std::endl;
+        return false;
+    }
     // VoiceData
     std::string voiceDataKey = "VoiceData" + idx;
     std::string voiceDataHex = kv.count(voiceDataKey) ? kv[voiceDataKey] : "";
@@ -201,7 +207,6 @@ bool load_performance_ini(const std::string& filename, StereoDexed* synth, int p
     // Bank/Voice/MIDI channel (for reference, not directly settable in Dexed)
     int bank = kv.count("BankNumber" + idx) ? std::stoi(kv["BankNumber" + idx]) : -1;
     int voice = kv.count("VoiceNumber" + idx) ? std::stoi(kv["VoiceNumber" + idx]) : -1;
-    int midiCh = kv.count("MIDIChannel" + idx) ? std::stoi(kv["MIDIChannel" + idx]) : -1;
     if (debug) std::cout << "[DEBUG] [Module " << partIndex << "] BankNumber: " << bank << ", VoiceNumber: " << voice << ", MIDIChannel: " << midiCh << std::endl;
     return true;
 }
