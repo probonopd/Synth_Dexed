@@ -84,18 +84,23 @@ void Module::setupUnison(uint8_t voices, float detune, float spread) {
     // Create engines with detuning and panning
     for (uint8_t i = 0; i < voices; ++i) {
         auto engine = std::make_unique<Dexed>(16, static_cast<uint16_t>(sampleRate_));
-        fmEngines_.push_back(std::move(engine));
         
         // Calculate detune and pan for this voice
+        float voiceDetune = 0.0f;
+        float voicePan = 0.5f;
         if (voices == 1) {
-            unisonDetune_.push_back(0.0f);
-            unisonPan_.push_back(0.5f);
+            voiceDetune = 0.0f;
+            voicePan = 0.5f;
         } else {
-            float voiceDetune = detune * (i - (voices - 1) * 0.5f);
-            float voicePan = 0.5f + spread * (i / float(voices - 1) - 0.5f);
-            unisonDetune_.push_back(voiceDetune);
-            unisonPan_.push_back(std::clamp(voicePan, 0.0f, 1.0f));
+            voiceDetune = detune * (i - (voices - 1) * 0.5f);
+            voicePan = 0.5f + spread * (i / float(voices - 1) - 0.5f);
+            voicePan = std::clamp(voicePan, 0.0f, 1.0f);
         }
+        // Apply detune to Dexed engine (in cents)
+        engine->setMasterTune(static_cast<int8_t>(voiceDetune));
+        fmEngines_.push_back(std::move(engine));
+        unisonDetune_.push_back(voiceDetune);
+        unisonPan_.push_back(voicePan);
     }
 }
 

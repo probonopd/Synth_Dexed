@@ -18,6 +18,14 @@ public:
     // Performance management
     bool loadPerformance(const std::string& filename);
     void setDefaultPerformance();
+    void setPerformance(const Performance& perf) {
+        *performance_ = perf;
+        createModulesFromPerformance();
+        // Configure effects from performance
+        reverb_->setEnabled(performance_->effects.reverbEnable);
+        reverb_->setSize(performance_->effects.reverbSize / 127.0f);
+        reverb_->setLevel(performance_->effects.reverbLevel / 127.0f);
+    }
 
     // MIDI processing
     void processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2);

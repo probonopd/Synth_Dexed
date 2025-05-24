@@ -54,6 +54,12 @@ static std::unique_ptr<UdpServer> g_udpServer;
 // Add UDP port definition
 int udpPort = 50007; // Default UDP port, can be made configurable
 
+// Global variables for command line options
+static int numModules = 1; // Number of modules/parts
+static int unisonVoices = 1; // Unison voices per module
+static float unisonDetune = 0.0f; // Detune in cents
+static float unisonSpread = 0.5f; // Stereo spread
+
 #ifdef _WIN32
 // Windows MIDI callback
 void CALLBACK midiInProc(HMIDIIN hmi, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
@@ -388,6 +394,18 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
         } else if ((arg == "--midi-device" || arg == "-m") && i + 1 < argc) {
             midiDev = std::atoi(argv[i + 1]);
             ++i;
+        } else if (arg == "--num-modules" && i + 1 < argc) {
+            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 8);
+            ++i;
+        } else if (arg == "--unison-voices" && i + 1 < argc) {
+            unisonVoices = std::clamp(std::atoi(argv[i + 1]), 1, 4);
+            ++i;
+        } else if (arg == "--unison-detune" && i + 1 < argc) {
+            unisonDetune = std::stof(argv[i + 1]);
+            ++i;
+        } else if (arg == "--unison-spread" && i + 1 < argc) {
+            unisonSpread = std::clamp(std::stof(argv[i + 1]), 0.0f, 1.0f);
+            ++i;
         } else if (arg == "--sine") {
             useSine = true;
         } else if (arg == "--help" || arg == "-h") {
@@ -399,6 +417,10 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             std::cout << "  --num-buffers <count>    Set number of buffers (default: 4)\n";
             std::cout << "  --audio-device <id>      Audio device ID (default: 0)\n";
             std::cout << "  --midi-device <id>       MIDI device ID (default: 0)\n";
+            std::cout << "  --num-modules <n>        Number of modules/parts (default: 1)\n";
+            std::cout << "  --unison-voices <n>      Unison voices per module (default: 1)\n";
+            std::cout << "  --unison-detune <cents>  Unison detune in cents (default: 0.0)\n";
+            std::cout << "  --unison-spread <0-1>    Unison stereo spread (default: 0.5)\n";
             std::cout << "  --sine                   Generate test sine wave\n";
             std::cout << "  --help, -h               Show this help message\n";
             exit(0);
@@ -455,12 +477,28 @@ int main(int argc, char* argv[]) {
                 g_rack->setDefaultPerformance();
             }
         } else {
-            g_rack->setDefaultPerformance();
-            std::cout << "Default performance loaded.\n";
+            // Custom default setup using command line options
+            FMRack::Performance perf;
+            perf.setDefaults();
+            for (int i = 0; i < 8; ++i) {
+                if (i < numModules) {
+                    perf.parts[i].midiChannel = i + 1;
+                    perf.parts[i].unisonVoices = unisonVoices;
+                    perf.parts[i].unisonDetune = unisonDetune;
+                    perf.parts[i].unisonSpread = unisonSpread;
+                    perf.parts[i].volume = 100;
+                } else {
+                    perf.parts[i].midiChannel = 0;
+                }
+            }
+            g_rack->setPerformance(perf);
+            std::cout << "Default configuration: " << numModules << " modules, "
+                      << unisonVoices << " unison voices, detune " << unisonDetune
+                      << ", spread " << unisonSpread << std::endl;
             if (useSine) {
                 std::cout << "Running in sine wave test mode.\n";
             } else {
-                std::cout << "Running with default FM synthesizer configuration on MIDI channel 1.\n";
+                std::cout << "Running with custom FM synthesizer configuration.\n";
             }
         }
         
