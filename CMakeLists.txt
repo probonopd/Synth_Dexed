@@ -55,7 +55,7 @@ else()
 endif()
 
 # Create the executable with main.cpp as the entry point
-add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/native/main.cpp src/native/main_common.cpp ${PLATFORM_SOURCES})
+add_executable(Synth_Dexed ${SYNTH_DEXED_SRC} src/native/main.cpp src/native/main_common.cpp src/native/performance_loader.cpp ${PLATFORM_SOURCES})
 
 target_include_directories(Synth_Dexed PRIVATE src src/native)
 
