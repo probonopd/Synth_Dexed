@@ -63,6 +63,7 @@ void CALLBACK midiInProc(HMIDIIN hmi, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR
 void audioThread() {
     std::vector<float> leftBuffer(BUFFER_FRAMES);
     std::vector<float> rightBuffer(BUFFER_FRAMES);
+    float outputGain = 1.0f; // Add this line to define outputGain, adjust as needed
     
     while (g_running) {
         if (g_rack && g_hWaveOut) {
@@ -276,6 +277,9 @@ void audioThread() {
     std::vector<float> leftBuffer(BUFFER_FRAMES);
     std::vector<float> rightBuffer(BUFFER_FRAMES);
     
+    // Declare and initialize outputGain before use
+    float outputGain = 1.0f; // Set to appropriate value or make configurable
+    
     while (g_running) {
         if (g_rack) {
             if (useSine) {
@@ -294,7 +298,7 @@ void audioThread() {
             }
             
             // Interleave samples
-            for (int i = 0; i < BUFFER_FRAMES; ++i) {
+            for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) {
                 audioBuffer[i * 2] = leftBuffer[i] * static_cast<float>(outputGain);
                 audioBuffer[i * 2 + 1] = rightBuffer[i] * static_cast<float>(outputGain);
             }
@@ -316,9 +320,9 @@ void midiThread() {
     }
     
     snd_seq_set_client_name(seq_handle, "FMRack");
-    int port = snd_seq_create_simple_port(seq_handle, "Input",
-                                         SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
-                                         SND_SEQ_PORT_TYPE_MIDI_GENERIC);
+    snd_seq_create_simple_port(seq_handle, "Input",
+        SND_SEQ_PORT_CAP_WRITE|SND_SEQ_PORT_CAP_SUBS_WRITE,
+        SND_SEQ_PORT_TYPE_APPLICATION);
     
     while (g_running) {
         snd_seq_event_t* ev;
