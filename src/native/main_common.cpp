@@ -1,8 +1,9 @@
 #ifndef ARDUINO
 
 #include "main_common.h"
-#include "dexed.h"
+#include "StereoDexed.h"
 #include "midi_socket_server.h"
+#include "performance_loader.h"
 #include <iostream>
 #include <csignal>
 #include <cstring>
@@ -14,6 +15,7 @@
 #include <string> // Add this line
 #include <cstdlib>
 #include <random>
+#include <fstream>
 
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
@@ -51,12 +53,12 @@ std::vector<uint8_t> customVoiceSysex; // Added for custom voice
 int unisonVoices = 1;
 float unisonSpread = 0.0f;
 float unisonDetune = 0.0f;
-std::vector<Dexed*> allSynths; // Changed from unisonSynths
+std::vector<StereoDexed*> allSynths; // Changed from unisonSynths
 unsigned int SAMPLE_RATE = 48000;
 unsigned int BUFFER_FRAMES = 1024;
 int numBuffers = 4;
 std::atomic<bool> running{true};
-Dexed* synth = nullptr;
+StereoDexed* synth = nullptr;
 std::mutex synthMutex;
 std::vector<std::vector<short>> audioBuffers;
 uint8_t fmpiano_sysex[156] = {
@@ -100,7 +102,7 @@ void setup_all_synths() { // Renamed from setup_unison_synths
         std::cout << "[DEBUG] Setting up module " << module_idx << " for MIDI channel " << midi_channel_for_module << std::endl;
 
         for (int v = 0; v < unisonVoices; ++v) {
-            Dexed* s = new Dexed(16, SAMPLE_RATE); // Max 16 notes polyphony per instance
+            StereoDexed* s = new StereoDexed(16, SAMPLE_RATE); // Max 16 notes polyphony per instance
             // Check for duplicate pointer (should never happen, but for safety)
             if (std::find(allSynths.begin(), allSynths.end(), s) != allSynths.end()) { // Changed from unisonSynths
                 std::cout << "[ERROR] Attempt to add duplicate Dexed pointer to allSynths!" << std::endl;
@@ -143,7 +145,12 @@ void setup_all_synths() { // Renamed from setup_unison_synths
             // }
             // for (int op = 0; op < 6; ++op) s->setOPDetune(op, detuneValue);
             
-            s->setGain(3.0f);
+            // Always apply global GAIN multiplier when setting gain
+            #ifdef GAIN
+            s->setGain(1.0f * GAIN);
+            #else
+            s->setGain(1.0f);
+            #endif
 
             s->setPitchbendRange(2);
             s->setModWheelRange(99);
@@ -436,7 +443,7 @@ void fill_audio_buffer(int i, bool useSynth) {
                     #endif
                     continue;
                 }
-                Dexed* current_synth = allSynths[overall_synth_idx];
+                StereoDexed* current_synth = allSynths[overall_synth_idx];
                 #ifdef DEBUG_ENABLED
                 std::cout << "[AUDIO DEBUG] Module " << module_idx << ", Voice " << voice_in_module_idx 
                           << " (Overall Idx " << overall_synth_idx << ", Ptr " << current_synth 
@@ -595,9 +602,49 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
         std::cout << std::endl;
     }
 
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] Before setup_all_synths" << std::endl;
-    setup_all_synths(); // Changed from setup_unison_synths
-    if (DEBUG_ENABLED) std::cout << "[DEBUG] After setup_all_synths" << std::endl;
+    std::string iniFilePath;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg.size() > 4 && arg.substr(arg.size() - 4) == ".ini") {
+            iniFilePath = arg;
+            break;
+        }
+    }
+    if (!iniFilePath.empty()) {
+        // Count VoiceDataN entries to determine number of modules
+        std::ifstream iniFile(iniFilePath);
+        int detectedModules = 0;
+        std::string line;
+        while (std::getline(iniFile, line)) {
+            for (int n = 1; n <= 8; ++n) {
+                std::string key = "VoiceData" + std::to_string(n) + "=";
+                if (line.find(key) == 0) {
+                    detectedModules = n;
+                }
+            }
+        }
+        if (detectedModules > 0) {
+            num_modules = detectedModules;
+            std::cout << "[INFO] Detected " << num_modules << " modules from INI file." << std::endl;
+        }
+        std::lock_guard<std::mutex> lock(synthMutex);
+        allSynths.clear();
+        for (int module_idx = 0; module_idx < num_modules; ++module_idx) {
+            for (int v = 0; v < unisonVoices; ++v) {
+                StereoDexed* s = new StereoDexed(16, SAMPLE_RATE);
+                load_performance_ini(iniFilePath, s, module_idx + 1, DEBUG_ENABLED);
+                s->activate();
+                allSynths.push_back(s);
+            }
+        }
+        if (!allSynths.empty()) {
+            synth = allSynths[0];
+        } else {
+            synth = nullptr;
+        }
+    } else {
+        setup_all_synths();
+    }
     // Allocate audio buffers ONCE at startup
     audioBuffers.resize(numBuffers);
     for (int i = 0; i < numBuffers; ++i) {

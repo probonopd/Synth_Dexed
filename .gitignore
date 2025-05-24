@@ -313,3 +313,5 @@ Synth_Dexed_exe
 *.app
 *.o
 *.a
+0*.ini
+.vscode/*

@@ -114,6 +114,8 @@ add_library(dexed SHARED
     src/pitchenv.cpp
     src/porta.cpp
     src/sin.cpp
+    src/native/performance_loader.cpp
+    src/native/StereoDexed.cpp
 )
 target_compile_definitions(dexed PRIVATE SYNTH_DEXED_EXPORTS)
 target_include_directories(dexed PUBLIC ${CMAKE_SOURCE_DIR}/src)

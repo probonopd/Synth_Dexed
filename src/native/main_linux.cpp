@@ -19,7 +19,7 @@
 extern double global_sine_phase;
 extern int num_modules;
 extern int unisonVoices;
-extern std::vector<Dexed*> allSynths;
+extern std::vector<StereoDexed*> allSynths;
 
 static snd_pcm_t* pcm_handle = nullptr;
 static snd_seq_t* seq_handle = nullptr;

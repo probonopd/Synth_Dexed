@@ -19,7 +19,7 @@
 #include "main_common.h"
 
 struct SynthWrapper {
-    Dexed* synth = nullptr;
+    StereoDexed* synth = nullptr;
     std::atomic<bool> running{false};
     std::thread audio_thread;
     std::mutex mutex;
@@ -55,7 +55,7 @@ synth_handle synth_create(uint32_t sample_rate, uint8_t max_notes) {
     auto* wrapper = new SynthWrapper();
     wrapper->sample_rate = sample_rate;
     wrapper->max_notes = max_notes;
-    wrapper->synth = new Dexed(max_notes, sample_rate);
+    wrapper->synth = new StereoDexed(max_notes, sample_rate);
     // Set up global synth pointer for fill_audio_buffers
     synth = wrapper->synth;
     SAMPLE_RATE = sample_rate;

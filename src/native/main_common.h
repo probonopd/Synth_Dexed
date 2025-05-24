@@ -5,16 +5,17 @@
 #include <atomic>
 #include <mutex>
 #include "dexed.h"
+#include "StereoDexed.h"
 
 extern int unisonVoices;
 extern float unisonSpread;
 extern float unisonDetune;
-extern std::vector<Dexed*> unisonSynths;
+extern std::vector<StereoDexed*> allSynths;
 extern unsigned int SAMPLE_RATE;
 extern unsigned int BUFFER_FRAMES;
 extern int numBuffers;
 extern std::atomic<bool> running;
-extern Dexed* synth;
+extern StereoDexed* synth;
 extern std::mutex synthMutex;
 extern std::vector<std::vector<short>> audioBuffers;
 extern uint8_t fmpiano_sysex[156];

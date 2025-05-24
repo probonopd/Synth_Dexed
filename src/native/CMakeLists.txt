@@ -38,8 +38,11 @@ endif()
 
 # Add the C API wrapper source file
 list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/synth_dexed_c_api.cpp")
+
+set_source_files_properties(${CMAKE_CURRENT_LIST_DIR}/ini.c PROPERTIES LANGUAGE C)
 # Add platform and shared code for DLL
 list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/main_common.cpp")
+list(APPEND SYNTH_DEXED_SRC "${CMAKE_CURRENT_LIST_DIR}/performance_loader.cpp")
 
 # Only add main_win.cpp for Windows builds
 if (WIN32)
@@ -62,7 +65,7 @@ else()
 endif()
 
 # Create the executable with main.cpp as the entry point, linking to the Synth_Dexed library
-add_executable(Synth_Dexed_exe ../main.cpp main_common.cpp midi_socket_server.cpp ${PLATFORM_SOURCES})
+add_executable(Synth_Dexed_exe ../main.cpp main_common.cpp midi_socket_server.cpp performance_loader.cpp ${PLATFORM_SOURCES})
 target_link_libraries(Synth_Dexed_exe PRIVATE Synth_Dexed)
 
 if (WIN32)

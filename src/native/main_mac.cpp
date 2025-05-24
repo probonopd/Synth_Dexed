@@ -13,7 +13,7 @@
 extern double global_sine_phase;
 extern int num_modules;
 extern int unisonVoices;
-extern std::vector<Dexed*> allSynths;
+extern std::vector<StereoDexed*> allSynths;
 
 AudioUnit audioUnit;
 MIDIClientRef midiClient;

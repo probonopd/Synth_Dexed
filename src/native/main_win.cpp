@@ -32,7 +32,7 @@ extern std::vector<std::vector<short>> audioBuffers;
 extern unsigned int BUFFER_FRAMES;
 extern int numBuffers;
 extern std::atomic<bool> running;
-extern std::vector<Dexed*> allSynths; // Changed from unisonSynths
+extern std::vector<StereoDexed*> allSynths; // Changed from unisonSynths
 extern std::mutex synthMutex;
 extern int num_modules;      // Added
 extern int unisonVoices;     // Added
