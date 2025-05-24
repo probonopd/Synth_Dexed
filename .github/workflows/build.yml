@@ -31,8 +31,6 @@ jobs:
       - name: Build C++ project
         run: |
              cmake --build build --config Release
-             find build/ -type f -name 'FMRack*'
-             echo "Build completed successfully."
 
       - name: Upload build
         uses: actions/upload-artifact@v4
