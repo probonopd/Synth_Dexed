@@ -395,7 +395,7 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             midiDev = std::atoi(argv[i + 1]);
             ++i;
         } else if (arg == "--num-modules" && i + 1 < argc) {
-            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 8);
+            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 16);
             ++i;
         } else if (arg == "--unison-voices" && i + 1 < argc) {
             unisonVoices = std::clamp(std::atoi(argv[i + 1]), 1, 4);
@@ -471,7 +471,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Loading performance file: " << performanceFile << "\n";
             if (g_rack->loadPerformance(performanceFile)) {
                 std::cout << "Performance loaded successfully!\n";
-                std::cout << "Enabled parts: " << g_rack->getEnabledPartCount() << "/8\n";
+                std::cout << "Enabled parts: " << g_rack->getEnabledPartCount() << "/16\n";
             } else {
                 std::cout << "Failed to load performance file. Using default configuration.\n";
                 g_rack->setDefaultPerformance();
@@ -480,7 +480,7 @@ int main(int argc, char* argv[]) {
             // Custom default setup using command line options
             FMRack::Performance perf;
             perf.setDefaults();
-            for (int i = 0; i < 8; ++i) {
+            for (int i = 0; i < 16; ++i) {
                 if (i < numModules) {
                     perf.parts[i].midiChannel = i + 1;
                     perf.parts[i].unisonVoices = unisonVoices;

@@ -167,8 +167,8 @@ void Performance::setDefaults() {
         0                                                                                   // pad to 156 bytes
     }};
     
-    // Set default values for all parts
-    for (int i = 0; i < 8; ++i) {
+    // Set default values for all 16 parts
+    for (int i = 0; i < 16; ++i) {
         parts[i] = PartConfig{};  // Use default constructor values
         parts[i].voiceData = initVoice;
     }
@@ -182,7 +182,7 @@ void Performance::setDefaults() {
 }
 
 const Performance::PartConfig& Performance::getPartConfig(int partIndex) const {
-    if (partIndex >= 0 && partIndex < 8) {
+    if (partIndex >= 0 && partIndex < 16) {
         return parts[partIndex];
     }
     static PartConfig defaultConfig;
