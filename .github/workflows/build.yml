@@ -28,7 +28,8 @@ jobs:
             container: alpine:latest
             build_type: alpine-static-arm64
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        run: git clone ${{ github.repository }} .
 
       - name: Install dependencies (Linux)
         if: startsWith(matrix.os, 'ubuntu') && matrix.container == ''
@@ -40,7 +41,9 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
-        uses: lukka/get-cmake@latest
+        run: |
+          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
+          choco install visualstudio2019buildtools -y
 
       - name: Configure
         if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
@@ -48,9 +51,7 @@ jobs:
         env:
           CMAKE_BUILD_TYPE: Release
 
-        
       - name: Build static ALSA library
-        # https://gitlab.alpinelinux.org/alpine/aports/-/issues/17187
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
           apk add --no-cache build-base wget autoconf automake libtool
@@ -70,9 +71,9 @@ jobs:
              cmake --build build --config Release
 
       - name: Upload build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Synth_Dexed-${{ matrix.os }}${{ matrix.build_type != '' && format('-{0}', matrix.build_type) || '' }}
-          path: |
-                build/bin/Release/FMRack.exe
-                build/bin/FMRack
+        run: |
+          mkdir -p artifacts
+          cp build/bin/Release/FMRack.exe artifacts/ || true
+          cp build/bin/FMRack artifacts/ || true
+          tar -czf artifacts.tar.gz artifacts
+          echo "Artifacts packaged as artifacts.tar.gz"
