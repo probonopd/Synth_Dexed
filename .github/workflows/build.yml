@@ -6,10 +6,18 @@ on:
   workflow_dispatch:
 
 jobs:
+  checkout:
+    name: Checkout Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container }}
+    needs: checkout  # Ensure this job runs after the checkout job
     strategy:
       matrix:
         include:
@@ -28,9 +36,6 @@ jobs:
             container: alpine:latest
             build_type: alpine-static-arm64
     steps:
-      - name: Checkout code
-        run: git clone ${{ github.repository }} .
-
       - name: Install dependencies (Linux)
         if: startsWith(matrix.os, 'ubuntu') && matrix.container == ''
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
@@ -41,9 +46,7 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
-        run: |
-          choco install cmake --installargs 'ADD_CMAKE_TO_PATH=System' -y
-          choco install visualstudio2019buildtools -y
+        uses: lukka/get-cmake@latest
 
       - name: Configure
         if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
@@ -70,10 +73,21 @@ jobs:
         run: |
              cmake --build build --config Release
 
-      - name: Upload build
+      - name: Set outputs
+        id: set_outputs
         run: |
-          mkdir -p artifacts
-          cp build/bin/Release/FMRack.exe artifacts/ || true
-          cp build/bin/FMRack artifacts/ || true
-          tar -czf artifacts.tar.gz artifacts
-          echo "Artifacts packaged as artifacts.tar.gz"
+          echo "os=${{ matrix.os }}" >> $GITHUB_ENV
+          echo "build_type=${{ matrix.build_type }}" >> $GITHUB_ENV
+
+  upload:
+    name: Upload Build Artifacts
+    runs-on: ubuntu-latest
+    needs: build  # Ensure this job runs after the build job
+    steps:
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Synth_Dexed-${{ env.os }}${{ env.build_type != '' && format('-{0}', env.build_type) || '' }}
+          path: |
+            build/bin/Release/*
+            build/bin/*
