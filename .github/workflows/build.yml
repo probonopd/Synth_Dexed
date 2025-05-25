@@ -50,7 +50,7 @@ jobs:
 
       - name: Configure
         if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
-        run: ls && cmake -S . -B build
+        run: readlink -f . && ls -lh && cmake -S . -B build
         env:
           CMAKE_BUILD_TYPE: Release
 
