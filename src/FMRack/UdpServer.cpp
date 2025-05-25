@@ -52,7 +52,7 @@ void UdpServer::threadFunc() {
     }
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // Only listen on localhost
     addr.sin_port = htons(port_);
     int bindret = bind(sock, (struct sockaddr*)&addr, sizeof(addr));
     DEBUG_PRINT("[UDP] bind() returned: " << bindret);
@@ -66,7 +66,7 @@ void UdpServer::threadFunc() {
 #endif
         return;
     }
-    std::cout << "[INFO] UDP server listening on 0.0.0.0:" << port_ << std::endl;
+    std::cout << "[INFO] UDP server listening on 127.0.0.1:" << port_ << std::endl;
     while (running_) {
         uint8_t buf[512];
         sockaddr_in src_addr = {};
