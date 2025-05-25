@@ -169,11 +169,12 @@ void AudioEffectPlateReverb::doReverb(const float* inblockL, const float* inbloc
     float rv_time;
 
     // for LFOs:
-    int16_t lfo1_out_sin, lfo1_out_cos, lfo2_out_sin, lfo2_out_cos;
+    int16_t lfo1_out_sin, lfo2_out_sin;
     int32_t y0, y1;
     int64_t y;
     uint32_t idx;
     static bool cleanup_done = false;
+    int16_t lfo2_out_cos;
 
     // handle bypass, 1st call will clean the buffers to avoid continuing the previous reverb tail
     if (bypass)
@@ -217,12 +218,6 @@ void AudioEffectPlateReverb::doReverb(const float* inblockL, const float* inbloc
         y = (int64_t)y0 * (0x00FFFFFF - idx);
         y += (int64_t)y1 * idx;
         lfo1_out_sin = (int32_t) (y >> (32-8)); // 16bit output
-        idx = ((lfo1_phase_acc >> 24)+64) & 0xFF;
-        y0 = AudioWaveformSine[idx];
-        y1 = AudioWaveformSine[idx + 1];
-        y = (int64_t)y0 * (0x00FFFFFF - idx);
-        y += (int64_t)y1 * idx;
-        lfo1_out_cos = (int32_t) (y >> (32-8)); // 16bit output        
 
         lfo2_phase_acc += lfo2_adder;
         idx = lfo2_phase_acc >> 24;     // 8bit lookup table address

@@ -49,13 +49,14 @@ inline q16_t q16_convert(q16_t input, uint8_t src_frac_bits, uint8_t dest_frac_b
   return input;
 }
 
+// Adjust the logic to handle the range correctly
 inline q16_t q16_saturate(q16_t r) {
-    if (r > INT16_MAX)
-        return INT16_MAX;
-    else if (r < INT16_MIN)
-        return INT16_MIN;
-    else
-        return(q16_t(r));
+    if (r > static_cast<q16_t>(INT16_MAX)) {
+        return static_cast<q16_t>(INT16_MAX);
+    } else if (r < static_cast<q16_t>(INT16_MIN)) {
+        return static_cast<q16_t>(INT16_MIN);
+    }
+    return r;
 }
 
 inline q16_t q16_add(q16_t a, q16_t b) {
