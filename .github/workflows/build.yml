@@ -55,11 +55,10 @@ jobs:
             make install
           "
 
-          - name: git clone this repository and branch
-          if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
-          run: |
-            git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" "${{ github.workspace }}/repo"
-        
+      - name: git clone this repository and branch
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
+        run: |
+          git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" "${{ github.workspace }}/repo"
 
       - name: Run Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
