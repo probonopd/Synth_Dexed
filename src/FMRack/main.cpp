@@ -36,6 +36,9 @@ static const int AUDIO_BUFFER_SIZE = 1024; // samples per channel
 #elif __linux__
 #include <alsa/asoundlib.h>
 #include <alsa/seq.h>
+#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
+#define SND_SEQ_EVENT_PROGRAMCHANGE 192
+#endif
 #endif
 
 using namespace FMRack;
@@ -433,31 +436,91 @@ void audioThread() {
 // Linux ALSA MIDI thread
 void midiThread() {
     snd_seq_t* seq_handle;
-    int err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_DUPLEX, 0);
+    int err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
     if (err < 0) {
-        std::cout << "Failed to open sequencer: " << snd_strerror(err) << "\n";
+        std::cout << "Failed to open ALSA sequencer: " << snd_strerror(err) << "\n";
         return;
     }
-    
     snd_seq_set_client_name(seq_handle, "FMRack");
-    snd_seq_create_simple_port(seq_handle, "Input",
-        SND_SEQ_PORT_CAP_WRITE|SND_SEQ_PORT_CAP_SUBS_WRITE,
+    int midi_in_port = snd_seq_create_simple_port(seq_handle, "Input",
+        SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
         SND_SEQ_PORT_TYPE_APPLICATION);
-    
+    if (midi_in_port < 0) {
+        std::cerr << "[ERROR] Failed to create ALSA MIDI input port." << std::endl;
+        snd_seq_close(seq_handle);
+        return;
+    }
+    std::cout << "[ALSA] MIDI input port created. Connect your MIDI device using 'aconnect' or your ALSA tool." << std::endl;
+
+    struct pollfd *pfds;
+    int npfds = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
+    pfds = (struct pollfd*)alloca(npfds * sizeof(struct pollfd));
+    snd_seq_poll_descriptors(seq_handle, pfds, npfds, POLLIN);
     while (g_running) {
-        snd_seq_event_t* ev;
-        if (snd_seq_event_input(seq_handle, &ev) >= 0) {
-            if (g_rack && ev->type == SND_SEQ_EVENT_NOTEON) {
-                handleMidiMessage(0x90 | ev->data.note.channel,
-                                 ev->data.note.note, ev->data.note.velocity);
-            } else if (g_rack && ev->type == SND_SEQ_EVENT_NOTEOFF) {
-                handleMidiMessage(0x80 | ev->data.note.channel,
-                                 ev->data.note.note, ev->data.note.velocity);
+        if (poll(pfds, npfds, 100) > 0) {
+            snd_seq_event_t *ev = nullptr;
+            while (snd_seq_event_input(seq_handle, &ev) > 0) {
+                if (!ev) continue;
+                if (ev->type == SND_SEQ_EVENT_SYSEX) {
+                    uint8_t* data = (uint8_t*)ev->data.ext.ptr;
+                    uint16_t len = ev->data.ext.len;
+                    if (g_rack && data && len > 0) {
+                        uint8_t sysex_channel = 0;
+                        if (len > 2 && data[0] == 0xF0 && data[1] == 0x43) {
+                            sysex_channel = (data[2] & 0x0F) + 1;
+                        }
+                        g_rack->routeSysexToModules(data, len, sysex_channel);
+                    }
+                } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF ||
+                           ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND ||
+                           ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS ||
+                           ev->type == SND_SEQ_EVENT_PROGRAMCHANGE) {
+                    uint8_t status = 0, data1 = 0, data2 = 0;
+                    switch (ev->type) {
+                        case SND_SEQ_EVENT_NOTEON:
+                            status = 0x90 | (ev->data.note.channel & 0x0F);
+                            data1 = ev->data.note.note;
+                            data2 = ev->data.note.velocity;
+                            break;
+                        case SND_SEQ_EVENT_NOTEOFF:
+                            status = 0x80 | (ev->data.note.channel & 0x0F);
+                            data1 = ev->data.note.note;
+                            data2 = ev->data.note.velocity;
+                            break;
+                        case SND_SEQ_EVENT_CONTROLLER:
+                            status = 0xB0 | (ev->data.control.channel & 0x0F);
+                            data1 = ev->data.control.param;
+                            data2 = ev->data.control.value;
+                            break;
+                        case SND_SEQ_EVENT_PITCHBEND:
+                            status = 0xE0 | (ev->data.control.channel & 0x0F);
+                            data1 = ev->data.control.value & 0x7F;
+                            data2 = (ev->data.control.value >> 7) & 0x7F;
+                            break;
+                        case SND_SEQ_EVENT_CHANPRESS:
+                            status = 0xD0 | (ev->data.control.channel & 0x0F);
+                            data1 = ev->data.control.value;
+                            data2 = 0;
+                            break;
+                        case SND_SEQ_EVENT_KEYPRESS:
+                            status = 0xA0 | (ev->data.note.channel & 0x0F);
+                            data1 = ev->data.note.note;
+                            data2 = ev->data.note.velocity;
+                            break;
+                        case SND_SEQ_EVENT_PROGRAMCHANGE:
+                            status = 0xC0 | (ev->data.control.channel & 0x0F);
+                            data1 = ev->data.control.value;
+                            data2 = 0;
+                            break;
+                        default:
+                            break;
+                    }
+                    if (g_rack) handleMidiMessage(status, data1, data2);
+                }
+                snd_seq_free_event(ev);
             }
-            snd_seq_free_event(ev);
         }
     }
-    
     snd_seq_close(seq_handle);
 }
 
