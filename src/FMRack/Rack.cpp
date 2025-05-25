@@ -1,4 +1,5 @@
 #include "Rack.h"
+#include "AudioEffectPlateReverb.h"
 #include <iostream>
 #include <algorithm>
 #include <cstring>
@@ -30,7 +31,7 @@ std::string extractVoiceName(const std::array<uint8_t, 156>& voiceData) {
 // Rack class implementation
 Rack::Rack(float sampleRate) : initialized(false), sampleRate_(sampleRate) {
     performance_ = std::make_unique<Performance>();
-    reverb_ = std::make_unique<Reverb>(sampleRate);
+    reverb_ = std::make_unique<AudioEffectPlateReverb>(sampleRate);
     
     // Initialize audio buffers
     const int maxBufferSize = 1024;
@@ -50,12 +51,15 @@ Rack::Rack(float sampleRate) : initialized(false), sampleRate_(sampleRate) {
 bool Rack::loadPerformance(const std::string& filename) {
     if (performance_->loadFromFile(filename)) {
         createModulesFromPerformance();
-        
         // Configure effects from performance
+        std::cout << "[DEBUG] Performance loaded: " << filename << std::endl;
+        std::cout << "[DEBUG] ReverbEnable: " << performance_->effects.reverbEnable << std::endl;
+        std::cout << "[DEBUG] ReverbLevel: " << static_cast<int>(performance_->effects.reverbLevel) << std::endl;
+        std::cout << "[DEBUG] ReverbSize: " << static_cast<int>(performance_->effects.reverbSize) << std::endl;
+        std::cout << "[DEBUG] Number of modules: " << modules_.size() << std::endl;
         reverb_->setEnabled(performance_->effects.reverbEnable);
         reverb_->setSize(performance_->effects.reverbSize / 127.0f);
         reverb_->setLevel(performance_->effects.reverbLevel / 127.0f);
-        
         return true;
     }
     return false;
@@ -76,12 +80,22 @@ void Rack::createModulesFromPerformance() {
 
     modules_.clear();
 
+    // Debug output for global reverb settings
+    std::cout << "[DEBUG] Global Reverb Settings:\n";
+    std::cout << "  ReverbEnable: " << performance_->effects.reverbEnable << "\n";
+    std::cout << "  ReverbLevel: " << static_cast<int>(performance_->effects.reverbLevel) << "/127\n";
+    std::cout << "  ReverbSize: " << static_cast<int>(performance_->effects.reverbSize) << "/127\n";
+    std::cout << "  ReverbHighDamp: " << static_cast<int>(performance_->effects.reverbHighDamp) << "/127\n";
+    std::cout << "  ReverbLowDamp: " << static_cast<int>(performance_->effects.reverbLowDamp) << "/127\n";
+    std::cout << "  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n";
+    std::cout << "  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n";
+
     for (int i = 0; i < 16; ++i) {
         auto config = performance_->getPartConfig(i);
 
         if (config.midiChannel > 0 ) {
             // Force each part to its own MIDI channel (1-16)
-            config.midiChannel = i + 1;
+            // config.midiChannel = i + 1;
             std::string voiceName = extractVoiceName(config.voiceData);
             std::cout << "Creating module " << (i + 1) << " on MIDI channel "
                       << static_cast<int>(config.midiChannel) << " with voice: \"" << voiceName << "\"\n";
@@ -241,10 +255,16 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
         numSamples
     );  
 
-    // Mix dry and reverb
+    // Mix dry and reverb, but only add reverb if enabled
+    bool reverbEnabled = reverb_->get_bypass() == false;
     for (int i = 0; i < numSamples; ++i) {
-        finalLeftBuffer_[i] = dryLeftBuffer_[i] + reverbOutLeftBuffer_[i];
-        finalRightBuffer_[i] = dryRightBuffer_[i] + reverbOutRightBuffer_[i];
+        if (reverbEnabled) {
+            finalLeftBuffer_[i] = dryLeftBuffer_[i] + reverbOutLeftBuffer_[i];
+            finalRightBuffer_[i] = dryRightBuffer_[i] + reverbOutRightBuffer_[i];
+        } else {
+            finalLeftBuffer_[i] = dryLeftBuffer_[i];
+            finalRightBuffer_[i] = dryRightBuffer_[i];
+        }
     }
 
     // Copy final buffers to output

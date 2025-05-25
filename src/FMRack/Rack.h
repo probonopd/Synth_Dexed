@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 #include "Performance.h"
-#include "Reverb.h"
+#include "AudioEffectPlateReverb.h"
 #include "Module.h"
 
 namespace FMRack {
@@ -53,7 +53,7 @@ private:
     std::vector<std::unique_ptr<Module>> modules_;
     
     // Effects
-    std::unique_ptr<Reverb> reverb_;
+    std::unique_ptr<AudioEffectPlateReverb> reverb_;
     
     // Internal audio buffers
     std::vector<float> dryLeftBuffer_;

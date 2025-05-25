@@ -12,14 +12,14 @@ set(FMRACK_SOURCES
     main.cpp
     Rack.cpp
     Performance.cpp
-    Reverb.cpp
+    AudioEffectPlateReverb.cpp
     Module.cpp
 )
 
 set(FMRACK_HEADERS
     Rack.h
     Performance.h
-    Reverb.h
+    AudioEffectPlateReverb.h
     Module.h
 )
 
