@@ -9,25 +9,46 @@ jobs:
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
     strategy:
       matrix:
-        os: [windows-2022, ubuntu-22.04, ubuntu-22.04-arm, macos-13]
+        include:
+          - os: windows-2022
+            container: ''
+          - os: ubuntu-22.04
+            container: ''
+          - os: ubuntu-22.04-arm
+            container: ''
+          - os: macos-13
+            container: ''
+          - os: ubuntu-22.04
+            container: alpine:latest
+            build_type: alpine-static
     steps:
       - uses: actions/checkout@v4
 
       - name: Install dependencies (Linux)
-        if: startsWith(matrix.os, 'ubuntu')
+        if: startsWith(matrix.os, 'ubuntu') && matrix.container == ''
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
+
+      - name: Install dependencies (Alpine)
+        if: matrix.build_type == 'alpine-static'
+        run: apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
         uses: lukka/get-cmake@latest
 
       - name: Configure
+        if: matrix.build_type != 'alpine-static'
         run: cmake -S . -B build
         env:
           CMAKE_BUILD_TYPE: Release
 
+      - name: Configure (Alpine Static)
+        if: matrix.build_type == 'alpine-static'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS="-static"
+        
       - name: Build C++ project
         run: |
              cmake --build build --config Release
@@ -35,7 +56,7 @@ jobs:
       - name: Upload build
         uses: actions/upload-artifact@v4
         with:
-          name: Synth_Dexed-${{ matrix.os }}
+          name: Synth_Dexed-${{ matrix.os }}${{ matrix.build_type != '' && format('-{0}', matrix.build_type) || '' }}
           path: |
                 build/bin/Release/FMRack.exe
                 build/bin/FMRack

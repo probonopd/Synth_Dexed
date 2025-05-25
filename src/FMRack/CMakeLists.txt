@@ -4,6 +4,9 @@ project(FMRack)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Option for static builds
+option(BUILD_STATIC "Build statically linked executable" OFF)
+
 # Include the parent Dexed source directory
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/..)
 
@@ -57,9 +60,37 @@ elseif(APPLE)
     target_link_libraries(FMRack ${COREAUDIO_FRAMEWORK} ${COREMIDI_FRAMEWORK} ${AUDIOUNIT_FRAMEWORK} ${COREFDN_FRAMEWORK} ${AUDIOTOOLBOX_FRAMEWORK})
 elseif(UNIX)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(ALSA REQUIRED alsa)
-    target_link_libraries(FMRack ${ALSA_LIBRARIES} pthread)
-    target_include_directories(FMRack PRIVATE ${ALSA_INCLUDE_DIRS})
+    
+    if(BUILD_STATIC)
+        # Configure for static building
+        set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+        
+        # For Alpine Linux, we need to handle musl libc differently
+        if(EXISTS "/etc/alpine-release")
+            # Alpine-specific static linking
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+            target_link_libraries(FMRack -Wl,--whole-archive -lpthread -Wl,--no-whole-archive)
+            
+            # Find static ALSA for Alpine
+            find_library(ALSA_LIB NAMES libasound.a)
+            if(ALSA_LIB)
+                target_link_libraries(FMRack ${ALSA_LIB})
+            else()
+                message(FATAL_ERROR "Static ALSA library not found. Install alsa-lib-static package.")
+            endif()
+        else()
+            # Regular Linux static linking
+            pkg_check_modules(ALSA REQUIRED alsa)
+            target_link_libraries(FMRack ${ALSA_LIBRARIES} -pthread)
+            target_include_directories(FMRack PRIVATE ${ALSA_INCLUDE_DIRS})
+        endif()
+    else()
+        # Regular dynamic linking
+        pkg_check_modules(ALSA REQUIRED alsa)
+        target_link_libraries(FMRack ${ALSA_LIBRARIES} pthread)
+        target_include_directories(FMRack PRIVATE ${ALSA_INCLUDE_DIRS})
+    endif()
 endif()
 
 # Compiler-specific options
