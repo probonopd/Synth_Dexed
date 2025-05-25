@@ -5,11 +5,6 @@
 #include <algorithm>
 #include <cstring>
 #include <regex>
-#include <atomic>
-
-namespace {
-    static std::atomic<bool> performanceChangeInProgress{false};
-}
 
 namespace FMRack {
 
@@ -83,6 +78,7 @@ void Rack::setDefaultPerformance() {
 }
 
 void Rack::createModulesFromPerformance() {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     std::cout << "\n=== Creating modules from performance ===\n";
     modules_.clear();
     std::cout << "[DEBUG] performance_->parts.size(): " << performance_->parts.size() << std::endl;
@@ -175,6 +171,7 @@ uint8_t Rack::extractMidiChannel(uint8_t status) const {
 }
 
 void Rack::routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2) {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     uint8_t channel = extractMidiChannel(status);
     DEBUG_PRINT("[DEBUG] routeMidiToModules: status=0x" << std::hex << (int)status
         << " channel=" << std::dec << (int)channel);
@@ -224,6 +221,7 @@ void Rack::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
 }
 
 void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     if (!initialized || numSamples <= 0) {
         std::fill(leftOut, leftOut + numSamples, 0.0f);
         std::fill(rightOut, rightOut + numSamples, 0.0f);
@@ -321,6 +319,7 @@ std::string Rack::getControllerTargetName(uint8_t target) const {
 }
 
 void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_channel) {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     // Only handle MiniDexed (0x7D) SysEx in Performance
     if (len >= 3 && data[1] == 0x7D && performance_) {
         std::cout << "[SYSEX] MiniDexed SysEx received, length: " << len << " bytes\n";
@@ -343,10 +342,6 @@ void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_chann
 
 // Add handleProgramChange implementation
 void Rack::handleProgramChange(int programNum, const std::string& performanceDir) {
-    if (performanceChangeInProgress.exchange(true)) {
-        DEBUG_PRINT("[DEBUG] Program change ignored: another performance change is still in progress");
-        return;
-    }
     // Special case: program 1 loads ../performance.ini
     if (programNum == 0) {
         std::filesystem::path perfPath = std::filesystem::path(performanceDir) / ".." / "performance.ini";
@@ -360,7 +355,6 @@ void Rack::handleProgramChange(int programNum, const std::string& performanceDir
         } else {
             DEBUG_PRINT("[DEBUG] Performance file does not exist: " << perfPath.string());
         }
-        performanceChangeInProgress = false;
         return;
     }
     // For other programs, match files with any number of leading zeros and any suffix
@@ -385,7 +379,6 @@ void Rack::handleProgramChange(int programNum, const std::string& performanceDir
     } else {
         DEBUG_PRINT("[DEBUG] No matching performance file found for program " << (programNum + 1));
     }
-    performanceChangeInProgress = false;
 }
 
 bool Rack::loadInitialPerformance(const std::string& performanceFile) {

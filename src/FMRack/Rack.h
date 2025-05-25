@@ -7,6 +7,7 @@
 #include "AudioEffectPlateReverb.h"
 #include "Module.h"
 #include <filesystem>
+#include <mutex>
 
 namespace FMRack {
 
@@ -72,6 +73,9 @@ private:
     std::vector<float> finalLeftBuffer_;
     std::vector<float> finalRightBuffer_;
     
+    // Mutex for thread-safe access to modules_
+    std::mutex modulesMutex;
+
     // Helper methods
     void createModulesFromPerformance();
     void routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2);
