@@ -119,88 +119,12 @@ void Module::applyNoteShift(uint8_t& note) const {
 
 void Module::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     if (!enabled_) return;
-    uint8_t msgType = status & 0xF0;
-    switch (msgType) {
-        case 0x80: // Note Off
-        case 0x90: // Note On
-        {
-            uint8_t note = data1;
-            uint8_t velocity = data2;
-            if (msgType == 0x90 && velocity == 0) msgType = 0x80;
-            if (!isNoteInRange(note)) return;
-            applyNoteShift(note);
-            for (auto& engine : fmEngines_) {
-                if (msgType == 0x90) {
-                    std::cout << "[DEBUG] keydown(" << (int)note << ", " << (int)velocity << ")\n";
-                    engine->keydown(note, velocity);
-                } else {
-                    std::cout << "[DEBUG] keyup(" << (int)note << ")\n";
-                    engine->keyup(note);
-                }
-            }
-            break;
-        }
-        case 0xB0: // Control Change
-        {
-            for (auto& engine : fmEngines_) {
-                switch (data1) {
-                    case 1:
-                        std::cout << "[DEBUG] setModWheel(" << (int)data2 << ")\n";
-                        engine->setModWheel(data2);
-                        break;
-                    case 2:
-                        std::cout << "[DEBUG] setBreathController(" << (int)data2 << ")\n";
-                        engine->setBreathController(data2);
-                        break;
-                    case 4:
-                        std::cout << "[DEBUG] setFootController(" << (int)data2 << ")\n";
-                        engine->setFootController(data2);
-                        break;
-                    case 7:
-                        engine->setGain(data2 / 127.0f);
-                        break;
-                    case 11:
-                        engine->setGain(data2 / 127.0f);
-                        break;
-                    case 64:
-                        std::cout << "[DEBUG] setSustain(" << (data2 >= 64) << ")\n";
-                        engine->setSustain(data2 >= 64);
-                        break;
-                    case 66:
-                        std::cout << "[DEBUG] setSostenuto(" << (data2 >= 64) << ")\n";
-                        engine->setSostenuto(data2 >= 64);
-                        break;
-                    case 123:
-                        std::cout << "[DEBUG] notesOff()\n";
-                        engine->notesOff();
-                        break;
-                    default:
-                        std::cout << "[DEBUG] Unhandled CC: " << (int)data1 << " value: " << (int)data2 << std::endl;
-                        break;
-                }
-            }
-            break;
-        }
-        case 0xE0: // Pitch Bend
-        {
-            uint16_t pitchBend = (data2 << 7) | data1;
-            for (auto& engine : fmEngines_) {
-                std::cout << "[DEBUG] setPitchbend(" << pitchBend << ")\n";
-                engine->setPitchbend(pitchBend);
-            }
-            break;
-        }
-        case 0xD0: // Channel Aftertouch
-        {
-            for (auto& engine : fmEngines_) {
-                std::cout << "[DEBUG] setAftertouch(" << (int)data1 << ")\n";
-                engine->setAftertouch(data1);
-            }
-            break;
-        }
-        default:
-            std::cout << "[DEBUG] Unhandled MIDI message: status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2 << std::endl;
-            break;
+    std::cout << "[DEBUG] Module::processMidiMessage: status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2 << std::endl;
+    uint8_t midiData[3] = {status, data1, data2};
+    uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
+    for (auto& engine : fmEngines_) {
+        std::cout << "[DEBUG] midiDataHandler: channel=" << (int)msgChannel << ", status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2 << std::endl;
+        engine->midiDataHandler(msgChannel, midiData, 3);
     }
 }
 
