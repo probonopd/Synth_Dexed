@@ -59,8 +59,8 @@ jobs:
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
           docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
-            git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
+            git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
           "
