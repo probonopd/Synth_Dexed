@@ -45,10 +45,22 @@ jobs:
         env:
           CMAKE_BUILD_TYPE: Release
 
+        
+      - name: Build static ALSA library
+        if: matrix.build_type == 'alpine-static'
+        run: |
+          apk add --no-cache build-base wget autoconf automake libtool
+          wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2
+          tar -xjf alsa-lib-1.2.9.tar.bz2
+          cd alsa-lib-1.2.9
+          ./configure --enable-static --disable-shared
+          make -j$(nproc)
+          make install
+
       - name: Configure (Alpine Static)
         if: matrix.build_type == 'alpine-static'
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS="-static -lasound"
-        
+
       - name: Build C++ project
         run: |
              cmake --build build --config Release
