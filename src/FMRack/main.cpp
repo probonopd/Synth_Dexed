@@ -130,8 +130,6 @@ void audioThread() {
 bool initializeAudioMidi() {
     // Initialize MIDI input
     UINT numMidiDevices = midiInGetNumDevs();
-    std::cout << "Found " << numMidiDevices << " MIDI input devices:\n";
-    
     for (UINT i = 0; i < numMidiDevices; ++i) {
         MIDIINCAPS caps;
         if (midiInGetDevCaps(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR) {
@@ -395,7 +393,7 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             midiDev = std::atoi(argv[i + 1]);
             ++i;
         } else if (arg == "--num-modules" && i + 1 < argc) {
-            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 16);
+            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 8);
             ++i;
         } else if (arg == "--unison-voices" && i + 1 < argc) {
             unisonVoices = std::clamp(std::atoi(argv[i + 1]), 1, 4);
@@ -428,231 +426,6 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
     }
 }
 
-// Windows: Enumerate audio output devices
-void listAudioDevices() {
-    UINT numDevices = waveOutGetNumDevs();
-    std::cout << "Available audio output devices:\n";
-    
-    for (UINT i = 0; i < numDevices; ++i) {
-        WAVEOUTCAPS woc;
-        if (waveOutGetDevCaps(i, &woc, sizeof(WAVEOUTCAPS)) == MMSYSERR_NOERROR) {
-            std::wcout << "  " << i << ": " << woc.szPname << L"\n";
-        }
-    }
-    
-    if (numDevices == 0) {
-        std::cout << "  No audio output devices found.\n";
-    }
-}
-
-// Windows MIDI input enumeration is already implemented in initializeAudioMidi()
-void listMidiDevices() {
-    UINT numMidiDevices = midiInGetNumDevs();
-    std::cout << "Available MIDI input devices:\n";
-    
-    for (UINT i = 0; i < numMidiDevices; ++i) {
-        MIDIINCAPS caps;
-        if (midiInGetDevCaps(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR) {
-            std::wcout << "  " << i << ": " << caps.szPname << L"\n";
-        }
-    }
-    
-    if (numMidiDevices == 0) {
-        std::cout << "  No MIDI input devices found.\n";
-    }
-}
-
-#elif __APPLE__
-// macOS: Enumerate audio output devices
-void listAudioDevices() {
-    UInt32 propSize;
-    AudioObjectPropertyAddress propAddress = {
-        kAudioHardwarePropertyDevices,
-        kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMain
-    };
-    
-    // Get number of devices
-    AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &propAddress, 0, NULL, &propSize);
-    int deviceCount = propSize / sizeof(AudioDeviceID);
-    
-    // Get device IDs
-    std::vector<AudioDeviceID> deviceIDs(deviceCount);
-    AudioObjectGetPropertyData(kAudioObjectSystemObject, &propAddress, 0, NULL, &propSize, deviceIDs.data());
-    
-    std::cout << "Available audio output devices:\n";
-    int deviceIndex = 0;
-    
-    // Iterate through devices and print info
-    for (const auto& deviceID : deviceIDs) {
-        // Check if device has output channels
-        propAddress.mSelector = kAudioDevicePropertyStreamConfiguration;
-        propAddress.mScope = kAudioDevicePropertyScopeOutput;
-        AudioObjectGetPropertyDataSize(deviceID, &propAddress, 0, NULL, &propSize);
-        
-        if (propSize > 0) {
-            // Get device name
-            CFStringRef deviceName = NULL;
-            propSize = sizeof(CFStringRef);
-            propAddress.mSelector = kAudioDevicePropertyDeviceNameCFString;
-            propAddress.mScope = kAudioObjectPropertyScopeGlobal;
-            AudioObjectGetPropertyData(deviceID, &propAddress, 0, NULL, &propSize, &deviceName);
-            
-            char name[256];
-            CFStringGetCString(deviceName, name, sizeof(name), kCFStringEncodingUTF8);
-            CFRelease(deviceName);
-            
-            std::cout << "  " << deviceIndex << ": " << name << " (ID: " << deviceID << ")\n";
-            deviceIndex++;
-        }
-    }
-    
-    if (deviceIndex == 0) {
-        std::cout << "  No audio output devices found.\n";
-    }
-}
-
-// macOS: Enumerate MIDI input devices
-void listMidiDevices() {
-    ItemCount sourceCount = MIDIGetNumberOfSources();
-    std::cout << "Available MIDI input devices:\n";
-    
-    for (ItemCount i = 0; i < sourceCount; ++i) {
-        MIDIEndpointRef source = MIDIGetSource(i);
-        
-        // Get device name
-        CFStringRef displayName = NULL;
-        MIDIObjectGetStringProperty(source, kMIDIPropertyDisplayName, &displayName);
-        
-        char name[256];
-        CFStringGetCString(displayName, name, sizeof(name), kCFStringEncodingUTF8);
-        CFRelease(displayName);
-        
-        std::cout << "  " << i << ": " << name << "\n";
-    }
-    
-    if (sourceCount == 0) {
-        std::cout << "  No MIDI input devices found.\n";
-    }
-}
-
-#elif __linux__
-// Linux: Enumerate ALSA audio output devices
-void listAudioDevices() {
-    int card = -1;
-    int device;
-    int err;
-    std::cout << "Available audio output devices:\n";
-    int deviceIndex = 0;
-    
-    if ((err = snd_card_next(&card)) < 0) {
-        std::cout << "  Cannot enumerate sound cards: " << snd_strerror(err) << "\n";
-        return;
-    }
-    
-    while (card >= 0) {
-        char name[32];
-        sprintf(name, "hw:%d", card);
-        
-        snd_ctl_t* ctl;
-        if ((err = snd_ctl_open(&ctl, name, 0)) < 0) {
-            std::cout << "  Cannot open control for card " << card << ": " << snd_strerror(err) << "\n";
-            continue;
-        }
-        
-        device = -1;
-        while (true) {
-            if ((err = snd_ctl_pcm_next_device(ctl, &device)) < 0) {
-                std::cout << "  Cannot get next PCM device: " << snd_strerror(err) << "\n";
-                break;
-            }
-            
-            if (device < 0)
-                break;
-                
-            snd_pcm_info_t* info;
-            snd_pcm_info_alloca(&info);
-            snd_pcm_info_set_device(info, device);
-            snd_pcm_info_set_subdevice(info, 0);
-            snd_pcm_info_set_stream(info, SND_PCM_STREAM_PLAYBACK);
-            
-            if ((err = snd_ctl_pcm_info(ctl, info)) == 0) {
-                // This device supports playback
-                char cardName[128];
-                if ((err = snd_card_get_name(card, cardName)) < 0) {
-                    strcpy(cardName, "Unknown");
-                }
-                
-                std::cout << "  " << deviceIndex << ": hw:" << card << "," << device << " - " 
-                          << cardName << " - " << snd_pcm_info_get_name(info) << "\n";
-                deviceIndex++;
-            }
-        }
-        
-        snd_ctl_close(ctl);
-        
-        if ((err = snd_card_next(&card)) < 0) {
-            std::cout << "  Cannot enumerate sound cards: " << snd_strerror(err) << "\n";
-            break;
-        }
-    }
-    
-    if (deviceIndex == 0) {
-        std::cout << "  No audio output devices found.\n";
-    }
-}
-
-// Linux: Enumerate ALSA MIDI input devices
-void listMidiDevices() {
-    int err;
-    snd_seq_t* seq;
-    
-    if ((err = snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0)) < 0) {
-        std::cout << "Cannot open ALSA sequencer: " << snd_strerror(err) << "\n";
-        return;
-    }
-    
-    snd_seq_client_info_t* client_info;
-    snd_seq_port_info_t* port_info;
-    
-    snd_seq_client_info_alloca(&client_info);
-    snd_seq_port_info_alloca(&port_info);
-    
-    std::cout << "Available MIDI input devices:\n";
-    int deviceIndex = 0;
-    
-    snd_seq_client_info_set_client(client_info, -1);
-    while (snd_seq_query_next_client(seq, client_info) >= 0) {
-        int client = snd_seq_client_info_get_client(client_info);
-        
-        // Skip system clients (0 = system timer, 1 = system announce)
-        if (client < 2) continue;
-        
-        snd_seq_port_info_set_client(port_info, client);
-        snd_seq_port_info_set_port(port_info, -1);
-        
-        while (snd_seq_query_next_port(seq, port_info) >= 0) {
-            unsigned int port_caps = snd_seq_port_info_get_capability(port_info);
-            
-            if ((port_caps & (SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ))
-                == (SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_READ)) {
-                std::cout << "  " << deviceIndex << ": " 
-                          << snd_seq_client_info_get_name(client_info) << " - "
-                          << snd_seq_port_info_get_name(port_info) << " ("
-                          << client << ":" << snd_seq_port_info_get_port(port_info) << ")\n";
-                deviceIndex++;
-            }
-        }
-    }
-    
-    snd_seq_close(seq);
-    
-    if (deviceIndex == 0) {
-        std::cout << "  No MIDI input devices found.\n";
-    }
-}
-#endif
-
 int main(int argc, char* argv[]) {
     std::cout << "FMRack Multi-Timbral FM Synthesizer\n";
     std::cout << "===================================\n";
@@ -674,13 +447,130 @@ int main(int argc, char* argv[]) {
         "Unknown"
 #endif
         << "\n\n";
-    
-    // List audio and MIDI devices before parsing command line arguments
-    listAudioDevices();
-    std::cout << "\n";
-    listMidiDevices();
-    std::cout << "\n";
-    
+
+    // List audio and MIDI devices for each platform
+#ifdef _WIN32
+    // List audio output devices
+    UINT numAudioDevs = waveOutGetNumDevs();
+    std::cout << "Available audio output devices:\n";
+    for (UINT i = 0; i < numAudioDevs; ++i) {
+        WAVEOUTCAPS caps;
+        if (waveOutGetDevCaps(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR) {
+            std::wcout << "  " << i << ": " << caps.szPname << L"\n";
+        }
+    }
+    if (numAudioDevs == 0) std::cout << "  (none found)\n";
+
+    // List MIDI input devices
+    UINT numMidiDevices = midiInGetNumDevs();
+    std::cout << "Available MIDI input devices:\n";
+    for (UINT i = 0; i < numMidiDevices; ++i) {
+        MIDIINCAPS caps;
+        if (midiInGetDevCaps(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR) {
+            std::wcout << "  " << i << ": " << caps.szPname << L"\n";
+        }
+    }
+    if (numMidiDevices == 0) std::cout << "  (none found)\n";
+#elif __APPLE__
+    // List audio devices (CoreAudio)
+    std::cout << "Available audio output devices:\n";
+    UInt32 size = 0;
+    AudioObjectPropertyAddress addr = {
+        kAudioHardwarePropertyDevices,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMaster
+    };
+    AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &addr, 0, nullptr, &size);
+    int numDevices = size / sizeof(AudioDeviceID);
+    std::vector<AudioDeviceID> devices(numDevices);
+    AudioObjectGetPropertyData(kAudioObjectSystemObject, &addr, 0, nullptr, &size, devices.data());
+    for (int i = 0; i < numDevices; ++i) {
+        char name[256] = {0};
+        size = sizeof(name);
+        AudioObjectPropertyAddress nameAddr = {
+            kAudioObjectPropertyName,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMaster
+        };
+        AudioObjectGetPropertyData(devices[i], &nameAddr, 0, nullptr, &size, name);
+        std::cout << "  " << i << ": " << name << "\n";
+    }
+    if (numDevices == 0) std::cout << "  (none found)\n";
+
+    // List MIDI input devices
+    ItemCount midiSources = MIDIGetNumberOfSources();
+    std::cout << "Available MIDI input devices:\n";
+    for (ItemCount i = 0; i < midiSources; ++i) {
+        MIDIEndpointRef src = MIDIGetSource(i);
+        if (src) {
+            CFStringRef pname = nullptr;
+            MIDIObjectGetStringProperty(src, kMIDIPropertyName, &pname);
+            char name[256] = {0};
+            if (pname) {
+                CFStringGetCString(pname, name, sizeof(name), kCFStringEncodingUTF8);
+                CFRelease(pname);
+            }
+            std::cout << "  " << i << ": " << name << "\n";
+        }
+    }
+    if (midiSources == 0) std::cout << "  (none found)\n";
+#elif __linux__
+    // List ALSA audio devices
+    std::cout << "Available ALSA audio output devices:\n";
+    void **hints;
+    if (snd_device_name_hint(-1, "pcm", &hints) == 0) {
+        void **n = hints;
+        int idx = 0;
+        while (*n != nullptr) {
+            char *name = snd_device_name_get_hint(*n, "NAME");
+            char *desc = snd_device_name_get_hint(*n, "DESC");
+            if (name) {
+                std::cout << "  " << idx << ": " << name;
+                if (desc) std::cout << " (" << desc << ")";
+                std::cout << "\n";
+                free(name);
+            }
+            if (desc) free(desc);
+            ++n;
+            ++idx;
+        }
+        snd_device_name_free_hint(hints);
+        if (idx == 0) std::cout << "  (none found)\n";
+    } else {
+        std::cout << "  (error listing devices)\n";
+    }
+
+    // List ALSA MIDI devices
+    std::cout << "Available ALSA MIDI input devices:\n";
+    snd_seq_t* seq;
+    if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) == 0) {
+        snd_seq_client_info_t *cinfo;
+        snd_seq_port_info_t *pinfo;
+        snd_seq_client_info_alloca(&cinfo);
+        snd_seq_port_info_alloca(&pinfo);
+        int idx = 0;
+        snd_seq_client_info_set_client(cinfo, -1);
+        while (snd_seq_query_next_client(seq, cinfo) >= 0) {
+            int client = snd_seq_client_info_get_client(cinfo);
+            snd_seq_port_info_set_client(pinfo, client);
+            snd_seq_port_info_set_port(pinfo, -1);
+            while (snd_seq_query_next_port(seq, pinfo) >= 0) {
+                unsigned int caps = snd_seq_port_info_get_capability(pinfo);
+                if ((caps & SND_SEQ_PORT_CAP_WRITE) && (caps & SND_SEQ_PORT_CAP_SUBS_WRITE)) {
+                    std::cout << "  " << idx << ": "
+                              << snd_seq_client_info_get_name(cinfo) << " - "
+                              << snd_seq_port_info_get_name(pinfo) << "\n";
+                    ++idx;
+                }
+            }
+        }
+        if (idx == 0) std::cout << "  (none found)\n";
+        snd_seq_close(seq);
+    } else {
+        std::cout << "  (error listing MIDI devices)\n";
+    }
+#endif
+
     // Parse command line arguments
     std::string performanceFile;
     parseCommandLineArgs(argc, argv, performanceFile);
@@ -702,7 +592,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Loading performance file: " << performanceFile << "\n";
             if (g_rack->loadPerformance(performanceFile)) {
                 std::cout << "Performance loaded successfully!\n";
-                std::cout << "Enabled parts: " << g_rack->getEnabledPartCount() << "/16\n";
+                std::cout << "Enabled parts: " << g_rack->getEnabledPartCount() << "/8\n";
             } else {
                 std::cout << "Failed to load performance file. Using default configuration.\n";
                 g_rack->setDefaultPerformance();
@@ -711,7 +601,7 @@ int main(int argc, char* argv[]) {
             // Custom default setup using command line options
             FMRack::Performance perf;
             perf.setDefaults();
-            for (int i = 0; i < 16; ++i) {
+            for (int i = 0; i < 8; ++i) {
                 if (i < numModules) {
                     perf.parts[i].midiChannel = i + 1;
                     perf.parts[i].unisonVoices = unisonVoices;
