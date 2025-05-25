@@ -209,34 +209,64 @@ In essence, FMRack takes inspiration from the powerful multi-timbral concepts of
 
 ## Performance INI File Format
 
-The `Performance` configuration is stored in an INI file format with numbered parameters for each part. Based on the actual format, the structure is:
+The `Performance` configuration is stored in an INI file format with numbered parameters for each part. The format is as follows:
 
-**Per-Part Parameters (1-8):**
-Each part is defined by numbered parameters (e.g., `BankNumber1`, `Volume1`, etc.):
-- `BankNumber[N]` - Bank identifier for patch selection (0-127)
-- `VoiceNumber[N]` - Voice/patch number within the bank (0-127)
-- `MIDIChannel[N]` - MIDI channel assignment (0=disabled, 1-16)
-- `Volume[N]` - Part volume level (0-127)
-- `Pan[N]` - Stereo panning (0-127, where 64=center)
-- `Detune[N]` - Fine tuning in cents (-64 to +63)
-- `Cutoff[N]` - Filter cutoff frequency (0-127)
-- `Resonance[N]` - Filter resonance amount (0-127)
-- `NoteLimitLow[N]`, `NoteLimitHigh[N]` - Note range limits (0-127)
-- `NoteShift[N]` - Transpose in semitones (-24 to +24)
-- `ReverbSend[N]` - Amount sent to reverb effect (0-127)
-- `PitchBendRange[N]` - Pitch bend sensitivity in semitones (0-12)
-- `PitchBendStep[N]` - Pitch bend step mode (0=smooth, 1=stepped)
+```
+# TG#
+#BankNumber#=0        # 0 .. 127
+#VoiceNumber#=1       # 1 .. 32
+#MIDIChannel#=1       # 1 .. 16, 0: off, >16: omni mode
+#Volume#=100          # 0 .. 127
+#Pan#=64              # 0 .. 127
+#Detune#=0            # -99 .. 99
+#Cutoff#=99           # 0 .. 99
+#Resonance#=0         # 0 .. 99
+#NoteLimitLow#=0      # 0 .. 127, C-2 .. G8
+#NoteLimitHigh#=127   # 0 .. 127, C-2 .. G8
+#NoteShift#=0         # -24 .. 24
+#ReverbSend#=0        # 0 .. 99
+#PitchBendRange#=2    # 0 .. 12
+#PitchBendStep#=0     # 0 .. 12
+#PortamentoMode#=0    # 0 .. 1
+#PortamentoGlissando#=0 # 0 .. 1
+#PortamentoTime#=0    # 0 .. 99
+#VoiceData#=          # space separated hex numbers of 156 voice parameters. Example: 5F 1D 14 32 63 [....] 20 55
+#MonoMode#=0          # 0-off .. 1-On
+#ModulationWheelRange#=99 # 0..99
+#ModulationWheelTarget#=1 # 0..7
+#FootControlRange#=99 # 0..99
+#FootControlTarget#=0 # 0..7
+#BreathControlRange#=99 # 0..99
+#BreathControlTarget#=0 # 0..7
+#AftertouchRange#=99  # 0..99
+#AftertouchTarget#=0  # 0..7
+```
+
+**Parameter Details:**
+- `BankNumber[N]` - Bank identifier for patch selection (0..127)
+- `VoiceNumber[N]` - Voice/patch number within the bank (1..32)
+- `MIDIChannel[N]` - MIDI channel assignment (1..16, 0=off, >16=omni mode)
+- `Volume[N]` - Part volume level (0..127)
+- `Pan[N]` - Stereo panning (0..127, 64=center)
+- `Detune[N]` - Fine tuning in cents (-99..99)
+- `Cutoff[N]` - Filter cutoff frequency (0..99)
+- `Resonance[N]` - Filter resonance amount (0..99)
+- `NoteLimitLow[N]`, `NoteLimitHigh[N]` - Note range limits (0..127, C-2..G8)
+- `NoteShift[N]` - Transpose in semitones (-24..24)
+- `ReverbSend[N]` - Amount sent to reverb effect (0..99)
+- `PitchBendRange[N]` - Pitch bend sensitivity in semitones (0..12)
+- `PitchBendStep[N]` - Pitch bend step mode (0..12)
 - `PortamentoMode[N]` - Portamento on/off (0/1)
 - `PortamentoGlissando[N]` - Glissando mode (0/1)
-- `PortamentoTime[N]` - Portamento time (0-127)
-- `VoiceData[N]` - Complete DX7 patch data as space-separated hex bytes (155 bytes)
-- `MonoMode[N]` - Monophonic mode (0=poly, 1=mono)
+- `PortamentoTime[N]` - Portamento time (0..99)
+- `VoiceData[N]` - Complete DX7 patch data as space-separated hex bytes (156 bytes)
+- `MonoMode[N]` - Monophonic mode (0=off, 1=on)
 
 **Controller Assignments per Part:**
-- `ModulationWheelRange[N]`, `ModulationWheelTarget[N]` - Mod wheel assignment
-- `FootControlRange[N]`, `FootControlTarget[N]` - Foot controller assignment
-- `BreathControlRange[N]`, `BreathControlTarget[N]` - Breath controller assignment
-- `AftertouchRange[N]`, `AftertouchTarget[N]` - Aftertouch assignment
+- `ModulationWheelRange[N]` (0..99), `ModulationWheelTarget[N]` (0..7)
+- `FootControlRange[N]` (0..99), `FootControlTarget[N]` (0..7)
+- `BreathControlRange[N]` (0..99), `BreathControlTarget[N]` (0..7)
+- `AftertouchRange[N]` (0..99), `AftertouchTarget[N]` (0..7)
 
 **Global Effects Settings:**
 - `CompressorEnable` - Enable/disable compressor (0/1)
@@ -250,7 +280,7 @@ Each part is defined by numbered parameters (e.g., `BankNumber1`, `Volume1`, etc
 
 **Key Features:**
 - Parts with `MIDIChannel[N]=0` are disabled
-- `VoiceData[N]` contains the complete 155-byte DX7 patch as hex values
+- `VoiceData[N]` contains the complete 156-byte DX7 patch as hex values
 - Multiple parts can share the same MIDI channel for layering
 - Each part can have different detune and pan settings for stereo spread effects
 - Controller assignments allow real-time parameter modulation
@@ -272,14 +302,14 @@ This format allows complete specification of a multi-timbral setup in a single f
 - Final signal path: (Dry Sum + Reverb Output) → Compressor → Host Output
 
 ### Patch Loading
-- `VoiceData[N]` contains exactly 155 hex bytes representing a complete DX7 patch
+- `VoiceData[N]` contains exactly 156 hex bytes representing a complete DX7 patch
 - Patch data is loaded directly into the `Dexed` during initialization
 - Bank/Voice numbers in the INI file are for reference only; actual patch data comes from `VoiceData[N]`
 
 ### Controller Mapping
 - Each part supports 4 controller types: Mod Wheel, Foot Control, Breath Control, Aftertouch
-- `*Range[N]` parameters define the amount of modulation (0-127)
-- `*Target[N]` parameters define which synthesis parameter is modulated (implementation-specific mapping)
+- `*Range[N]` parameters define the amount of modulation (0..99)
+- `*Target[N]` parameters define which synthesis parameter is modulated (implementation-specific mapping, 0..7)
 
 ### Effects Parameters
 - Compressor: Standard dynamics processor with threshold, ratio, attack, release, makeup gain
