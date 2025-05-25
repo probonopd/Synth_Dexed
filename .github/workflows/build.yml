@@ -24,6 +24,9 @@ jobs:
           - os: ubuntu-22.04
             container: alpine:latest
             build_type: alpine-static
+          - os: ubuntu-22.04-arm
+            container: alpine:latest
+            build_type: alpine-static-arm64
     steps:
       - uses: actions/checkout@v4
 
@@ -32,7 +35,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
 
       - name: Install dependencies (Alpine)
-        if: matrix.build_type == 'alpine-static'
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev
 
       - name: Install dependencies (Windows)
@@ -40,14 +43,15 @@ jobs:
         uses: lukka/get-cmake@latest
 
       - name: Configure
-        if: matrix.build_type != 'alpine-static'
+        if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
         run: cmake -S . -B build
         env:
           CMAKE_BUILD_TYPE: Release
 
         
       - name: Build static ALSA library
-        if: matrix.build_type == 'alpine-static'
+        # https://gitlab.alpinelinux.org/alpine/aports/-/issues/17187
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
           apk add --no-cache build-base wget autoconf automake libtool
           wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2
@@ -58,7 +62,7 @@ jobs:
           make install
 
       - name: Configure (Alpine Static)
-        if: matrix.build_type == 'alpine-static'
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS="-static -lasound"
 
       - name: Build C++ project
