@@ -539,6 +539,44 @@ int main(int argc, char* argv[]) {
 #endif
         << "\n\n";
 
+#ifdef __linux__
+    // Try to stop PulseAudio and PipeWire user services (failures are expected and are ok)
+    (void)system("systemctl --user stop pulseaudio.socket && systemctl --user stop pulseaudio.service");
+    (void)system("systemctl --user stop pipewire.socket && systemctl --user stop pipewire.service");
+    (void)system("systemctl --user stop pipewire-pulse.socket && systemctl --user stop pipewire-pulse.service");
+
+    // Pre-scan ALSA devices for "sysdefault" if user did not specify -a/--audio-device
+    bool userSetAudioDev = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
+            userSetAudioDev = true;
+            break;
+        }
+    }
+    if (!userSetAudioDev) {
+        void **hints;
+        if (snd_device_name_hint(-1, "pcm", &hints) == 0) {
+            void **n = hints;
+            int idx = 0;
+            int sysdefaultIdx = -1;
+            while (*n != nullptr) {
+                char *name = snd_device_name_get_hint(*n, "NAME");
+                if (name && std::string(name).find("sysdefault") != std::string::npos) {
+                    if (sysdefaultIdx == -1) sysdefaultIdx = idx;
+                }
+                if (name) free(name);
+                ++n;
+                ++idx;
+            }
+            if (sysdefaultIdx != -1) {
+                audioDev = sysdefaultIdx;
+            }
+            snd_device_name_free_hint(hints);
+        }
+    }
+#endif
+
     // List audio and MIDI devices for each platform
 #ifdef _WIN32
     // List audio output devices
