@@ -30,7 +30,7 @@ The branch `native` is original to this repository, in the hope that it can even
 
 ### Branch `minidexed-native`
 
-Similar to branch `native`, but implements MiniDexed performances. It is centered around an object oriented [FMRack architecture](../../blob/minidexed-native/src/FMRack/ARCHITECTURE.md).
+Similar to branch `native`, but implements MiniDexed performances. It is centered around an object oriented [FMRack architecture](../../blob/minidexed-native/src/FMRack/README.md).
 
 ### TODO
 
