@@ -52,6 +52,7 @@ jobs:
             ./configure --enable-static --disable-shared && \
             make -j$(nproc) && \
             make install && \
+            cd - && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
             git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && \
             cd Synth_Dexed && \
@@ -86,5 +87,5 @@ jobs:
         with:
           name: Synth_Dexed-${{ env.os }}${{ env.build_type != '' && format('-{0}', env.build_type) || '' }}
           path: |
-            Synth_Dexed/build/bin/Release/*
-            Synth_Dexed/build/bin/*
+            Synth_Dexed/build/bin/Release/FMRack.exe
+            Synth_Dexed/build/bin/FMRack
