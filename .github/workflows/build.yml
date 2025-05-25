@@ -44,8 +44,8 @@ jobs:
       - name: Build static ALSA library
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
-          docker run -v $(pwd):/workspace -w /workspace alpine:latest sh -c "
-            apk add --no-cache build-base wget autoconf automake libtool && \
+          docker run --rm -v $(pwd):/workspace -w /workspace alpine:latest sh -c "
+            apk add --no-cache build-base wget autoconf automake libtool linux-headers && \
             wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
             tar -xjf alsa-lib-1.2.9.tar.bz2 && \
             cd alsa-lib-1.2.9 && \
