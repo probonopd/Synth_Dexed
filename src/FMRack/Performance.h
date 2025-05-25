@@ -6,7 +6,7 @@
 
 namespace FMRack {
 
-// Performance class - stores configuration for up to 8 parts
+// Performance class - stores configuration for up to 16 parts
 class Performance {
 public:
     struct PartConfig {
@@ -61,7 +61,7 @@ public:
         uint8_t reverbLevel = 32;
     };
     
-    std::array<PartConfig, 8> parts;
+    std::array<PartConfig, 16> parts;
     EffectsConfig effects;
     
     // Constructor and destructor
