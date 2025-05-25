@@ -151,7 +151,7 @@ bool Performance::loadFromFile(const std::string& filename) {
 }
 
 void Performance::setDefaults() {
-    // Initialize with a basic FM patch (INIT VOICE)
+    // Initialize with a basic FM voice (INIT VOICE)
     std::array<uint8_t, 156> initVoice = {{
         99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6
         99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5

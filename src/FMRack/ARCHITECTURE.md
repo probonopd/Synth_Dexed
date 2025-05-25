@@ -6,12 +6,12 @@ At its heart, the system is conceived as a digital 'rack' of synthesizer modules
 
 ## Core Concepts
 
-The system is designed around a hierarchical structure to manage multiple synthesizer instances (modules), each capable of playing a distinct sound (patch) with its own settings.
+The system is designed around a hierarchical structure to manage multiple synthesizer instances (modules), each capable of playing a distinct sound (voice) with its own settings.
 
--   **Performance**: A `Performance` object defines the complete setup for up to 8 parts. This setup includes, for each part, its specific synthesizer patch data (complete DX7 patch as hex bytes), MIDI channel, volume, panning, detune, transpose, note range, controller assignments, reverb send, and other parameters. Such a `Performance` object, encapsulating all these part configurations, is loaded from a single INI file.
+-   **Performance**: A `Performance` object defines the complete setup for up to 8 parts. This setup includes, for each part, its specific synthesizer voice data (complete DX7 voice as hex bytes), MIDI channel, volume, panning, detune, transpose, note range, controller assignments, reverb send, and other parameters. Such a `Performance` object, encapsulating all these part configurations, is loaded from a single INI file.
 -   **Rack**: The `Rack` is the top-level container. It manages a collection of `Module` instances. Its primary responsibilities are to load a multi-part performance configuration (from an INI file via the `Performance` class), instantiate and configure `Module`s based on this data, route incoming MIDI messages to the appropriate `Module`(s), mix the audio output from all active `Module`s, and apply global effects (Compressor and Reverb).
 -   **Module**: A `Module` represents a single instrument or sound layer within the `Rack`, corresponding to one part in a `Performance`. Each `Module` is configured using part-specific data from a `Performance` object. It contains one or more `Dexed` instances (up to 4 for unison effects). The `Module` processes MIDI messages assigned to it, manages its `Dexed` instance(s), and applies module-level volume, panning, detune, and reverb send.
--   **Dexed**: This is the core FM synthesizer engine, emulating the Yamaha DX7. It generates stereo audio based on its patch parameters and MIDI input. It handles note on/off, pitch bend, control changes, and SysEx messages to modify its sound. The core functionality is provided by the `Dexed` class from `dexed.h`, outside the `FMRack` namespace, allowing it to be used independently of the `Rack` and `Module` structures.
+-   **Dexed**: This is the core FM synthesizer engine, emulating the Yamaha DX7. It generates stereo audio based on its voice parameters and MIDI input. It handles note on/off, pitch bend, control changes, and SysEx messages to modify its sound. The core functionality is provided by the `Dexed` class from `dexed.h`, outside the `FMRack` namespace, allowing it to be used independently of the `Rack` and `Module` structures.
 -   **Compressor**: A dynamics processor effect that controls the dynamic range of the audio signal. The `Compressor` is owned by the `Rack` and processes the final mixed audio output from all `Module`s before it's returned to the host.
 -   **Reverb**: A spatial effect that adds ambience and depth to the audio signal. The `Reverb` is owned by the `Rack` and receives audio input from `Module`s via their "Reverb Send" parameter. The reverb output is mixed with the dry signal in the final output.
 -   **Unison**: The system supports unison by allowing a `Module` to manage multiple `Dexed` instances (up to 4). Each instance can be configured with its own detune and pan settings, creating a richer sound by layering multiple voices for the same note with slight variations.
@@ -32,7 +32,7 @@ The system is designed around a hierarchical structure to manage multiple synthe
     *   Create and configure its internal `Dexed` instances (1-4 instances based on unison settings).
 6.  Each `Dexed` instance:
     *   Initializes its internal synthesis components.
-    *   Loads the patch parameters (from the `VoiceData[N]` hex bytes in the `Performance` object).
+    *   Loads the voice parameters (from the `VoiceData[N]` hex bytes in the `Performance` object).
     *   Applies note range limits and mono/poly mode settings.
     *   Applies voice-specific detune and pan settings (for unison spread).
 
@@ -81,7 +81,7 @@ This section describes the main classes and their relationships.
     *   Represents a single instrument/sound layer within the `Rack`.
     *   Manages one or more `Dexed` instances (1-4 for unison effects).
     *   Is configured by part-specific data from a `Performance` object.
-    *   Processes MIDI messages and dispatches them to its `Dexed` instance(s).
+    *   Processes MIDI messages and disvoicees them to its `Dexed` instance(s).
     *   Applies module-level volume, panning, detune, transpose, and reverb send.
     *   Handles controller assignments and portamento settings.
     *   Manages unison voice allocation and mixing.
@@ -92,19 +92,19 @@ This section describes the main classes and their relationships.
 ### Class: `Performance`
 
 *   **Responsibilities**:
-    *   Stores all settings for a multi-part sound configuration, defining up to 8 parts. This includes, for each part, its complete DX7 patch data (as 155 hex bytes), MIDI channel, volume, panning, detune, transpose, note ranges, controller assignments, reverb send, etc.
+    *   Stores all settings for a multi-part sound configuration, defining up to 8 parts. This includes, for each part, its complete DX7 voice data (as 155 hex bytes), MIDI channel, volume, panning, detune, transpose, note ranges, controller assignments, reverb send, etc.
     *   Is populated by parsing an INI file with numbered parameters (e.g., `Volume1`, `Pan2`, etc.).
     *   Provides the configuration data for each part to be used by the `Rack` during `Module` instantiation.
     *   Stores global effects settings (compressor and reverb parameters).
 *   **Key Relationships**:
-    *   **Contains**: Configuration data for multiple parts, including complete DX7 patch data (155 hex bytes per part), and various scalar properties for each part's configuration.
+    *   **Contains**: Configuration data for multiple parts, including complete DX7 voice data (155 hex bytes per part), and various scalar properties for each part's configuration.
     *   **Used by**: `Rack` (to load a performance configuration and guide `Module` creation).
 
 ### Class: `Dexed`
 
 *   **Responsibilities**:
     *   Core FM synthesis engine (emulates Yamaha DX7) using the `Dexed` class from `dexed.h`, which is outside the `FMRack` namespace.
-    *   Generates stereo audio output based on its current patch parameters and MIDI input.
+    *   Generates stereo audio output based on its current voice parameters and MIDI input.
     *   Handles MIDI events (note on/off, CC, pitch bend, SysEx) to modulate its sound.
     *   Manages all internal synthesis parameters (algorithms, operator settings, envelopes, LFO, etc.).
     *   Applies note range limiting and mono/poly mode settings.
@@ -177,7 +177,7 @@ This section describes the main classes and their relationships.
 +-----------------+              |             |
 |    FMEngine     |              |             |
 |-----------------|              |             |
-| - patch_params  |              |             |
+| - voice_params  |              |             |
 | - note_range    |--------------+-------------+
 | - mono_mode     |
 | - voice_detune  |
@@ -196,12 +196,12 @@ The architecture of FMRack shares conceptual similarities with Yamaha's classic 
 *   **Yamaha TX816:**
     *   **Analogy:** The TX816 is essentially a rack chassis containing eight independent TF1 modules, each being a complete DX7 synthesizer. This is very similar to the `Rack` in FMRack containing multiple `Module` instances, where each `Module` (with at least one `Dexed` engine) acts like a TF1.
     *   **Multi-timbrality:** Both offer multi-timbrality by having distinct synth voices/modules. The TX816 has 8, FMRack's `Rack` can manage up to 8 `Module`s.
-    *   **Configuration:** In the TX816, each TF1 module stores its own patch and settings. While you could set them up for a multi-timbral performance, there isn't a single overarching "Performance" file like FMRack's `Performance` object that defines the entire rack's setup in one go. FMRack's `Performance` object provides a more centralized configuration.
+    *   **Configuration:** In the TX816, each TF1 module stores its own voice and settings. While you could set them up for a multi-timbral performance, there isn't a single overarching "Performance" file like FMRack's `Performance` object that defines the entire rack's setup in one go. FMRack's `Performance` object provides a more centralized configuration.
     *   **Unison:** To achieve unison on a TX816, you would manually configure multiple TF1 modules to the same MIDI channel and detune/pan them. FMRack formalizes this by allowing a `Module` to manage multiple `Dexed` instances specifically for unison, which is a more integrated approach.
 
 *   **Yamaha TX802:**
     *   **Analogy:** The TX802 is an 8-part multi-timbral synthesizer with 16-note polyphony shared among the parts. A "Part" in the TX802 is highly analogous to a `Module` in FMRack. The TX802 unit itself is like the `Rack`.
-    *   **Performance Management:** The TX802 features "Performance" presets that store the configuration for all 8 parts (patch, MIDI channel, volume, pan, detune, note range, etc.). This is *very* similar to how FMRack's `Performance` object stores the configuration for all its `Module`s, typically loaded from a single INI file.
+    *   **Performance Management:** The TX802 features "Performance" presets that store the configuration for all 8 parts (voice, MIDI channel, volume, pan, detune, note range, etc.). This is *very* similar to how FMRack's `Performance` object stores the configuration for all its `Module`s, typically loaded from a single INI file.
     *   **Voice Architecture:** Each "Part" in the TX802 draws from a common pool of 16 voices. In FMRack, each `Module` (corresponding to one part) contains one or more complete `Dexed` instances. For unison effects, a `Module` can have up to 4 `Dexed` instances, each with its own detune and pan settings, creating richer sounds than a single voice.
     *   **Flexibility:** FMRack's approach allows both multi-timbral operation (multiple parts on different MIDI channels) and unison effects (multiple `Dexed` instances per part), providing more flexibility than the TX802's shared polyphony model.
 
@@ -243,8 +243,8 @@ The `Performance` configuration is stored in an INI file format with numbered pa
 ```
 
 **Parameter Details:**
-- `BankNumber[N]` - Bank identifier for patch selection (0..127)
-- `VoiceNumber[N]` - Voice/patch number within the bank (1..32)
+- `BankNumber[N]` - Bank identifier for voice selection (0..127)
+- `VoiceNumber[N]` - Voice/voice number within the bank (1..32)
 - `MIDIChannel[N]` - MIDI channel assignment (1..16, 0=off, >16=omni mode)
 - `Volume[N]` - Part volume level (0..127)
 - `Pan[N]` - Stereo panning (0..127, 64=center)
@@ -259,7 +259,7 @@ The `Performance` configuration is stored in an INI file format with numbered pa
 - `PortamentoMode[N]` - Portamento on/off (0/1)
 - `PortamentoGlissando[N]` - Glissando mode (0/1)
 - `PortamentoTime[N]` - Portamento time (0..99)
-- `VoiceData[N]` - Complete DX7 patch data as space-separated hex bytes (156 bytes)
+- `VoiceData[N]` - Complete DX7 voice data as space-separated hex bytes (156 bytes)
 - `MonoMode[N]` - Monophonic mode (0=off, 1=on)
 
 **Controller Assignments per Part:**
@@ -280,7 +280,7 @@ The `Performance` configuration is stored in an INI file format with numbered pa
 
 **Key Features:**
 - Parts with `MIDIChannel[N]=0` are disabled
-- `VoiceData[N]` contains the complete 156-byte DX7 patch as hex values
+- `VoiceData[N]` contains the complete 156-byte DX7 voice as hex values
 - Multiple parts can share the same MIDI channel for layering
 - Each part can have different detune and pan settings for stereo spread effects
 - Controller assignments allow real-time parameter modulation
@@ -301,10 +301,10 @@ This format allows complete specification of a multi-timbral setup in a single f
 - Reverb sends are summed separately and processed through the `Reverb` effect
 - Final signal path: (Dry Sum + Reverb Output) → Compressor → Host Output
 
-### Patch Loading
-- `VoiceData[N]` contains exactly 156 hex bytes representing a complete DX7 patch
-- Patch data is loaded directly into the `Dexed` during initialization
-- Bank/Voice numbers in the INI file are for reference only; actual patch data comes from `VoiceData[N]`
+### Voice Loading
+- `VoiceData[N]` contains exactly 156 hex bytes representing a complete DX7 voice
+- Voice data is loaded directly into the `Dexed` during initialization
+- Bank/Voice numbers in the INI file are for reference only; actual voice data comes from `VoiceData[N]`
 
 ### Controller Mapping
 - Each part supports 4 controller types: Mod Wheel, Foot Control, Breath Control, Aftertouch
