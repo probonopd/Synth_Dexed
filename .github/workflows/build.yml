@@ -73,7 +73,7 @@ jobs:
       - name: Find build artifacts
         id: find_artifacts
         run: |
-          find . -type f -name 'Synth_Dexed*' -exec readlink -f {} \;
+          find . -type f -name 'FMRack*' -exec readlink -f {} \;
           echo "artifacts=$(find . -type f -name 'FMRack*' | tr '\n' ' ')" >> $GITHUB_OUTPUT || true
 
   upload:
