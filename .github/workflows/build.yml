@@ -35,7 +35,7 @@ jobs:
     steps:
       - name: Install dependencies (Linux)
         if: startsWith(matrix.os, 'ubuntu')
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libasound2-dev
+        run: sudo apt-get update && sudo apt-get install -y git cmake g++ libasound2-dev
 
       - name: Install dependencies (Windows)
         if: startsWith(matrix.os, 'windows')
@@ -59,9 +59,11 @@ jobs:
             cmake --build build --config Release
           "
 
-      - name: Build with CMake
+      - name: Build with CMake (Non-Alpine)
         if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
         run: |
+          git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
+          cd Synth_Dexed && \
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
 
@@ -81,7 +83,5 @@ jobs:
         with:
           name: Synth_Dexed-${{ env.os }}${{ env.build_type != '' && format('-{0}', env.build_type) || '' }}
           path: |
-            build/bin/Release/*
-            build/bin/*
             Synth_Dexed/build/bin/Release/*
             Synth_Dexed/build/bin/*
