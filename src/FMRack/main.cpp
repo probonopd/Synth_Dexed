@@ -271,30 +271,89 @@ bool initializeAudioMidi() {
 void audioThread() {
     // Set audio thread to high priority
     struct sched_param sch_params;
-    sch_params.sched_priority = 20;
-    pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params);
-    
+    sch_params.sched_priority = 20; // Consider increasing for SCHED_FIFO (e.g., 50) if system allows
+    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params) != 0) {
+        std::cerr << "Warning: Failed to set real-time priority for audio thread." << std::endl;
+    }
+
     snd_pcm_t* pcm_handle;
+    // TODO: Use the audioDev parameter to select the device string, similar to native/main_linux.cpp
+    // For now, using "default". The command line --audio-device is currently ignored for Linux.
     int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0) {
-        std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\n";
+        std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\\n";
         return;
     }
-    
+
     // Configure PCM
     snd_pcm_hw_params_t* hw_params;
     snd_pcm_hw_params_alloca(&hw_params);
-    snd_pcm_hw_params_any(pcm_handle, hw_params);
-    snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
-    snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_FLOAT_LE);
-    snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2);
-    unsigned int rate = SAMPLE_RATE;
-    snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, &rate, 0);
-    snd_pcm_hw_params_set_period_size(pcm_handle, hw_params, BUFFER_FRAMES, 0);
-    snd_pcm_hw_params(pcm_handle, hw_params);
-    snd_pcm_prepare(pcm_handle);
-    
-    std::vector<float> audioBuffer(BUFFER_FRAMES * 2); // Interleaved stereo
+    err = snd_pcm_hw_params_any(pcm_handle, hw_params);
+    if (err < 0) { std::cout << "Failed to init hw_params: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+
+    err = snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
+    if (err < 0) { std::cout << "Failed to set access: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+
+    err = snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_FLOAT_LE);
+    if (err < 0) { std::cout << "Failed to set format: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+
+    err = snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2);
+    if (err < 0) { std::cout << "Failed to set channels: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+
+    unsigned int current_rate_alsa = SAMPLE_RATE;
+    err = snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, &current_rate_alsa, 0);
+    if (err < 0) { std::cout << "Failed to set rate: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+    if (current_rate_alsa != SAMPLE_RATE) {
+        std::cout << "Warning: ALSA sample rate set to " << current_rate_alsa << " (requested " << SAMPLE_RATE 
+                  << "). This might cause audio issues as synth engine uses " << SAMPLE_RATE << "." << std::endl;
+        // Ideally, g_rack should be reconfigured or app should exit.
+    }
+
+    snd_pcm_uframes_t period_size_frames = BUFFER_FRAMES;
+    int dir = 0; // exact value
+    err = snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size_frames, &dir);
+    if (err < 0) { std::cout << "Failed to set period size near " << BUFFER_FRAMES << ": " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+    if (period_size_frames != BUFFER_FRAMES) {
+        std::cout << "Info: ALSA period size set to " << period_size_frames << " (requested " << BUFFER_FRAMES << ", dir=" << dir << ")." << std::endl;
+        // Note: The application's audio buffers (leftBuffer, rightBuffer, audioBuffer) and g_rack->processAudio
+        // are still using BUFFER_FRAMES. If period_size_frames is different, this could lead to issues.
+        // A more robust solution would adapt to period_size_frames. For now, we proceed with BUFFER_FRAMES for snd_pcm_writei.
+    }
+
+
+    // Attempt to set total buffer size to 2 periods
+    snd_pcm_uframes_t num_periods = 2;
+    // Use the (potentially adjusted) period_size_frames for calculating target buffer size
+    snd_pcm_uframes_t target_buffer_size_frames = period_size_frames * num_periods;
+    dir = 0; // exact value
+    err = snd_pcm_hw_params_set_buffer_size_near(pcm_handle, hw_params, &target_buffer_size_frames);
+    if (err < 0) {
+        std::cout << "Warning: Failed to set ALSA buffer size near " << (period_size_frames * num_periods) 
+                  << " (" << num_periods << " periods of " << period_size_frames << "): " << snd_strerror(err)
+                  << ". ALSA will use its default buffer size, which might be large." << std::endl;
+    } else {
+         std::cout << "Info: ALSA buffer size set to " << target_buffer_size_frames << " frames ("
+                  << target_buffer_size_frames / period_size_frames << " periods of " << period_size_frames << " frames, dir=" << dir << ")." << std::endl;
+    }
+
+    err = snd_pcm_hw_params(pcm_handle, hw_params);
+    if (err < 0) { std::cout << "Failed to apply ALSA hardware parameters: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+
+    // Log actual parameters
+    snd_pcm_uframes_t actual_period_size, actual_buffer_size;
+    snd_pcm_hw_params_get_period_size(hw_params, &actual_period_size, &dir);
+    snd_pcm_hw_params_get_buffer_size(hw_params, &actual_buffer_size);
+    std::cout << "Info: Final ALSA period size: " << actual_period_size << " frames. Buffer size: " << actual_buffer_size << " frames." << std::endl;
+    if (actual_period_size != BUFFER_FRAMES) {
+        std::cout << "Warning: Final ALSA period size (" << actual_period_size << ") differs from engine BUFFER_FRAMES (" << BUFFER_FRAMES << ")."
+                  << " Audio processing and snd_pcm_writei will use BUFFER_FRAMES. This mismatch might cause issues." << std::endl;
+    }
+
+
+    err = snd_pcm_prepare(pcm_handle);
+    if (err < 0) { std::cout << "Failed to prepare ALSA PCM device: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
+
+    std::vector<float> audioBuffer(BUFFER_FRAMES * 2); // Interleaved stereo for ALSA
     std::vector<float> leftBuffer(BUFFER_FRAMES);
     std::vector<float> rightBuffer(BUFFER_FRAMES);
     
@@ -323,11 +382,30 @@ void audioThread() {
                 audioBuffer[i * 2] = leftBuffer[i] * static_cast<float>(outputGain);
                 audioBuffer[i * 2 + 1] = rightBuffer[i] * static_cast<float>(outputGain);
             }
-            
-            snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
+
+            // snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
+            snd_pcm_sframes_t frames_written = snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
+            if (frames_written < 0) {
+                frames_written = snd_pcm_recover(pcm_handle, frames_written, 0); // 0 = silent recovery
+            }
+            if (frames_written < 0) {
+                std::cout << "ALSA write error after recover: " << snd_strerror(frames_written) << "\\n";
+                g_running = false; // Stop on persistent error
+                break;
+            }
+            // It's normal for frames_written to be equal to BUFFER_FRAMES in blocking mode.
+            // A short write (frames_written < BUFFER_FRAMES but > 0) would be unusual here unless an error occurred.
+            if (frames_written > 0 && (snd_pcm_uframes_t)frames_written < BUFFER_FRAMES) {
+                 std::cout << "Warning: ALSA short write. Expected " << BUFFER_FRAMES << ", wrote " << frames_written << "\\n";
+            }
+        } else {
+            // If g_rack is not available but we are running, sleep a bit.
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        // No explicit sleep needed here if snd_pcm_writei blocks for the period duration.
     }
-    
+
+    snd_pcm_drain(pcm_handle); // Drain any pending samples
     snd_pcm_close(pcm_handle);
 }
 
