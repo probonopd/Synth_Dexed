@@ -1,6 +1,6 @@
-# FMRack Architecture Overview
+# FMRack
 
-This document outlines the software architecture of the FMRack application, focusing on its multi-timbral synthesis capabilities.
+This document outlines the software architecture of the FMRack application.
 
 At its heart, the system is conceived as a digital 'rack' of synthesizer modules, each capable of producing a distinct sound, and all configurable through a unified performance setup. This modularity allows for complex soundscapes, layering, and efficient management of synthesis resources. The core components – the `Rack`, `Performance`, `Module`, and `Dexed` – work in concert to deliver this vision, providing a clear separation of concerns from overall setup and MIDI routing down to the individual sound generation.
 
