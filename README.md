@@ -32,8 +32,6 @@ The branch `native` is original to this repository, in the hope that it can even
 
 Similar to branch `native`, but implements MiniDexed performances. It is centered around an object oriented [FMRack architecture](../../blob/minidexed-native/src/FMRack/ARCHITECTURE.md).
 
-### Branch `cache`
+### TODO
 
-Idea: Decrease CPU load by caching and/or precomputing things.
-
-Implements an envelope cache in an effort to reduce CPU load; this might be especially useful when running many instances simultaneously on devices that have RAM but lack CPU (like Raspberry Pi).
+Idea: Decrease CPU load by caching and/or precomputing things. This might be especially useful when running many instances simultaneously on devices that have RAM but lack CPU (like Raspberry Pi).
