@@ -21,7 +21,7 @@ jobs:
       matrix:
         include:
           - os: windows-2022
-            build-type: 'windows'
+            build_type: 'windows'  # Standardized to build_type
           - os: ubuntu-22.04
             build_type: 'linux'
           - os: ubuntu-22.04-arm
@@ -29,9 +29,9 @@ jobs:
           - os: macos-13
             build_type: 'macos'
           - os: ubuntu-22.04
-            build_type: alpine-static
+            build_type: 'alpine-static'
           - os: ubuntu-22.04-arm
-            build_type: alpine-static-arm64
+            build_type: 'alpine-static-arm64'
     steps:
       - name: Install dependencies (Linux)
         if: startsWith(matrix.os, 'ubuntu')
@@ -45,18 +45,18 @@ jobs:
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
           docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
-            apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \
-            wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
-            tar -xjf alsa-lib-1.2.9.tar.bz2 && \
-            cd alsa-lib-1.2.9 && \
-            ./configure --enable-static --disable-shared && \
-            make -j$(nproc) && \
-            make install && \
-            cd - && \
-            apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
-            git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && \
-            cd Synth_Dexed && \
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
+            apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \\
+            wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \\
+            tar -xjf alsa-lib-1.2.9.tar.bz2 && \\
+            cd alsa-lib-1.2.9 && \\
+            ./configure --enable-static --disable-shared && \\
+            make -j$(nproc) && \\
+            make install && \\
+            cd - && \\
+            apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \\
+            git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && \\
+            cd Synth_Dexed && \\
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \\
             cmake --build build --config Release
           "
 
@@ -65,27 +65,12 @@ jobs:
         run: |
           git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && cd Synth_Dexed && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
 
-      - name: Set outputs
-        id: set_outputs
-        run: |
-          echo "os=${{ matrix.os }}" >> $GITHUB_ENV
-          echo "build_type=${{ matrix.build_type }}" >> $GITHUB_ENV
-
-      - name: Find build artifacts
-        id: find_artifacts
-        run: |
-          find . -type f -name 'FMRack*' -exec readlink -f {} \;
-          echo "artifacts=$(find . -type f -name 'FMRack*' | tr '\n' ' ')" >> $GITHUB_OUTPUT || true
-
-  upload:
-    name: Upload Build Artifacts
-    runs-on: ubuntu-latest
-    needs: build  # Ensure this job runs after the build job
-    steps:
-      - name: Upload build
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Synth_Dexed-${{ env.os }}${{ env.build_type != '' && format('-{0}', env.build_type) || '' }}
+          name: Synth_Dexed-${{ matrix.os }}-${{ matrix.build_type }}
           path: |
             Synth_Dexed/build/bin/Release/FMRack.exe
             Synth_Dexed/build/bin/FMRack
+            Synth_Dexed/build/FMRack
+          if-no-files-found: warn # Optional: warn if no files are found, default is error
