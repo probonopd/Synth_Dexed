@@ -55,19 +55,11 @@ jobs:
             make install
           "
 
-      - name: git clone this repository and branch
-        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
-        run: |
-          git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" "${{ github.workspace }}/repo"
-
       - name: Run Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
-          docker run -v ${{ github.workspace }}:/workspace/repo -w /workspace/repo alpine:latest sh -c "
-            if [ ! -f /workspace/repo/CMakeLists.txt ]; then
-              echo 'CMakeLists.txt not found in /workspace/repo. Please check the mount configuration.'
-              exit 1
-            fi && cd /workspace/repo && \
+          docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
+            git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
