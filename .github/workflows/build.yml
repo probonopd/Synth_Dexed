@@ -70,6 +70,12 @@ jobs:
           echo "os=${{ matrix.os }}" >> $GITHUB_ENV
           echo "build_type=${{ matrix.build_type }}" >> $GITHUB_ENV
 
+      - name: Find build artifacts
+        id: find_artifacts
+        run: |
+          find . -type f -name 'Synth_Dexed*' -exec readlink -f {} \;
+          echo "artifacts=$(find . -type f -name 'Synth_Dexed*' | tr '\n' ' ')" >> $GITHUB_OUTPUT || true
+
   upload:
     name: Upload Build Artifacts
     runs-on: ubuntu-latest
