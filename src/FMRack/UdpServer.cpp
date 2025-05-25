@@ -13,6 +13,10 @@
 #include <cstring>
 #endif
 
+// Debug macro/flag for debug output (no main.h include needed)
+extern bool debugEnabled;
+#define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
+
 UdpServer::UdpServer(int port, Callback cb)
     : port_(port), callback_(cb), running_(false) {}
 
@@ -29,11 +33,11 @@ void UdpServer::stop() {
 }
 
 void UdpServer::threadFunc() {
-    std::cout << "[UDP] UdpServer::threadFunc started (port=" << port_ << ")" << std::endl;
+    DEBUG_PRINT("[UDP] UdpServer::threadFunc started (port=" << port_ << ")");
 #ifdef _WIN32
     WSADATA wsaData;
     int wsaret = WSAStartup(MAKEWORD(2,2), &wsaData);
-    std::cout << "[UDP] WSAStartup returned: " << wsaret << std::endl;
+    DEBUG_PRINT("[UDP] WSAStartup returned: " << wsaret);
 #endif
     int sock =
 #ifdef _WIN32
@@ -41,7 +45,7 @@ void UdpServer::threadFunc() {
 #else
         socket(AF_INET, SOCK_DGRAM, 0);
 #endif
-    std::cout << "[UDP] socket() returned: " << sock << std::endl;
+    DEBUG_PRINT("[UDP] socket() returned: " << sock);
     if (sock < 0) {
         std::cerr << "[UDP] Failed to create socket" << std::endl;
         return;
@@ -51,7 +55,7 @@ void UdpServer::threadFunc() {
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
     addr.sin_port = htons(port_);
     int bindret = bind(sock, (struct sockaddr*)&addr, sizeof(addr));
-    std::cout << "[UDP] bind() returned: " << bindret << std::endl;
+    DEBUG_PRINT("[UDP] bind() returned: " << bindret);
     if (bindret < 0) {
         std::cerr << "[UDP] Failed to bind socket" << std::endl;
 #ifdef _WIN32
@@ -76,10 +80,12 @@ void UdpServer::threadFunc() {
         if (n > 0) {
             char addrstr[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &src_addr.sin_addr, addrstr, sizeof(addrstr));
-            std::cout << "[UDP] Received " << n << " bytes from " << addrstr << ":" << ntohs(src_addr.sin_port) << std::endl;
-            std::cout << "[UDP] Data: ";
-            for (int i = 0; i < n; ++i) std::cout << (int)buf[i] << " ";
-            std::cout << std::endl;
+            DEBUG_PRINT("[UDP] Received " << n << " bytes from " << addrstr << ":" << ntohs(src_addr.sin_port));
+            if (debugEnabled) {
+                std::cout << "[UDP] Data: ";
+                for (int i = 0; i < n; ++i) std::cout << (int)buf[i] << " ";
+                std::cout << std::endl;
+            }
             callback_(buf, n);
         }
     }
