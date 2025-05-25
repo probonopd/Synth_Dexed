@@ -8,8 +8,9 @@ Mirrored from https://codeberg.org/dcoredump/Synth_Dexed.
 
 See the `master` and `dev` branches.
 
-## Native branch [![Teensy](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml) [![Build Executables](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml)
+## Original branches [![Teensy](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/teensy.yml) [![Build Executables](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml/badge.svg?branch=native)](https://github.com/probonopd/Synth_Dexed/actions/workflows/build.yml)
 
+### Branch `native`
 
 The branch `native` is original to this repository, in the hope that it can eventually be merged upstream. It contains the following:
 
@@ -26,3 +27,13 @@ The branch `native` is original to this repository, in the hope that it can even
 - [x] Automated builds on GitHub Actions for Windows
 - [x] Automated builds on GitHub Actions for Linux __untested__
 - [x] Automated builds on GitHub Actions for macOS __untested__
+
+### Branch `minidexed-native`
+
+Similar to branch `native`, but implements MiniDexed performances. It is centered around an object oriented [FMRack architecture](../../blob/minidexed-native/src/FMRack/ARCHITECTURE.md).
+
+### Branch `cache`
+
+Idea: Decrease CPU load by caching and/or precomputing things.
+
+Implements an envelope cache in an effort to reduce CPU load; this might be especially useful when running many instances simultaneously on devices that have RAM but lack CPU (like Raspberry Pi).
