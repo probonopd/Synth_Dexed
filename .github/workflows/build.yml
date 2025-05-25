@@ -63,6 +63,7 @@ jobs:
             echo "CMakeLists.txt not found in ${{ github.workspace }}. Exiting."
             exit 1
           fi
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
 
       - name: Run Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
