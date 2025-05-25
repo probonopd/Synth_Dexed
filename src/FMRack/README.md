@@ -14,7 +14,7 @@ At its heart, the system is conceived as a digital 'rack' of synthesizer modules
 
 The system is designed around a hierarchical structure to manage multiple synthesizer instances (modules), each capable of playing a distinct sound (voice) with its own settings.
 
--   **Performance**: A `Performance` object defines the complete setup for up to 8 parts. This setup includes, for each part, its specific synthesizer voice data (complete DX7 voice as hex bytes), MIDI channel, volume, panning, detune, transpose, note range, controller assignments, reverb send, and other parameters. Such a `Performance` object, encapsulating all these part configurations, is loaded from a single INI file.
+-   **Performance**: A `Performance` object defines the complete setup for up to 16 parts. This setup includes, for each part, its specific synthesizer voice data (complete DX7 voice as hex bytes), MIDI channel, volume, panning, detune, transpose, note range, controller assignments, reverb send, and other parameters. Such a `Performance` object, encapsulating all these part configurations, is loaded from a single INI file.
 -   **Rack**: The `Rack` is the top-level container. It manages a collection of `Module` instances. Its primary responsibilities are to load a multi-part performance configuration (from an INI file via the `Performance` class), instantiate and configure `Module`s based on this data, route incoming MIDI messages to the appropriate `Module`(s), mix the audio output from all active `Module`s, and apply global effects (Reverb).
 -   **Module**: A `Module` represents a single instrument or sound layer within the `Rack`, corresponding to one part in a `Performance`. Each `Module` is configured using part-specific data from a `Performance` object. It contains one or more `Dexed` instances (up to 4 for unison effects). The `Module` processes MIDI messages assigned to it, manages its `Dexed` instance(s), and applies module-level volume, panning, detune, and reverb send.
 -   **Reverb**: A spatial effect that adds ambience and depth to the audio signal. The `Reverb` is owned by the `Rack` and receives audio input from `Module`s via their "Reverb Send" parameter. The reverb output is mixed with the dry signal in the final output.
@@ -95,12 +95,12 @@ This section describes the main classes and their relationships.
 ### Class: `Performance`
 
 *   **Responsibilities**:
-    *   Stores all settings for a multi-part sound configuration, defining up to 8 parts. This includes, for each part, its complete DX7 voice data (as 155 hex bytes), MIDI channel, volume, panning, detune, transpose, note ranges, controller assignments, reverb send, etc.
+    *   Stores all settings for a multi-part sound configuration, defining up to 16 parts. This includes, for each part, its complete DX7 voice data (as 156 hex bytes), MIDI channel, volume, panning, detune, transpose, note ranges, controller assignments, reverb send, etc.
     *   Is populated by parsing an INI file with numbered parameters (e.g., `Volume1`, `Pan2`, etc.).
     *   Provides the configuration data for each part to be used by the `Rack` during `Module` instantiation.
     *   Stores global effects settings (compressor and reverb parameters).
 *   **Key Relationships**:
-    *   **Contains**: Configuration data for multiple parts, including complete DX7 voice data (155 hex bytes per part), and various scalar properties for each part's configuration.
+    *   **Contains**: Configuration data for multiple parts, including complete DX7 voice data (156 hex bytes per part), and various scalar properties for each part's configuration.
     *   **Used by**: `Rack` (to load a performance configuration and guide `Module` creation).
 
 ### Class: `Dexed`
@@ -222,7 +222,7 @@ Each part is defined by numbered parameters (e.g., `BankNumber1`, `Volume1`, etc
 - `PortamentoMode[N]` - Portamento on/off (0/1)
 - `PortamentoGlissando[N]` - Glissando mode (0/1)
 - `PortamentoTime[N]` - Portamento time (0-127)
-- `VoiceData[N]` - Complete DX7 voice data as space-separated hex bytes (155 bytes)
+- `VoiceData[N]` - Complete DX7 voice data as space-separated hex bytes (156 bytes)
 - `MonoMode[N]` - Monophonic mode (0=poly, 1=mono)
 
 **Controller Assignments per Part:**
@@ -243,7 +243,7 @@ Each part is defined by numbered parameters (e.g., `BankNumber1`, `Volume1`, etc
 
 **Key Features:**
 - Parts with `MIDIChannel[N]=0` are disabled
-- `VoiceData[N]` contains the complete 155-byte DX7 voice as hex values
+- `VoiceData[N]` contains the complete 156-byte DX7 voice as hex values
 - Multiple parts can share the same MIDI channel for layering
 - Each part can have different detune and pan settings for stereo spread effects
 - Controller assignments allow real-time parameter modulation
@@ -265,7 +265,7 @@ This format allows complete specification of a multi-timbral setup in a single f
 - Final signal path: (Dry Sum + Reverb Output) → Compressor → Host Output
 
 ### Voice Loading
-- `VoiceData[N]` contains exactly 155 hex bytes representing a complete DX7 voice
+- `VoiceData[N]` contains exactly 156 hex bytes representing a complete DX7 voice
 - Voice data is loaded directly into the `Dexed` during initialization
 - Bank/Voice numbers in the INI file are for reference only; actual voice data comes from `VoiceData[N]`
 
