@@ -41,19 +41,10 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         uses: lukka/get-cmake@latest
 
-      - name: Run Alpine Docker Container
-        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
-        run: |
-          docker run --rm -v $(pwd):/workspace -w /workspace alpine:latest sh -c "
-            apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
-            cmake --build build --config Release
-          "
-
       - name: Build static ALSA library
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
-          docker run --rm -v $(pwd):/workspace -w /workspace alpine:latest sh -c "
+          docker run --rm -v $(pwd):/ -w /workspace alpine:latest sh -c "
             apk add --no-cache build-base wget autoconf automake libtool && \
             wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
             tar -xjf alsa-lib-1.2.9.tar.bz2 && \
@@ -61,6 +52,19 @@ jobs:
             ./configure --enable-static --disable-shared && \
             make -j$(nproc) && \
             make install
+          "
+
+      - name: Run Alpine Docker Container
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
+        run: |
+          docker run --rm -v $(pwd):/ -w /workspace alpine:latest sh -c "
+            if [ ! -f /workspace/CMakeLists.txt ]; then
+              echo 'CMakeLists.txt not found in /workspace. Please check the mount configuration.'
+              exit 1
+            fi && \
+            apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
+            cmake --build build --config Release
           "
 
       - name: Set outputs
