@@ -6,7 +6,7 @@
 namespace FMRack {
 
 // Helper function to extract voice name from DX7 voice data
-std::string extractVoiceName(const std::array<uint8_t, 155>& voiceData) {
+std::string extractVoiceName(const std::array<uint8_t, 156>& voiceData) {
     // Voice name is at offset 145-154 (10 characters)
     std::string voiceName;
     for (int i = 145; i < 155; ++i) {
@@ -79,9 +79,9 @@ void Rack::createModulesFromPerformance() {
     for (int i = 0; i < 16; ++i) {
         auto config = performance_->getPartConfig(i);
 
-        if (config.midiChannel > 0) {
+        if (config.midiChannel > 0 ) {
             // Force each part to its own MIDI channel (1-16)
-            // config.midiChannel = i + 1;
+            config.midiChannel = i + 1;
             std::string voiceName = extractVoiceName(config.voiceData);
             std::cout << "Creating module " << (i + 1) << " on MIDI channel "
                       << static_cast<int>(config.midiChannel) << " with voice: \"" << voiceName << "\"\n";

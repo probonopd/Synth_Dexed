@@ -46,30 +46,89 @@ bool Performance::loadFromFile(const std::string& filename) {
         
         // Parse numbered parameters for parts 1-8
         for (int part = 1; part <= 8; ++part) {
-            if (key == "MIDIChannel" + std::to_string(part)) {
-                parts[part-1].midiChannel = static_cast<uint8_t>(std::stoi(value));
+            if (key == "BankNumber" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].bankNumber = std::clamp(v, 0, 127);
+            } else if (key == "VoiceNumber" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].voiceNumber = std::clamp(v, 1, 32);
+            } else if (key == "MIDIChannel" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].midiChannel = (v < 0) ? 0 : (v > 255 ? 255 : v); // allow 0, 1..16, >16 for omni
             } else if (key == "Volume" + std::to_string(part)) {
-                parts[part-1].volume = static_cast<uint8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].volume = std::clamp(v, 0, 127);
             } else if (key == "Pan" + std::to_string(part)) {
-                parts[part-1].pan = static_cast<uint8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].pan = std::clamp(v, 0, 127);
             } else if (key == "Detune" + std::to_string(part)) {
-                parts[part-1].detune = static_cast<int8_t>(std::stoi(value));
-            } else if (key == "NoteShift" + std::to_string(part)) {
-                parts[part-1].noteShift = static_cast<int8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].detune = std::clamp(v, -99, 99);
+            } else if (key == "Cutoff" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].cutoff = std::clamp(v, 0, 99);
+            } else if (key == "Resonance" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].resonance = std::clamp(v, 0, 99);
             } else if (key == "NoteLimitLow" + std::to_string(part)) {
-                parts[part-1].noteLimitLow = static_cast<uint8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].noteLimitLow = std::clamp(v, 0, 127);
             } else if (key == "NoteLimitHigh" + std::to_string(part)) {
-                parts[part-1].noteLimitHigh = static_cast<uint8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].noteLimitHigh = std::clamp(v, 0, 127);
+            } else if (key == "NoteShift" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].noteShift = std::clamp(v, -24, 24);
             } else if (key == "ReverbSend" + std::to_string(part)) {
-                parts[part-1].reverbSend = static_cast<uint8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].reverbSend = std::clamp(v, 0, 99);
+            } else if (key == "PitchBendRange" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].pitchBendRange = std::clamp(v, 0, 12);
+            } else if (key == "PitchBendStep" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].pitchBendStep = std::clamp(v, 0, 12);
+            } else if (key == "PortamentoMode" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].portamentoMode = std::clamp(v, 0, 1);
+            } else if (key == "PortamentoGlissando" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].portamentoGlissando = std::clamp(v, 0, 1);
+            } else if (key == "PortamentoTime" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].portamentoTime = std::clamp(v, 0, 99);
             } else if (key == "MonoMode" + std::to_string(part)) {
-                parts[part-1].monoMode = static_cast<uint8_t>(std::stoi(value));
+                int v = std::stoi(value);
+                parts[part-1].monoMode = std::clamp(v, 0, 1);
+            } else if (key == "ModulationWheelRange" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].modulationWheelRange = std::clamp(v, 0, 99);
+            } else if (key == "ModulationWheelTarget" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].modulationWheelTarget = std::clamp(v, 0, 7);
+            } else if (key == "FootControlRange" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].footControlRange = std::clamp(v, 0, 99);
+            } else if (key == "FootControlTarget" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].footControlTarget = std::clamp(v, 0, 7);
+            } else if (key == "BreathControlRange" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].breathControlRange = std::clamp(v, 0, 99);
+            } else if (key == "BreathControlTarget" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].breathControlTarget = std::clamp(v, 0, 7);
+            } else if (key == "AftertouchRange" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].aftertouchRange = std::clamp(v, 0, 99);
+            } else if (key == "AftertouchTarget" + std::to_string(part)) {
+                int v = std::stoi(value);
+                parts[part-1].aftertouchTarget = std::clamp(v, 0, 7);
             } else if (key == "VoiceData" + std::to_string(part)) {
-                // Parse hex bytes separated by spaces
                 std::istringstream hexStream(value);
                 std::string hexByte;
                 int byteIndex = 0;
-                while (hexStream >> hexByte && byteIndex < 155) {
+                while (hexStream >> hexByte && byteIndex < 156) {
                     parts[part-1].voiceData[byteIndex] = static_cast<uint8_t>(std::stoul(hexByte, nullptr, 16));
                     byteIndex++;
                 }
@@ -91,7 +150,7 @@ bool Performance::loadFromFile(const std::string& filename) {
 
 void Performance::setDefaults() {
     // Initialize with a basic FM patch (INIT VOICE)
-    std::array<uint8_t, 155> initVoice = {{
+    std::array<uint8_t, 156> initVoice = {{
         99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6
         99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
         99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
@@ -102,7 +161,8 @@ void Performance::setDefaults() {
         01, 00, 01,                                                                         // algorithm, feedback, osc sync
         35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
         03, 48,                                                                             // pitch_mod_sensitivity, transpose
-        73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
+        73, 78, 73, 84, 32, 86, 79, 73, 67, 69,                                             // 10 * char for name ("INIT VOICE")
+        0                                                                                   // pad to 156 bytes
     }};
     
     // Set default values for all parts

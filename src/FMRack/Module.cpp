@@ -232,7 +232,7 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
         float rightGain = std::sqrt(voicePan);
         
         // Convert int16_t to float and apply panning
-        const float scale = 1.0f / 2000.0f; // Convert int16_t to float; 2000 is a rough scale factor for Dexed output
+        const float scale = 1.0f / 3000.0f; // Convert int16_t to float; FIXME: 3000 is a rough scale factor for Dexed output
         for (int i = 0; i < numSamples; ++i) {
             float sample = tempBuffer_[i] * scale;
             leftOut[i] += sample * leftGain;
