@@ -14,7 +14,7 @@ jobs:
         uses: actions/checkout@v4
 
   build:
-    name: Build for ${{ matrix.build-type }}
+    name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     needs: checkout  # Ensure this job runs after the checkout job
     strategy:
@@ -61,7 +61,7 @@ jobs:
             if [ ! -f /workspace/CMakeLists.txt ]; then
               echo 'CMakeLists.txt not found in /workspace. Please check the mount configuration.'
               exit 1
-            fi && \
+            fi && cd /workspace && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
