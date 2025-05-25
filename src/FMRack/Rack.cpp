@@ -135,6 +135,10 @@ void Rack::createModulesFromPerformance() {
                 std::cout << "    Aftertouch -> " << getControllerTargetName(config.aftertouchTarget) 
                           << " (range: " << static_cast<int>(config.aftertouchRange) << ")\n";
             }
+            
+            // Show pitch bend range if applicable
+            std::cout << "    Pitch bend range: " << static_cast<int>(config.pitchBendRange) << " semitones\n";
+            
             auto module = std::make_unique<Module>(sampleRate_);
             module->configureFromPerformance(config);
             std::cout << "[DEBUG] Module " << (i + 1)

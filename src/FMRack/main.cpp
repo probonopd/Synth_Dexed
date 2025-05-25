@@ -269,7 +269,7 @@ bool initializeAudioMidi() {
 }
 
 #elif __linux__
-// Linux ALSA audio thread - updated to use BUFFER_FRAMES
+// Linux ALSA audio thread - updated to reduce latency
 void audioThread() {
     // Set audio thread to high priority
     struct sched_param sch_params;
@@ -277,31 +277,73 @@ void audioThread() {
     pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params);
     
     snd_pcm_t* pcm_handle;
-    int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
+    // Try to open with low latency hint first
+    int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
     if (err < 0) {
-        std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\n";
-        return;
+        // Fall back to standard mode
+        err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
+        if (err < 0) {
+            std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\n";
+            return;
+        }
     }
     
-    // Configure PCM
+    // Configure PCM with lower latency settings
     snd_pcm_hw_params_t* hw_params;
     snd_pcm_hw_params_alloca(&hw_params);
     snd_pcm_hw_params_any(pcm_handle, hw_params);
     snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
     snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_FLOAT_LE);
     snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2);
+    
+    // Set sample rate
     unsigned int rate = SAMPLE_RATE;
     snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, &rate, 0);
-    snd_pcm_hw_params_set_period_size(pcm_handle, hw_params, BUFFER_FRAMES, 0);
-    snd_pcm_hw_params(pcm_handle, hw_params);
+    
+    // Use smaller buffer size for Linux to reduce latency
+    // Default to a smaller buffer size on Linux (256 frames instead of 1024)
+    snd_pcm_uframes_t linux_buffer_size = BUFFER_FRAMES > 512 ? 256 : BUFFER_FRAMES;
+    
+    // Set period size (frames per period)
+    snd_pcm_uframes_t period_size = linux_buffer_size;
+    int dir = 0;
+    err = snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size, &dir);
+    if (err < 0)
+        std::cout << "Cannot set period size: " << snd_strerror(err) << "\n";
+    
+    // Set number of periods (buffers)
+    unsigned int periods = 2; // Use 2 periods for lower latency
+    err = snd_pcm_hw_params_set_periods_near(pcm_handle, hw_params, &periods, &dir);
+    if (err < 0)
+        std::cout << "Cannot set number of periods: " << snd_strerror(err) << "\n";
+    
+    // Apply hardware parameters
+    err = snd_pcm_hw_params(pcm_handle, hw_params);
+    if (err < 0) {
+        std::cout << "Cannot set hardware parameters: " << snd_strerror(err) << "\n";
+        snd_pcm_close(pcm_handle);
+        return;
+    }
+    
+    // Get actual configured values
+    snd_pcm_uframes_t actual_period_size;
+    snd_pcm_hw_params_get_period_size(hw_params, &actual_period_size, &dir);
+    
+    unsigned int actual_periods;
+    snd_pcm_hw_params_get_periods(hw_params, &actual_periods, &dir);
+    
+    std::cout << "ALSA configured with: period size = " << actual_period_size 
+              << " frames, periods = " << actual_periods << "\n";
+    
+    // Prepare PCM for playback
     snd_pcm_prepare(pcm_handle);
     
-    std::vector<float> audioBuffer(BUFFER_FRAMES * 2); // Interleaved stereo
-    std::vector<float> leftBuffer(BUFFER_FRAMES);
-    std::vector<float> rightBuffer(BUFFER_FRAMES);
+    std::vector<float> audioBuffer(actual_period_size * 2); // Interleaved stereo
+    std::vector<float> leftBuffer(actual_period_size);
+    std::vector<float> rightBuffer(actual_period_size);
     
-    // Declare and initialize outputGain before use
-    float outputGain = 1.0f; // Set to appropriate value or make configurable
+    // Declare and initialize outputGain
+    float outputGain = 1.0f;
     
     while (g_running) {
         if (g_rack) {
@@ -310,65 +352,43 @@ void audioThread() {
                 static double phase = 0.0;
                 double freq = 440.0;
                 double phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
-                for (int i = 0; i < BUFFER_FRAMES; ++i) {
+                for (unsigned int i = 0; i < actual_period_size; ++i) {
                     float sample = static_cast<float>(std::sin(phase) * 0.5);
                     leftBuffer[i] = rightBuffer[i] = sample;
                     phase += phaseInc;
                     if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
                 }
             } else {
-                g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), BUFFER_FRAMES);
+                g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), actual_period_size);
             }
             
             // Interleave samples
-            for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) {
-                audioBuffer[i * 2] = leftBuffer[i] * static_cast<float>(outputGain);
-                audioBuffer[i * 2 + 1] = rightBuffer[i] * static_cast<float>(outputGain);
+            for (unsigned int i = 0; i < actual_period_size; ++i) {
+                audioBuffer[i * 2] = leftBuffer[i] * outputGain;
+                audioBuffer[i * 2 + 1] = rightBuffer[i] * outputGain;
             }
             
-            snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
-        }
-    }
-    
-    snd_pcm_close(pcm_handle);
-}
-
-// Linux ALSA MIDI thread
-void midiThread() {
-    snd_seq_t* seq_handle;
-    int err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_DUPLEX, 0);
-    if (err < 0) {
-        std::cout << "Failed to open sequencer: " << snd_strerror(err) << "\n";
-        return;
-    }
-    
-    snd_seq_set_client_name(seq_handle, "FMRack");
-    snd_seq_create_simple_port(seq_handle, "Input",
-        SND_SEQ_PORT_CAP_WRITE|SND_SEQ_PORT_CAP_SUBS_WRITE,
-        SND_SEQ_PORT_TYPE_APPLICATION);
-    
-    while (g_running) {
-        snd_seq_event_t* ev;
-        if (snd_seq_event_input(seq_handle, &ev) >= 0) {
-            if (g_rack && ev->type == SND_SEQ_EVENT_NOTEON) {
-                g_rack->processMidiMessage(0x90 | ev->data.note.channel,
-                                         ev->data.note.note, ev->data.note.velocity);
-            } else if (g_rack && ev->type == SND_SEQ_EVENT_NOTEOFF) {
-                g_rack->processMidiMessage(0x80 | ev->data.note.channel,
-                                         ev->data.note.note, ev->data.note.velocity);
+            int frames = snd_pcm_writei(pcm_handle, audioBuffer.data(), actual_period_size);
+            
+            // Handle underrun or other errors
+            if (frames < 0) {
+                frames = snd_pcm_recover(pcm_handle, frames, 0);
+                if (frames < 0) {
+                    std::cout << "ALSA write error: " << snd_strerror(frames) << "\n";
+                    std::cout << "If you're experiencing build issues, ensure required packages are installed:\n";
+                    std::cout << "  sudo apt update\n";
+                    std::cout << "  sudo apt install pkg-config libasound2-dev\n";
+                    break;
+                }
             }
-            snd_seq_free_event(ev);
+        } else {
+            // Small sleep if no rack is available
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     
-    snd_seq_close(seq_handle);
-}
-
-bool initializeAudioMidi() {
-    std::cout << "ALSA audio/MIDI interface initialized.\n";
-    std::cout << "  Sample Rate: " << SAMPLE_RATE << " Hz\n";
-    std::cout << "  Buffer Frames: " << BUFFER_FRAMES << "\n";
-    return true;
+    snd_pcm_drain(pcm_handle);
+    snd_pcm_close(pcm_handle);
 }
 #endif
 
