@@ -918,7 +918,7 @@ int main(int argc, char* argv[]) {
                     } else if ((status & 0xF0) >= 0x80 && (status & 0xF0) <= 0xE0 && (i + 2) < len) {
                         handleMidiMessage(data[i], data[i+1], data[i+2]);
                         i += 3;
-                    } else if (status >= 0xF8 && status <= 0xFF) {
+                    } else if (status >= 0xF8) {
                         handleMidiMessage(status, 0, 0);
                         i += 1;
                     } else {

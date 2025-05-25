@@ -17,7 +17,7 @@ std::string extractVoiceName(const std::array<uint8_t, 156>& voiceData) {
     for (int i = 145; i < 155; ++i) {
         char c = static_cast<char>(voiceData[i]);
         // DX7 uses ASCII characters 32-127
-        if (c >= 32 && c <= 127) {
+        if (c >= 32) {
             voiceName += c;
         } else {
             voiceName += ' ';
@@ -181,7 +181,7 @@ void Rack::routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2) {
     if (channel == 0) return; // Skip system messages
 
     // Route to all modules with matching MIDI channel
-    bool anyMatched = false;
+    [[maybe_unused]] bool anyMatched = false;
     for (size_t i = 0; i < modules_.size(); ++i) {
         uint8_t moduleChan = modules_[i]->getMIDIChannel();
         DEBUG_PRINT("[DEBUG] Module " << i << " getMIDIChannel()=" << (int)moduleChan);
