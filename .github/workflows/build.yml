@@ -41,10 +41,9 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         uses: lukka/get-cmake@latest
 
-      - name: Build static ALSA library
+      - name: Run Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
-          cd ${{ github.workspace }}
           docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
             apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \
             wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
@@ -52,13 +51,7 @@ jobs:
             cd alsa-lib-1.2.9 && \
             ./configure --enable-static --disable-shared && \
             make -j$(nproc) && \
-            make install
-          "
-
-      - name: Run Alpine Docker Container
-        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
-        run: |
-          docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
+            make install && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
             git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
             cd Synth_Dexed && \
