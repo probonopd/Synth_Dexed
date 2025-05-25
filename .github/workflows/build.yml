@@ -46,7 +46,7 @@ jobs:
         run: |
           cd ${{ github.workspace }}
           docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
-            apk add --no-cache build-base wget autoconf automake libtool linux-headers && \
+            apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \
             wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
             tar -xjf alsa-lib-1.2.9.tar.bz2 && \
             cd alsa-lib-1.2.9 && \
@@ -55,24 +55,20 @@ jobs:
             make install
           "
 
-      - name: Verify CMakeLists.txt
-        run: |
-          echo "Checking for CMakeLists.txt in ${{ github.workspace }}"
-          ls -lh ${{ github.workspace }}
-          if [ ! -f "${{ github.workspace }}/CMakeLists.txt" ]; then
-            echo "CMakeLists.txt not found in ${{ github.workspace }}. Exiting."
-            exit 1
-          fi
-        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
+          - name: git clone this repository and branch
+          if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
+          run: |
+            git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" "${{ github.workspace }}/repo"
+        
 
       - name: Run Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
-          docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
-            if [ ! -f /workspace/CMakeLists.txt ]; then
-              echo 'CMakeLists.txt not found in /workspace. Please check the mount configuration.'
+          docker run -v ${{ github.workspace }}:/workspace/repo -w /workspace/repo alpine:latest sh -c "
+            if [ ! -f /workspace/repo/CMakeLists.txt ]; then
+              echo 'CMakeLists.txt not found in /workspace/repo. Please check the mount configuration.'
               exit 1
-            fi && cd /workspace && \
+            fi && cd /workspace/repo && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
