@@ -8,7 +8,6 @@ At its heart, the system is conceived as a digital 'rack' of synthesizer modules
 
 * `src/FMRack/` - Contains the main application code for the FMRack synthesizer.	
 * `src/FMRack/README.md` - Documentation outlining the architecture and usage of the FMRack application. 
-* `src/FMRack/CMakefile` - Build instructions for the FMRack application.
 * `src/` - Contains `dexed.h`, the header file for the Dexed FM synthesis engine.
 
 ## Core Concepts
