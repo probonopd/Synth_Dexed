@@ -390,6 +390,67 @@ void audioThread() {
     snd_pcm_drain(pcm_handle);
     snd_pcm_close(pcm_handle);
 }
+
+// Linux ALSA MIDI thread implementation
+void midiThread() {
+    snd_seq_t* seq_handle;
+    int err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_DUPLEX, 0);
+    if (err < 0) {
+        std::cout << "Failed to open sequencer: " << snd_strerror(err) << "\n";
+        return;
+    }
+    
+    snd_seq_set_client_name(seq_handle, "FMRack");
+    int port = snd_seq_create_simple_port(seq_handle, "Input",
+        SND_SEQ_PORT_CAP_WRITE|SND_SEQ_PORT_CAP_SUBS_WRITE,
+        SND_SEQ_PORT_TYPE_APPLICATION);
+    
+    if (port < 0) {
+        std::cout << "Failed to create MIDI input port: " << snd_strerror(port) << "\n";
+        snd_seq_close(seq_handle);
+        return;
+    }
+
+    std::cout << "ALSA MIDI interface ready. Connect your MIDI devices to client " 
+              << snd_seq_client_id(seq_handle) << ", port " << port << std::endl;
+
+    while (g_running) {
+        snd_seq_event_t* ev;
+        if (snd_seq_event_input(seq_handle, &ev) >= 0) {
+            if (g_rack) {
+                if (ev->type == SND_SEQ_EVENT_NOTEON) {
+                    g_rack->processMidiMessage(0x90 | ev->data.note.channel,
+                                             ev->data.note.note, ev->data.note.velocity);
+                } else if (ev->type == SND_SEQ_EVENT_NOTEOFF) {
+                    g_rack->processMidiMessage(0x80 | ev->data.note.channel,
+                                             ev->data.note.note, ev->data.note.velocity);
+                } else if (ev->type == SND_SEQ_EVENT_CONTROLLER) {
+                    g_rack->processMidiMessage(0xB0 | ev->data.control.channel,
+                                             ev->data.control.param, ev->data.control.value);
+                } else if (ev->type == SND_SEQ_EVENT_PITCHBEND) {
+                    int value = ev->data.control.value + 8192; // Center at 8192
+                    int msb = (value >> 7) & 0x7F;
+                    int lsb = value & 0x7F;
+                    g_rack->processMidiMessage(0xE0 | ev->data.control.channel, lsb, msb);
+                }
+            }
+            snd_seq_free_event(ev);
+        } else {
+            // Small sleep to prevent CPU overload
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    
+    snd_seq_close(seq_handle);
+}
+
+// Linux audio/MIDI initialization function
+bool initializeAudioMidi() {
+    std::cout << "ALSA audio/MIDI interface initialized.\n";
+    std::cout << "  Sample Rate: " << SAMPLE_RATE << " Hz\n";
+    std::cout << "  Using lower latency settings for Linux.\n";
+    return true;
+}
 #endif
 
 // Parse command line arguments - matches native implementation
