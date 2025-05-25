@@ -6,6 +6,7 @@
 #include "Performance.h"
 #include "AudioEffectPlateReverb.h"
 #include "Module.h"
+#include <filesystem>
 
 namespace FMRack {
 
@@ -26,6 +27,12 @@ public:
         reverb_->setSize(performance_->effects.reverbSize / 127.0f);
         reverb_->setLevel(performance_->effects.reverbLevel / 127.0f);
     }
+
+    // Add: Handle program change and load performance file by program number
+    void handleProgramChange(int programNum, const std::string& performanceDir);
+
+    // Add: Initial performance loading by file path
+    bool loadInitialPerformance(const std::string& performanceFile);
 
     // MIDI processing
     void processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2);

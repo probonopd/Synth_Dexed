@@ -1,5 +1,6 @@
 #include "Rack.h"
 #include "UdpServer.h"
+#include "Debug.h"
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -8,6 +9,7 @@
 #include <algorithm>
 #include <cmath>  // Add for M_PI and sin functions
 #include <memory>
+#include <filesystem> // Add for file system operations
 
 // Define M_PI if not available (common on Windows)
 #ifndef M_PI
@@ -60,15 +62,26 @@ static int unisonVoices = 2; // Unison voices per module
 static float unisonDetune = 7.0f; // Detune in cents
 static float unisonSpread = 0.5f; // Stereo spread
 
-// Expose debugEnabled and DEBUG_PRINT for use in other FMRack files
-#ifndef FMRACK_DEBUG_HEADER
-#define FMRACK_DEBUG_HEADER
-extern bool debugEnabled;
-#define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
-#endif
-
 // Debug flag for controlling debug output
 bool debugEnabled = false;
+
+// Store the directory of the initial performance file if set
+static std::string g_performanceDir;
+static std::string g_performanceBase;
+static bool g_performanceSet = false;
+
+// Helper: wrapper for MIDI message handling
+void handleMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
+    // If --performance was set and this is a Program Change (0xC0-0xCF)
+    if (g_performanceSet && (status & 0xF0) == 0xC0) {
+        int programNum = data1; // 0-based
+        if (g_rack) {
+            g_rack->handleProgramChange(programNum, g_performanceDir);
+        }
+    } else if (g_rack) {
+        g_rack->processMidiMessage(status, data1, data2);
+    }
+}
 
 #ifdef _WIN32
 // Windows MIDI callback
@@ -78,8 +91,7 @@ void CALLBACK midiInProc(HMIDIIN hmi, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR
         int status = midiMsg & 0xFF;
         int data1 = (midiMsg >> 8) & 0xFF;
         int data2 = (midiMsg >> 16) & 0xFF;
-        
-        g_rack->processMidiMessage(status, data1, data2);
+        handleMidiMessage(status, data1, data2);
     }
 }
 
@@ -212,11 +224,10 @@ OSStatus audioCallback(void* inRefCon, AudioUnitRenderActionFlags* ioActionFlags
 // macOS Core MIDI callback
 void midiReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCon) {
     if (!g_rack) return;
-    
     const MIDIPacket* packet = &pktlist->packet[0];
     for (UInt32 i = 0; i < pktlist->numPackets; ++i) {
         if (packet->length >= 3) {
-            g_rack->processMidiMessage(packet->data[0], packet->data[1], packet->data[2]);
+            handleMidiMessage(packet->data[0], packet->data[1], packet->data[2]);
         }
         packet = MIDIPacketNext(packet);
     }
@@ -437,11 +448,11 @@ void midiThread() {
         snd_seq_event_t* ev;
         if (snd_seq_event_input(seq_handle, &ev) >= 0) {
             if (g_rack && ev->type == SND_SEQ_EVENT_NOTEON) {
-                g_rack->processMidiMessage(0x90 | ev->data.note.channel,
-                                         ev->data.note.note, ev->data.note.velocity);
+                handleMidiMessage(0x90 | ev->data.note.channel,
+                                 ev->data.note.note, ev->data.note.velocity);
             } else if (g_rack && ev->type == SND_SEQ_EVENT_NOTEOFF) {
-                g_rack->processMidiMessage(0x80 | ev->data.note.channel,
-                                         ev->data.note.note, ev->data.note.velocity);
+                handleMidiMessage(0x80 | ev->data.note.channel,
+                                 ev->data.note.note, ev->data.note.velocity);
             }
             snd_seq_free_event(ev);
         }
@@ -457,6 +468,9 @@ bool initializeAudioMidi() {
     return true;
 }
 #endif
+
+// Forward declaration for platform-specific audio/MIDI initialization
+bool initializeAudioMidi();
 
 // Parse command line arguments - matches native implementation
 void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) {
@@ -703,6 +717,17 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     std::string performanceFile;
     parseCommandLineArgs(argc, argv, performanceFile);
+    // Track performance directory if set
+    if (!performanceFile.empty()) {
+        std::filesystem::path perfPath(performanceFile);
+        g_performanceDir = perfPath.parent_path().string();
+        g_performanceBase = perfPath.filename().string();
+        g_performanceSet = true;
+        if (g_performanceDir.empty()) g_performanceDir = ".";
+        DEBUG_PRINT("[DEBUG] Initial performance directory: " << g_performanceDir);
+    } else {
+        g_performanceSet = false;
+    }
     
     try {
         // Initialize the rack with configured sample rate
@@ -718,14 +743,7 @@ int main(int argc, char* argv[]) {
         
         // Load performance file if specified, otherwise use default
         if (!performanceFile.empty()) {
-            std::cout << "Loading performance file: " << performanceFile << "\n";
-            if (g_rack->loadPerformance(performanceFile)) {
-                std::cout << "Performance loaded successfully!\n";
-                std::cout << "Enabled parts: " << g_rack->getEnabledPartCount() << "/8\n";
-            } else {
-                std::cout << "Failed to load performance file. Using default configuration.\n";
-                g_rack->setDefaultPerformance();
-            }
+            g_rack->loadInitialPerformance(performanceFile);
         } else {
             // Custom default setup using command line options
             FMRack::Performance perf;
@@ -766,12 +784,11 @@ int main(int argc, char* argv[]) {
         // Start UDP server for raw UDP handling
         g_udpServer = std::make_unique<UdpServer>(udpPort, [](const uint8_t* data, int len) {
             if (!g_rack) return;
-            // Handle standard 3-byte MIDI messages
             if (len == 3) {
                 uint8_t status = data[0];
                 uint8_t data1 = data[1];
                 uint8_t data2 = data[2];
-                g_rack->processMidiMessage(status, data1, data2);
+                handleMidiMessage(status, data1, data2);
             } else if (len > 0) {
                 int i = 0;
                 while (i < len) {
@@ -782,19 +799,18 @@ int main(int argc, char* argv[]) {
                         if (sysex_end < len && data[sysex_end] == 0xF7) sysex_end++;
                         int sysex_len = sysex_end - i;
                         if (sysex_len >= 2) {
-                            // Yamaha format: F0 43 cc ... F7, where cc = channel (0x00 = ch1, 0x0F = ch16)
-                            uint8_t sysex_channel = 0; // Default: OMNI
+                            uint8_t sysex_channel = 0;
                             if (sysex_len > 2 && data[i+1] == 0x43) {
-                                sysex_channel = (data[i+2] & 0x0F) + 1; // 1-16
+                                sysex_channel = (data[i+2] & 0x0F) + 1;
                             }
                             g_rack->routeSysexToModules(&data[i], sysex_len, sysex_channel);
                         }
                         i = sysex_end;
                     } else if ((status & 0xF0) >= 0x80 && (status & 0xF0) <= 0xE0 && (i + 2) < len) {
-                        g_rack->processMidiMessage(data[i], data[i+1], data[i+2]);
+                        handleMidiMessage(data[i], data[i+1], data[i+2]);
                         i += 3;
                     } else if (status >= 0xF8 && status <= 0xFF) {
-                        g_rack->processMidiMessage(status, 0, 0);
+                        handleMidiMessage(status, 0, 0);
                         i += 1;
                     } else {
                         i += 1;
@@ -826,9 +842,9 @@ int main(int argc, char* argv[]) {
                         std::cout << "Test note disabled in sine wave mode.\n";
                     } else {
                         std::cout << "Sending test MIDI note (C4)...\n";
-                        g_rack->processMidiMessage(0x90, 60, 100); // Note on C4
+                        handleMidiMessage(0x90, 60, 100); // Note on C4
                         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                        g_rack->processMidiMessage(0x80, 60, 0);   // Note off C4
+                        handleMidiMessage(0x80, 60, 0);   // Note off C4
                     }
                     break;
                 default:

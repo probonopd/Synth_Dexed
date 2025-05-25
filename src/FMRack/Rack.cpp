@@ -1,12 +1,10 @@
 #include "Rack.h"
 #include "AudioEffectPlateReverb.h"
+#include "Debug.h"
 #include <iostream>
 #include <algorithm>
 #include <cstring>
-
-// Debug macro/flag for debug output (no main.h include needed)
-extern bool debugEnabled;
-#define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
+#include <regex>
 
 namespace FMRack {
 
@@ -331,6 +329,60 @@ void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_chann
         if (sysex_channel == 0 || module->getMIDIChannel() == sysex_channel) {
             module->processSysex(data, len);
         }
+    }
+}
+
+// Add handleProgramChange implementation
+void Rack::handleProgramChange(int programNum, const std::string& performanceDir) {
+    // Special case: program 1 loads ../performance.ini
+    if (programNum == 0) {
+        std::filesystem::path perfPath = std::filesystem::path(performanceDir) / ".." / "performance.ini";
+        DEBUG_PRINT("[DEBUG] Program 1: trying to load " << perfPath.string());
+        if (std::filesystem::exists(perfPath)) {
+            if (loadPerformance(perfPath.string())) {
+                DEBUG_PRINT("[DEBUG] Performance loaded from: " << perfPath.string());
+            } else {
+                DEBUG_PRINT("[DEBUG] Failed to load performance: " << perfPath.string());
+            }
+        } else {
+            DEBUG_PRINT("[DEBUG] Performance file does not exist: " << perfPath.string());
+        }
+        return;
+    }
+    // For other programs, match files with any number of leading zeros and any suffix
+    std::regex pattern(R"((0*)" + std::to_string(programNum + 1) + R"(_.*\.ini)$)", std::regex_constants::icase);
+    std::filesystem::directory_iterator dirIter(performanceDir);
+    std::string foundFile;
+    for (const auto& entry : dirIter) {
+        if (!entry.is_regular_file()) continue;
+        std::string fname = entry.path().filename().string();
+        if (std::regex_search(fname, pattern)) {
+            foundFile = entry.path().string();
+            break;
+        }
+    }
+    if (!foundFile.empty()) {
+        DEBUG_PRINT("[DEBUG] Program Change: found file " << foundFile);
+        if (loadPerformance(foundFile)) {
+            DEBUG_PRINT("[DEBUG] Performance loaded from: " << foundFile);
+        } else {
+            DEBUG_PRINT("[DEBUG] Failed to load performance: " << foundFile);
+        }
+    } else {
+        DEBUG_PRINT("[DEBUG] No matching performance file found for program " << (programNum + 1));
+    }
+}
+
+bool Rack::loadInitialPerformance(const std::string& performanceFile) {
+    if (performanceFile.empty()) return false;
+    if (loadPerformance(performanceFile)) {
+        std::cout << "Performance loaded successfully!\n";
+        std::cout << "Enabled parts: " << getEnabledPartCount() << "/8\n";
+        return true;
+    } else {
+        std::cout << "Failed to load performance file. Using default configuration.\n";
+        setDefaultPerformance();
+        return false;
     }
 }
 

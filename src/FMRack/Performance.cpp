@@ -19,33 +19,34 @@ Performance::~Performance() {
 }
 
 bool Performance::loadFromFile(const std::string& filename) {
+    std::cout << "[DEBUG] Attempting to load performance file: " << filename << std::endl;
     std::ifstream file(filename);
     if (!file.is_open()) {
+        std::cout << "[DEBUG] Could not open performance file: " << filename << std::endl;
         return false;
     }
-    
     std::string line;
+    int lineNum = 0;
     while (std::getline(file, line)) {
+        ++lineNum;
         // Skip empty lines and comments
         if (line.empty() || line[0] == '#' || line[0] == ';') {
             continue;
         }
-        
         // Parse key=value pairs
         size_t equalPos = line.find('=');
         if (equalPos == std::string::npos) {
+            std::cout << "[DEBUG] Skipping malformed line " << lineNum << ": " << line << std::endl;
             continue;
         }
-        
         std::string key = line.substr(0, equalPos);
         std::string value = line.substr(equalPos + 1);
-        
         // Trim whitespace
         key.erase(0, key.find_first_not_of(" \t"));
         key.erase(key.find_last_not_of(" \t") + 1);
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t") + 1);
-        
+        std::cout << "[DEBUG] Parsed key: '" << key << "', value: '" << value << "' (line " << lineNum << ")" << std::endl;
         // Parse numbered parameters for parts 1-8
         for (int part = 1; part <= 8; ++part) {
             if (key == "BankNumber" + std::to_string(part)) {
