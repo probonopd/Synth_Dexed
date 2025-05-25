@@ -42,8 +42,8 @@ using namespace FMRack;
 static std::unique_ptr<Rack> g_rack;
 static std::atomic<bool> g_running{false};
 static unsigned int SAMPLE_RATE = 48000;  // Match native default
-static unsigned int BUFFER_FRAMES = 1024; // Match native default
-static int numBuffers = 4;                // Match native default
+static unsigned int BUFFER_FRAMES = 512; // Default changed from 256 to 512 to reduce stuttering on Windows
+static int numBuffers = 3;                // Default remains 3 (primarily for Windows)
 static int audioDev = 0;                  // Audio device ID
 static int midiDev = 0;                   // MIDI device ID
 static bool useSine = false;              // Sine wave test mode
