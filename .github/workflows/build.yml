@@ -41,7 +41,7 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         uses: lukka/get-cmake@latest
 
-      - name: Run Alpine Docker Container
+      - name: Build in Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
           docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:latest sh -c "
@@ -58,6 +58,12 @@ jobs:
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
           "
+
+      - name: Build with CMake
+        if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
 
       - name: Set outputs
         id: set_outputs
@@ -77,3 +83,5 @@ jobs:
           path: |
             build/bin/Release/*
             build/bin/*
+            Synth_Dexed/build/bin/Release/*
+            Synth_Dexed/build/bin/*
