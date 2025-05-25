@@ -24,7 +24,7 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
     enabled_ = (midiChannel_ > 0);
     
     if (!enabled_) return;
-    
+
     std::cout << "    Configuring module parameters...\n";
     
     // Set module parameters

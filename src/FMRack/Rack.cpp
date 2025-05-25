@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstring>
 #include <regex>
+#include <future>
+#include <mutex>
 
 namespace FMRack {
 
@@ -227,7 +229,6 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
         std::fill(rightOut, rightOut + numSamples, 0.0f);
         return;
     }
-    
     // Clear accumulation buffers
     std::fill(dryLeftBuffer_.begin(), dryLeftBuffer_.begin() + numSamples, 0.0f);
     std::fill(dryRightBuffer_.begin(), dryRightBuffer_.begin() + numSamples, 0.0f);
@@ -238,37 +239,82 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
     std::fill(finalLeftBuffer_.begin(), finalLeftBuffer_.begin() + numSamples, 0.0f);
     std::fill(finalRightBuffer_.begin(), finalRightBuffer_.begin() + numSamples, 0.0f);
 
-    // Temporary per-module buffers
-    std::vector<float> moduleLeft(numSamples, 0.0f);   
-    std::vector<float> moduleRight(numSamples, 0.0f);   
-    std::vector<float> moduleRevLeft(numSamples, 0.0f);
-    std::vector<float> moduleRevRight(numSamples, 0.0f);
+    // Only use multiprocessing if enabled
+    if (multiprocessingEnabled) {
+        // Prepare per-module buffers and futures
+        struct ModuleBuffers {
+            std::vector<float> left, right, revLeft, revRight;
+            ModuleBuffers(int n) : left(n, 0.0f), right(n, 0.0f), revLeft(n, 0.0f), revRight(n, 0.0f) {}
+        };
+        std::vector<ModuleBuffers> moduleBuffers;
+        std::vector<std::future<void>> futures;
+        moduleBuffers.reserve(modules_.size());
+        futures.reserve(modules_.size());
 
-    // Process each module and accumulate
-    for (auto& module : modules_) {
-        module->processAudio(
-            moduleLeft.data(), moduleRight.data(),
-            moduleRevLeft.data(), moduleRevRight.data(),
-            numSamples
-        );
-        
-        // Accumulate dry signal
-        for (int i = 0; i < numSamples; ++i) {
-            dryLeftBuffer_[i] += moduleLeft[i];
-            dryRightBuffer_[i] += moduleRight[i];
-            reverbLeftBuffer_[i] += moduleRevLeft[i];
-            reverbRightBuffer_[i] += moduleRevRight[i];
+        // Launch parallel processing for each module
+        for (size_t i = 0; i < modules_.size(); ++i) {
+            moduleBuffers.emplace_back(numSamples);
+            auto& mbuf = moduleBuffers.back();
+            auto* module = modules_[i].get();
+            futures.push_back(std::async(std::launch::async, [module, &mbuf, numSamples]() {
+                module->processAudio(
+                    mbuf.left.data(), mbuf.right.data(),
+                    mbuf.revLeft.data(), mbuf.revRight.data(),
+                    numSamples
+                );
+            }));
+        }
+        // Wait for all modules to finish
+        for (auto& fut : futures) {
+            fut.get();
+        }
+        // Accumulate results
+        for (const auto& mbuf : moduleBuffers) {
+            for (int i = 0; i < numSamples; ++i) {
+                dryLeftBuffer_[i] += mbuf.left[i];
+                dryRightBuffer_[i] += mbuf.right[i];
+                reverbLeftBuffer_[i] += mbuf.revLeft[i];
+                reverbRightBuffer_[i] += mbuf.revRight[i];
+            }
+        }
+    } else {
+        // Serial processing: use per-module buffers and sum
+        struct ModuleBuffers {
+            std::vector<float> left, right, revLeft, revRight;
+            ModuleBuffers(int n) : left(n, 0.0f), right(n, 0.0f), revLeft(n, 0.0f), revRight(n, 0.0f) {}
+        };
+        std::vector<ModuleBuffers> moduleBuffers;
+        moduleBuffers.reserve(modules_.size());
+        for (auto& module : modules_) {
+            moduleBuffers.emplace_back(numSamples);
+            auto& mbuf = moduleBuffers.back();
+            // Clear per-module buffers before processing
+            std::fill(mbuf.left.begin(), mbuf.left.end(), 0.0f);
+            std::fill(mbuf.right.begin(), mbuf.right.end(), 0.0f);
+            std::fill(mbuf.revLeft.begin(), mbuf.revLeft.end(), 0.0f);
+            std::fill(mbuf.revRight.begin(), mbuf.revRight.end(), 0.0f);
+            module->processAudio(
+                mbuf.left.data(), mbuf.right.data(),
+                mbuf.revLeft.data(), mbuf.revRight.data(),
+                numSamples
+            );
+        }
+        // Accumulate results
+        for (const auto& mbuf : moduleBuffers) {
+            for (int i = 0; i < numSamples; ++i) {
+                dryLeftBuffer_[i] += mbuf.left[i];
+                dryRightBuffer_[i] += mbuf.right[i];
+                reverbLeftBuffer_[i] += mbuf.revLeft[i];
+                reverbRightBuffer_[i] += mbuf.revRight[i];
+            }
         }
     }
-    
     // Process reverb
     reverb_->process(
         reverbLeftBuffer_.data(), reverbRightBuffer_.data(),
         reverbOutLeftBuffer_.data(), reverbOutRightBuffer_.data(),
         numSamples
-    );  
-
-    // Mix dry and reverb, but only add reverb if enabled
+    );
     bool reverbEnabled = reverb_->get_bypass() == false;
     for (int i = 0; i < numSamples; ++i) {
         if (reverbEnabled) {
@@ -279,8 +325,6 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
             finalRightBuffer_[i] = dryRightBuffer_[i];
         }
     }
-
-    // Copy final buffers to output
     for (int i = 0; i < numSamples; ++i) {
         leftOut[i] = finalLeftBuffer_[i];
         rightOut[i] = finalRightBuffer_[i];
@@ -385,11 +429,12 @@ bool Rack::loadInitialPerformance(const std::string& performanceFile) {
     if (performanceFile.empty()) return false;
     if (loadPerformance(performanceFile)) {
         std::cout << "Performance loaded successfully!\n";
-        std::cout << "Enabled parts: " << getEnabledPartCount() << "/8\n";
+        std::cout << "Enabled parts: " << getEnabledPartCount() << "/16\n";
         return true;
     } else {
-        std::cout << "Failed to load performance file. Using default configuration.\n";
-        setDefaultPerformance();
+        std::cout << "Failed to load performance file.\n";
+        // Exit the application if performance loading fails
+        std::cerr << "Error: Could not load performance file: " << performanceFile << "\n";
         return false;
     }
 }

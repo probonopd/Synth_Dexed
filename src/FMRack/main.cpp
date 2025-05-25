@@ -73,6 +73,9 @@ static std::string g_performanceDir;
 static std::string g_performanceBase;
 static bool g_performanceSet = false;
 
+// Define multiprocessingEnabled variable
+int multiprocessingEnabled = 1;
+
 // Helper: wrapper for MIDI message handling
 void handleMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     // If --performance was set and this is a Program Change (0xC0-0xCF)
@@ -573,6 +576,9 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             useSine = true;
         } else if (arg == "--debug") {
             debugEnabled = true;
+        } else if (arg == "--multiprocessing" && i + 1 < argc) {
+            multiprocessingEnabled = std::atoi(argv[i + 1]);
+            ++i;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n";
             std::cout << "Options:\n";
@@ -588,6 +594,7 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             std::cout << "  --unison-spread <0-1>    Unison stereo spread (default: " << unisonSpread << ")\n";
             std::cout << "  --sine                   Generate test sine wave\n";
             std::cout << "  --debug                  Enable debug output (print [DEBUG] messages)\n";
+            std::cout << "  --multiprocessing <0|1>  Enable (1, default) or disable (0) multicore audio processing\n";
             std::cout << "  --help, -h               Show this help message\n";
             exit(0);
         }
@@ -806,7 +813,9 @@ int main(int argc, char* argv[]) {
         
         // Load performance file if specified, otherwise use default
         if (!performanceFile.empty()) {
-            g_rack->loadInitialPerformance(performanceFile);
+            if (!g_rack->loadInitialPerformance(performanceFile)) {
+                return 1;
+            }
         } else {
             // Custom default setup using command line options
             FMRack::Performance perf;
