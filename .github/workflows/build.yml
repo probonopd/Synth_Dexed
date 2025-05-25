@@ -53,7 +53,7 @@ jobs:
             make -j$(nproc) && \
             make install && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
-            git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
+            git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && \
             cd Synth_Dexed && \
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
@@ -62,7 +62,7 @@ jobs:
       - name: Build with CMake (Non-Alpine)
         if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
         run: |
-          git clone --depth 1 --branch "${GITHUB_REF##*/}" "https://github.com/${{ github.repository }}" && \
+          git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && \
           cd Synth_Dexed && \
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release
