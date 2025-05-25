@@ -70,9 +70,9 @@ public:
     
     // Methods
     bool loadFromFile(const std::string& filename);
-    void setDefaults();
     const PartConfig& getPartConfig(int partIndex) const;
     int getEnabledPartCount() const;
+    void setDefaults(int numParts, int unisonVoices);
     
     // Handle MiniDexed SysEx (global or TG)
     // partIndex: -1 for global, 0..7 for TG

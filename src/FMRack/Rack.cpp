@@ -66,7 +66,7 @@ bool Rack::loadPerformance(const std::string& filename) {
 }
 
 void Rack::setDefaultPerformance() {
-    performance_->setDefaults();
+    performance_->setDefaults(16, 1); // Added unisonVoices parameter
     createModulesFromPerformance();
     
     // Set default effects

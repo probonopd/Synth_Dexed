@@ -11,7 +11,7 @@ namespace FMRack {
 
 Performance::Performance() {
     // Initialize with default values
-    setDefaults();
+    setDefaults(16, 1); // Added unisonVoices parameter
 }
 
 Performance::~Performance() {
@@ -150,7 +150,7 @@ bool Performance::loadFromFile(const std::string& filename) {
     return true;
 }
 
-void Performance::setDefaults() {
+void Performance::setDefaults(int numParts, int unisonVoices) {
     // Initialize with a basic FM voice (INIT VOICE)
     std::array<uint8_t, 156> initVoice = {{
         99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6
@@ -167,18 +167,21 @@ void Performance::setDefaults() {
         0                                                                                   // pad to 156 bytes
     }};
     
-    // Set default values for all 16 parts
+    // Set default values for all parts
     for (int i = 0; i < 16; ++i) {
-        parts[i] = PartConfig{};  // Use default constructor values
-        parts[i].voiceData = initVoice;
+        this->parts[i] = PartConfig{};  // Use default constructor values
+        this->parts[i].voiceData = initVoice;
+        if (i < numParts) {
+            this->parts[i].midiChannel = i + 1; // Assign unique MIDI channels
+            this->parts[i].volume = 100;
+            this->parts[i].unisonVoices = unisonVoices; // Use the provided unison voices value
+        } else {
+            this->parts[i].midiChannel = 0; // Disable unused parts
+        }
     }
-    
-    // Enable first part by default
-    parts[0].midiChannel = 1;
-    parts[0].volume = 100;
-    
+
     // Set default effects
-    effects = EffectsConfig{};
+    this->effects = EffectsConfig{};
 }
 
 const Performance::PartConfig& Performance::getPartConfig(int partIndex) const {

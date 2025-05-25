@@ -42,8 +42,8 @@ using namespace FMRack;
 static std::unique_ptr<Rack> g_rack;
 static std::atomic<bool> g_running{false};
 static unsigned int SAMPLE_RATE = 48000;  // Match native default
-static unsigned int BUFFER_FRAMES = 512; // Default changed from 256 to 512 to reduce stuttering on Windows
-static int numBuffers = 3;                // Default remains 3 (primarily for Windows)
+static unsigned int BUFFER_FRAMES = 1024; // Default changed from 256 to 1024 to reduce stuttering on Windows
+static int numBuffers = 4;                // Default remains 4 (primarily for Windows)
 static int audioDev = 0;                  // Audio device ID
 static int midiDev = 0;                   // MIDI device ID
 static bool useSine = false;              // Sine wave test mode
@@ -55,9 +55,9 @@ static std::unique_ptr<UdpServer> g_udpServer;
 int udpPort = 50007; // Default UDP port, can be made configurable
 
 // Global variables for command line options
-static int numModules = 1; // Number of modules/parts
-static int unisonVoices = 1; // Unison voices per module
-static float unisonDetune = 0.0f; // Detune in cents
+static int numModules = 16; // Number of modules/parts
+static int unisonVoices = 2; // Unison voices per module
+static float unisonDetune = 7.0f; // Detune in cents
 static float unisonSpread = 0.5f; // Stereo spread
 
 #ifdef _WIN32
@@ -471,7 +471,7 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             midiDev = std::atoi(argv[i + 1]);
             ++i;
         } else if (arg == "--num-modules" && i + 1 < argc) {
-            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 8);
+            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 16);
             ++i;
         } else if (arg == "--unison-voices" && i + 1 < argc) {
             unisonVoices = std::clamp(std::atoi(argv[i + 1]), 1, 4);
@@ -488,15 +488,15 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             std::cout << "Usage: " << argv[0] << " [options]\n";
             std::cout << "Options:\n";
             std::cout << "  --performance <file>     Load performance file at startup\n";
-            std::cout << "  --sample-rate <rate>     Set sample rate (default: 48000)\n";
-            std::cout << "  --buffer-frames <frames> Set buffer size (default: 1024)\n";
-            std::cout << "  --num-buffers <count>    Set number of buffers (default: 4)\n";
-            std::cout << "  --audio-device <id>      Audio device ID (default: 0)\n";
-            std::cout << "  --midi-device <id>       MIDI device ID (default: 0)\n";
-            std::cout << "  --num-modules <n>        Number of modules/parts (default: 1)\n";
-            std::cout << "  --unison-voices <n>      Unison voices per module (default: 1)\n";
-            std::cout << "  --unison-detune <cents>  Unison detune in cents (default: 0.0)\n";
-            std::cout << "  --unison-spread <0-1>    Unison stereo spread (default: 0.5)\n";
+            std::cout << "  --sample-rate <rate>     Set sample rate (default: " << SAMPLE_RATE << ")\n";
+            std::cout << "  --buffer-frames <frames> Set buffer size (default: " << BUFFER_FRAMES << ")\n";
+            std::cout << "  --num-buffers <count>    Set number of buffers (default: " << numBuffers << ")\n";
+            std::cout << "  --audio-device <id>      Audio device ID (default: " << audioDev << ")\n";
+            std::cout << "  --midi-device <id>       MIDI device ID (default: " << midiDev << ")\n";
+            std::cout << "  --num-modules <n>        Number of modules/parts (default: " << numModules << ")\n";
+            std::cout << "  --unison-voices <n>      Unison voices per module (default: " << unisonVoices << ")\n";
+            std::cout << "  --unison-detune <cents>  Unison detune in cents (default: " << unisonDetune << ")\n";
+            std::cout << "  --unison-spread <0-1>    Unison stereo spread (default: " << unisonSpread << ")\n";
             std::cout << "  --sine                   Generate test sine wave\n";
             std::cout << "  --help, -h               Show this help message\n";
             exit(0);
@@ -678,13 +678,13 @@ int main(int argc, char* argv[]) {
         } else {
             // Custom default setup using command line options
             FMRack::Performance perf;
-            perf.setDefaults();
+            perf.setDefaults(numModules, unisonVoices); // Pass unisonVoices to setDefaults
             for (int i = 0; i < 8; ++i) {
                 if (i < numModules) {
                     perf.parts[i].midiChannel = i + 1;
-                    perf.parts[i].unisonVoices = unisonVoices;
-                    perf.parts[i].unisonDetune = unisonDetune;
-                    perf.parts[i].unisonSpread = unisonSpread;
+                    perf.parts[i].unisonVoices = unisonVoices; // Use the value from the command line argument
+                    perf.parts[i].unisonDetune = 7.0f;
+                    perf.parts[i].unisonSpread = 0.5f;
                     perf.parts[i].volume = 100;
                 } else {
                     perf.parts[i].midiChannel = 0;
