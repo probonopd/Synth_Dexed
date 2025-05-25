@@ -5,6 +5,11 @@
 #include <algorithm>
 #include <cstring>
 #include <regex>
+#include <atomic>
+
+namespace {
+    static std::atomic<bool> performanceChangeInProgress{false};
+}
 
 namespace FMRack {
 
@@ -79,9 +84,8 @@ void Rack::setDefaultPerformance() {
 
 void Rack::createModulesFromPerformance() {
     std::cout << "\n=== Creating modules from performance ===\n";
-
     modules_.clear();
-
+    std::cout << "[DEBUG] performance_->parts.size(): " << performance_->parts.size() << std::endl;
     // Debug output for global reverb settings
     DEBUG_PRINT("[DEBUG] Global Reverb Settings:\n");
     DEBUG_PRINT("  ReverbEnable: " << performance_->effects.reverbEnable << "\n");
@@ -91,9 +95,14 @@ void Rack::createModulesFromPerformance() {
     DEBUG_PRINT("  ReverbLowDamp: " << static_cast<int>(performance_->effects.reverbLowDamp) << "/127\n");
     DEBUG_PRINT("  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n");
     DEBUG_PRINT("  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n");
-
     for (int i = 0; i < 16; ++i) {
+        std::cout << "[DEBUG] Looping module index: " << i << std::endl;
+        if (i >= static_cast<int>(performance_->parts.size())) {
+            std::cout << "[DEBUG] Index " << i << " out of bounds for parts.size() " << performance_->parts.size() << std::endl;
+            break;
+        }
         auto config = performance_->getPartConfig(i);
+        std::cout << "[DEBUG] Got part config for index: " << i << std::endl;
 
         if (config.midiChannel > 0 ) {
             // Force each part to its own MIDI channel (1-16)
@@ -334,6 +343,10 @@ void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_chann
 
 // Add handleProgramChange implementation
 void Rack::handleProgramChange(int programNum, const std::string& performanceDir) {
+    if (performanceChangeInProgress.exchange(true)) {
+        DEBUG_PRINT("[DEBUG] Program change ignored: another performance change is still in progress");
+        return;
+    }
     // Special case: program 1 loads ../performance.ini
     if (programNum == 0) {
         std::filesystem::path perfPath = std::filesystem::path(performanceDir) / ".." / "performance.ini";
@@ -347,10 +360,11 @@ void Rack::handleProgramChange(int programNum, const std::string& performanceDir
         } else {
             DEBUG_PRINT("[DEBUG] Performance file does not exist: " << perfPath.string());
         }
+        performanceChangeInProgress = false;
         return;
     }
     // For other programs, match files with any number of leading zeros and any suffix
-    std::regex pattern(R"((0*)" + std::to_string(programNum + 1) + R"(_.*\.ini)$)", std::regex_constants::icase);
+    std::regex pattern(R"((0*)" + std::to_string(programNum) + R"(_.*\.ini)$)", std::regex_constants::icase);
     std::filesystem::directory_iterator dirIter(performanceDir);
     std::string foundFile;
     for (const auto& entry : dirIter) {
@@ -371,6 +385,7 @@ void Rack::handleProgramChange(int programNum, const std::string& performanceDir
     } else {
         DEBUG_PRINT("[DEBUG] No matching performance file found for program " << (programNum + 1));
     }
+    performanceChangeInProgress = false;
 }
 
 bool Rack::loadInitialPerformance(const std::string& performanceFile) {
