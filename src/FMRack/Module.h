@@ -76,6 +76,9 @@ private:
     float outputGain_ = 1.0f;
     float moduleGain_ = 1.0f;
     
+    // Pointer to live PartConfig for real-time updates
+    Performance::PartConfig* partConfig_ = nullptr;
+    
     // Helper methods
     bool isNoteInRange(uint8_t note) const;
     void applyNoteShift(uint8_t& note) const;

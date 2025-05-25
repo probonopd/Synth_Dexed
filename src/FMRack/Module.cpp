@@ -15,6 +15,7 @@ Module::Module(float sampleRate)
 }
 
 void Module::configureFromPerformance(const Performance::PartConfig& config) {
+    partConfig_ = const_cast<Performance::PartConfig*>(&config);
     midiChannel_ = config.midiChannel;
     enabled_ = (midiChannel_ > 0);
     
@@ -258,8 +259,9 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
 }
 
 void Module::processSysex(const uint8_t* data, int len) {
+    // Only handle Yamaha/Dexed engine-specific SysEx here.
+    // All MiniDexed performance parameter SysEx is now handled in Performance.
     // Yamaha SysEx: F0 43 1n 01 1B vv F7 (operator ON/OFF mask)
-    // NOTE: Apparently Dexed cannot handle this directly on its own, so we have to handle it here.
     if (len == 7 && data[0] == 0xF0 && data[1] == 0x43 && data[3] == 0x01 && data[4] == 0x1B && data[6] == 0xF7) {
         uint8_t opMask = data[5];
         std::cout << "[SYSEX] Operator ON/OFF mask received: 0x" << std::hex << (int)opMask << std::dec << std::endl;

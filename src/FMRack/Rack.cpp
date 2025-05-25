@@ -286,6 +286,19 @@ std::string Rack::getControllerTargetName(uint8_t target) const {
 }
 
 void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_channel) {
+    // Only handle MiniDexed (0x7D) SysEx in Performance
+    if (len >= 3 && data[1] == 0x7D && performance_) {
+        std::cout << "[SYSEX] MiniDexed SysEx received, length: " << len << " bytes\n";
+        std::vector<uint8_t> response;
+        if (performance_->handleSysex(data, len, response)) {
+            if (!response.empty()) {
+                // TODO: Send response via MIDI output here
+                std::cout << "[SYSEX] TODO: Send performance parameter response (" << response.size() << " bytes)\n";
+            }
+            return;
+        }
+    }
+    // Forward all other SysEx to modules (Yamaha/Dexed etc)
     for (auto& module : modules_) {
         if (sysex_channel == 0 || module->getMIDIChannel() == sysex_channel) {
             module->processSysex(data, len);

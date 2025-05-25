@@ -2,6 +2,7 @@
 
 #include <array>
 #include <string>
+#include <vector>
 
 namespace FMRack {
 
@@ -72,6 +73,10 @@ public:
     void setDefaults();
     const PartConfig& getPartConfig(int partIndex) const;
     int getEnabledPartCount() const;
+    
+    // Handle MiniDexed SysEx (global or TG)
+    // partIndex: -1 for global, 0..7 for TG
+    bool handleSysex(const uint8_t* data, int len, std::vector<uint8_t>& response, int partIndex = -1);
 };
 
 } // namespace FMRack

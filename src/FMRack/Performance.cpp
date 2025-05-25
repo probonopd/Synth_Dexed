@@ -4,6 +4,8 @@
 #include <sstream>
 #include <algorithm>
 #include <cstring>
+#include <vector>
+#include <cstdint>
 
 namespace FMRack {
 
@@ -193,6 +195,155 @@ int Performance::getEnabledPartCount() const {
         if (part.midiChannel > 0) count++;
     }
     return count;
+}
+
+// Helper: encode signed int8_t as 2 MIDI 7-bit bytes (2's complement, 14-bit)
+static void encode_signed_14bit(int8_t val, uint8_t& msb, uint8_t& lsb) {
+    int16_t v = static_cast<int16_t>(val);
+    uint16_t midi14 = static_cast<uint16_t>(v & 0x3FFF);
+    msb = (midi14 >> 7) & 0x7F;
+    lsb = midi14 & 0x7F;
+}
+// Helper: decode signed 14-bit from 2 MIDI 7-bit bytes
+static int8_t decode_signed_14bit(uint8_t msb, uint8_t lsb) {
+    int16_t midi14 = ((msb & 0x7F) << 7) | (lsb & 0x7F);
+    if (midi14 & 0x2000) midi14 |= 0xC000; // sign extend
+    return static_cast<int8_t>(midi14);
+}
+
+bool Performance::handleSysex(const uint8_t* data, int len, std::vector<uint8_t>& response, int partIndex) {
+    std::cout << "[PERFORMANCE] MiniDexed SysEx received, length: " << len << " bytes, partIndex: " << partIndex << "\n";
+
+    if (len < 5 || data[0] != 0xF0 || data[1] != 0x7D || data[len-1] != 0xF7) return false;
+    uint8_t cmd = data[2];
+    std::cout << "[PERFORMANCE] MiniDexed command: " << std::hex << static_cast<int>(cmd) << " (partIndex: " << partIndex << ")\n";
+    // Global GET
+    if (cmd == 0x10 && partIndex == -1) {
+        std::cout << "[PERFORMANCE] Global GET command received\n";
+        response = {0xF0, 0x7D, 0x20};
+        auto& eff = effects;
+        auto add = [&](uint16_t p, uint16_t v) {
+            response.push_back((p >> 8) & 0x7F); response.push_back(p & 0x7F);
+            response.push_back((v >> 8) & 0x7F); response.push_back(v & 0x7F);
+        };
+        add(0x0000, eff.compressorEnable ? 1 : 0);
+        add(0x0001, eff.reverbEnable ? 1 : 0);
+        add(0x0002, eff.reverbSize);
+        add(0x0003, eff.reverbHighDamp);
+        add(0x0004, eff.reverbLowDamp);
+        add(0x0005, eff.reverbLowPass);
+        add(0x0006, eff.reverbDiffusion);
+        add(0x0007, eff.reverbLevel);
+        response.push_back(0xF7);
+        return true;
+    }
+    // TG GET
+    if (cmd == 0x11 && len >= 5 && partIndex >= 0 && partIndex < (int)parts.size()) {
+        std::cout << "[PERFORMANCE] TG GET command received for part " << partIndex << "\n";
+        response = {0xF0, 0x7D, 0x21, static_cast<uint8_t>(partIndex)};
+        const auto& p = parts[partIndex];
+        auto add = [&](uint16_t param, uint16_t value) {
+            response.push_back((param >> 8) & 0x7F); response.push_back(param & 0x7F);
+            response.push_back((value >> 8) & 0x7F); response.push_back(value & 0x7F);
+        };
+        add(0x0000, p.bankNumber);
+        add(0x0001, p.voiceNumber);
+        add(0x0002, p.midiChannel);
+        add(0x0003, p.volume);
+        add(0x0004, p.pan);
+        // Detune (signed)
+        uint8_t msb, lsb;
+        encode_signed_14bit(p.detune, msb, lsb);
+        add(0x0005, (msb << 8) | lsb);
+        add(0x0006, p.cutoff);
+        add(0x0007, p.resonance);
+        add(0x0008, p.noteLimitLow);
+        add(0x0009, p.noteLimitHigh);
+        // NoteShift (signed)
+        encode_signed_14bit(p.noteShift, msb, lsb);
+        add(0x000A, (msb << 8) | lsb);
+        add(0x000B, p.reverbSend);
+        add(0x000C, p.pitchBendRange);
+        add(0x000D, p.pitchBendStep);
+        add(0x000E, p.portamentoMode);
+        add(0x000F, p.portamentoGlissando);
+        add(0x0010, p.portamentoTime);
+        add(0x0011, p.monoMode);
+        add(0x0012, p.modulationWheelRange);
+        add(0x0013, p.modulationWheelTarget);
+        add(0x0014, p.footControlRange);
+        add(0x0015, p.footControlTarget);
+        add(0x0016, p.breathControlRange);
+        add(0x0017, p.breathControlTarget);
+        add(0x0018, p.aftertouchRange);
+        add(0x0019, p.aftertouchTarget);
+        response.push_back(0xF7);
+        return true;
+    }
+    // Global SET
+    if (cmd == 0x20 && partIndex == -1) {
+        std::cout << "[PERFORMANCE] Global SET command received\n";
+        int offset = 3;
+        while (offset + 3 < len - 1) {
+            uint16_t param = (data[offset] << 8) | data[offset+1];
+            uint16_t value = (data[offset+2] << 8) | data[offset+3];
+            offset += 4;
+            switch (param) {
+                case 0x0000: effects.compressorEnable = (value != 0); break;
+                case 0x0001: effects.reverbEnable = (value != 0); break;
+                case 0x0002: effects.reverbSize = value & 0x7F; break;
+                case 0x0003: effects.reverbHighDamp = value & 0x7F; break;
+                case 0x0004: effects.reverbLowDamp = value & 0x7F; break;
+                case 0x0005: effects.reverbLowPass = value & 0x7F; break;
+                case 0x0006: effects.reverbDiffusion = value & 0x7F; break;
+                case 0x0007: effects.reverbLevel = value & 0x7F; break;
+                default: break;
+            }
+        }
+        return true;
+    }
+    // TG SET
+    if (cmd == 0x21 && len >= 8 && partIndex >= 0 && partIndex < (int)parts.size()) {
+        std::cout << "[PERFORMANCE] TG SET command received for part " << partIndex << "\n";
+        int offset = 4;
+        auto& p = parts[partIndex];
+        while (offset + 3 < len - 1) {
+            uint16_t param = (data[offset] << 8) | data[offset+1];
+            uint16_t value = (data[offset+2] << 8) | data[offset+3];
+            offset += 4;
+            switch (param) {
+                case 0x0000: p.bankNumber = value & 0x7F; break;
+                case 0x0001: p.voiceNumber = value & 0x1F; break;
+                case 0x0002: p.midiChannel = value & 0x7F; break;
+                case 0x0003: p.volume = value & 0x7F; break;
+                case 0x0004: p.pan = value & 0x7F; break;
+                case 0x0005: p.detune = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F); break;
+                case 0x0006: p.cutoff = value & 0x7F; break;
+                case 0x0007: p.resonance = value & 0x7F; break;
+                case 0x0008: p.noteLimitLow = value & 0x7F; break;
+                case 0x0009: p.noteLimitHigh = value & 0x7F; break;
+                case 0x000A: p.noteShift = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F); break;
+                case 0x000B: p.reverbSend = value & 0x7F; break;
+                case 0x000C: p.pitchBendRange = value & 0x7F; break;
+                case 0x000D: p.pitchBendStep = value & 0x7F; break;
+                case 0x000E: p.portamentoMode = value & 0x7F; break;
+                case 0x000F: p.portamentoGlissando = value & 0x7F; break;
+                case 0x0010: p.portamentoTime = value & 0x7F; break;
+                case 0x0011: p.monoMode = value & 0x7F; break;
+                case 0x0012: p.modulationWheelRange = value & 0x7F; break;
+                case 0x0013: p.modulationWheelTarget = value & 0x7F; break;
+                case 0x0014: p.footControlRange = value & 0x7F; break;
+                case 0x0015: p.footControlTarget = value & 0x7F; break;
+                case 0x0016: p.breathControlRange = value & 0x7F; break;
+                case 0x0017: p.breathControlTarget = value & 0x7F; break;
+                case 0x0018: p.aftertouchRange = value & 0x7F; break;
+                case 0x0019: p.aftertouchTarget = value & 0x7F; break;
+                default: break;
+            }
+        }
+        return true;
+    }
+    return false;
 }
 
 } // namespace FMRack
