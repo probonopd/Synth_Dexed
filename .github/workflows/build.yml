@@ -55,6 +55,15 @@ jobs:
             make install
           "
 
+      - name: Verify CMakeLists.txt
+        run: |
+          echo "Checking for CMakeLists.txt in ${{ github.workspace }}"
+          ls -lh ${{ github.workspace }}
+          if [ ! -f "${{ github.workspace }}/CMakeLists.txt" ]; then
+            echo "CMakeLists.txt not found in ${{ github.workspace }}. Exiting."
+            exit 1
+          fi
+
       - name: Run Alpine Docker Container
         if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
         run: |
@@ -62,7 +71,7 @@ jobs:
             if [ ! -f /workspace/CMakeLists.txt ]; then
               echo 'CMakeLists.txt not found in /workspace. Please check the mount configuration.'
               exit 1
-            fi && \
+            fi && cd /workspace && \
             apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
             cmake --build build --config Release
