@@ -4,6 +4,10 @@
 #include <algorithm>
 #include <cstring>
 
+// Debug macro/flag for debug output (no main.h include needed)
+extern bool debugEnabled;
+#define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
+
 namespace FMRack {
 
 // Helper function to extract voice name from DX7 voice data
@@ -52,11 +56,11 @@ bool Rack::loadPerformance(const std::string& filename) {
     if (performance_->loadFromFile(filename)) {
         createModulesFromPerformance();
         // Configure effects from performance
-        std::cout << "[DEBUG] Performance loaded: " << filename << std::endl;
-        std::cout << "[DEBUG] ReverbEnable: " << performance_->effects.reverbEnable << std::endl;
-        std::cout << "[DEBUG] ReverbLevel: " << static_cast<int>(performance_->effects.reverbLevel) << std::endl;
-        std::cout << "[DEBUG] ReverbSize: " << static_cast<int>(performance_->effects.reverbSize) << std::endl;
-        std::cout << "[DEBUG] Number of modules: " << modules_.size() << std::endl;
+        DEBUG_PRINT("[DEBUG] Performance loaded: " << filename);
+        DEBUG_PRINT("[DEBUG] ReverbEnable: " << performance_->effects.reverbEnable);
+        DEBUG_PRINT("[DEBUG] ReverbLevel: " << static_cast<int>(performance_->effects.reverbLevel));
+        DEBUG_PRINT("[DEBUG] ReverbSize: " << static_cast<int>(performance_->effects.reverbSize));
+        DEBUG_PRINT("[DEBUG] Number of modules: " << modules_.size());
         reverb_->setEnabled(performance_->effects.reverbEnable);
         reverb_->setSize(performance_->effects.reverbSize / 127.0f);
         reverb_->setLevel(performance_->effects.reverbLevel / 127.0f);
@@ -81,14 +85,14 @@ void Rack::createModulesFromPerformance() {
     modules_.clear();
 
     // Debug output for global reverb settings
-    std::cout << "[DEBUG] Global Reverb Settings:\n";
-    std::cout << "  ReverbEnable: " << performance_->effects.reverbEnable << "\n";
-    std::cout << "  ReverbLevel: " << static_cast<int>(performance_->effects.reverbLevel) << "/127\n";
-    std::cout << "  ReverbSize: " << static_cast<int>(performance_->effects.reverbSize) << "/127\n";
-    std::cout << "  ReverbHighDamp: " << static_cast<int>(performance_->effects.reverbHighDamp) << "/127\n";
-    std::cout << "  ReverbLowDamp: " << static_cast<int>(performance_->effects.reverbLowDamp) << "/127\n";
-    std::cout << "  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n";
-    std::cout << "  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n";
+    DEBUG_PRINT("[DEBUG] Global Reverb Settings:\n");
+    DEBUG_PRINT("  ReverbEnable: " << performance_->effects.reverbEnable << "\n");
+    DEBUG_PRINT("  ReverbLevel: " << static_cast<int>(performance_->effects.reverbLevel) << "/127\n");
+    DEBUG_PRINT("  ReverbSize: " << static_cast<int>(performance_->effects.reverbSize) << "/127\n");
+    DEBUG_PRINT("  ReverbHighDamp: " << static_cast<int>(performance_->effects.reverbHighDamp) << "/127\n");
+    DEBUG_PRINT("  ReverbLowDamp: " << static_cast<int>(performance_->effects.reverbLowDamp) << "/127\n");
+    DEBUG_PRINT("  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n");
+    DEBUG_PRINT("  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n");
 
     for (int i = 0; i < 16; ++i) {
         auto config = performance_->getPartConfig(i);
@@ -141,10 +145,10 @@ void Rack::createModulesFromPerformance() {
             
             auto module = std::make_unique<Module>(sampleRate_);
             module->configureFromPerformance(config);
-            std::cout << "[DEBUG] Module " << (i + 1)
-                      << " MIDI channel: " << (int)module->getMIDIChannel()
-                      << " Note range: " << (int)config.noteLimitLow << "-" << (int)config.noteLimitHigh
-                      << " Pan: " << (int)config.pan << std::endl;
+            DEBUG_PRINT("[DEBUG] Module " << (i + 1)
+                << " MIDI channel: " << (int)module->getMIDIChannel()
+                << " Note range: " << (int)config.noteLimitLow << "-" << (int)config.noteLimitHigh
+                << " Pan: " << (int)config.pan);
             modules_.push_back(std::move(module));
             std::cout << "  Module " << (i + 1) << " created successfully\n\n";
         } else {
@@ -165,8 +169,8 @@ uint8_t Rack::extractMidiChannel(uint8_t status) const {
 
 void Rack::routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2) {
     uint8_t channel = extractMidiChannel(status);
-    std::cout << "[DEBUG] routeMidiToModules: status=0x" << std::hex << (int)status
-              << " channel=" << std::dec << (int)channel << std::endl;
+    DEBUG_PRINT("[DEBUG] routeMidiToModules: status=0x" << std::hex << (int)status
+        << " channel=" << std::dec << (int)channel);
 
     if (channel == 0) return; // Skip system messages
 
@@ -174,9 +178,9 @@ void Rack::routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2) {
     bool anyMatched = false;
     for (size_t i = 0; i < modules_.size(); ++i) {
         uint8_t moduleChan = modules_[i]->getMIDIChannel();
-        std::cout << "[DEBUG] Module " << i << " getMIDIChannel()=" << (int)moduleChan << std::endl;
+        DEBUG_PRINT("[DEBUG] Module " << i << " getMIDIChannel()=" << (int)moduleChan);
         if (moduleChan == channel) {
-            std::cout << "[DEBUG] Routing to module " << i << std::endl;
+            DEBUG_PRINT("[DEBUG] Routing to module " << i);
             modules_[i]->processMidiMessage(status, data1, data2);
             anyMatched = true;
         }
@@ -187,7 +191,7 @@ void Rack::routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2) {
         for (size_t i = 0; i < modules_.size(); ++i) {
             uint8_t moduleChan = modules_[i]->getMIDIChannel();
             if (moduleChan != 16) {
-                std::cout << "[DEBUG] Channel 16 broadcast to module " << i << std::endl;
+                DEBUG_PRINT("[DEBUG] Channel 16 broadcast to module " << i);
                 modules_[i]->processMidiMessage(status, data1, data2);
             }
         }
@@ -201,12 +205,12 @@ void Rack::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     uint8_t msgType = status & 0xF0;
     uint8_t channel = extractMidiChannel(status);
     if (msgType == 0x90 && data2 > 0) {
-        std::cout << "Note ON  - Channel: " << static_cast<int>(channel) 
-                  << ", Note: " << static_cast<int>(data1) 
-                  << ", Velocity: " << static_cast<int>(data2) << std::endl;
+        DEBUG_PRINT("[DEBUG] Note ON - Channel: " << static_cast<int>(channel) 
+            << ", Note: " << static_cast<int>(data1) 
+            << ", Velocity: " << static_cast<int>(data2));
     } else if (msgType == 0x80 || (msgType == 0x90 && data2 == 0)) {
-        std::cout << "Note OFF - Channel: " << static_cast<int>(channel) 
-                  << ", Note: " << static_cast<int>(data1) << std::endl;
+        DEBUG_PRINT("[DEBUG] Note OFF - Channel: " << static_cast<int>(channel) 
+            << ", Note: " << static_cast<int>(data1));
     }
     
     routeMidiToModules(status, data1, data2);

@@ -1990,12 +1990,12 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t midiState, uint8_t midi
 
 bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
 {
-    std::cout << "[DEXED DEBUG] midiDataHandler (long): midiChannel=" << (int)midiChannel
-              << " status=0x" << std::hex << (int)(midiData[0] & 0xF0)
-              << " channel=" << std::dec << (int)(midiData[0] & 0x0F)
-              << " data1=" << (int)midiData[1]
-              << " data2=" << (int)midiData[2]
-              << " len=" << len << std::endl;
+//    std::cout << "[DEXED DEBUG] midiDataHandler (long): midiChannel=" << (int)midiChannel
+//              << " status=0x" << std::hex << (int)(midiData[0] & 0xF0)
+//              << " channel=" << std::dec << (int)(midiData[0] & 0x0F)
+//              << " data1=" << (int)midiData[1]
+//              << " data2=" << (int)midiData[2]
+//              << " len=" << len << std::endl;
 
     // check for MIDI channel (except for system messages)
     uint8_t status = midiData[0] & 0xF0;

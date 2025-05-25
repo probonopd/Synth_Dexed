@@ -60,6 +60,16 @@ static int unisonVoices = 2; // Unison voices per module
 static float unisonDetune = 7.0f; // Detune in cents
 static float unisonSpread = 0.5f; // Stereo spread
 
+// Expose debugEnabled and DEBUG_PRINT for use in other FMRack files
+#ifndef FMRACK_DEBUG_HEADER
+#define FMRACK_DEBUG_HEADER
+extern bool debugEnabled;
+#define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
+#endif
+
+// Debug flag for controlling debug output
+bool debugEnabled = false;
+
 #ifdef _WIN32
 // Windows MIDI callback
 void CALLBACK midiInProc(HMIDIIN hmi, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
@@ -484,6 +494,8 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             ++i;
         } else if (arg == "--sine") {
             useSine = true;
+        } else if (arg == "--debug") {
+            debugEnabled = true;
         } else if (arg == "--help" || arg == "-h") {
             std::cout << "Usage: " << argv[0] << " [options]\n";
             std::cout << "Options:\n";
@@ -498,6 +510,7 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             std::cout << "  --unison-detune <cents>  Unison detune in cents (default: " << unisonDetune << ")\n";
             std::cout << "  --unison-spread <0-1>    Unison stereo spread (default: " << unisonSpread << ")\n";
             std::cout << "  --sine                   Generate test sine wave\n";
+            std::cout << "  --debug                  Enable debug output (print [DEBUG] messages)\n";
             std::cout << "  --help, -h               Show this help message\n";
             exit(0);
         }
@@ -711,7 +724,7 @@ int main(int argc, char* argv[]) {
 #endif
 #endif
         
-        std::cout << "[DEBUG] About to start UDP server on port " << udpPort << std::endl;
+        DEBUG_PRINT("[DEBUG] About to start UDP server on port " << udpPort);
         // Start UDP server for raw UDP handling
         g_udpServer = std::make_unique<UdpServer>(udpPort, [](const uint8_t* data, int len) {
             if (!g_rack) return;

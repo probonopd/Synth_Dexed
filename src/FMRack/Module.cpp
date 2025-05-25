@@ -4,6 +4,10 @@
 #include <cmath>
 #include <cstring>
 
+// Debug macro/flag for debug output (no main.h include needed)
+extern bool debugEnabled;
+#define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
+
 namespace FMRack {
 
 Module::Module(float sampleRate) 
@@ -119,11 +123,11 @@ void Module::applyNoteShift(uint8_t& note) const {
 
 void Module::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     if (!enabled_) return;
-    std::cout << "[DEBUG] Module::processMidiMessage: status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2 << std::endl;
+    DEBUG_PRINT("[DEBUG] Module::processMidiMessage: status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
     uint8_t midiData[3] = {status, data1, data2};
     uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
     for (auto& engine : fmEngines_) {
-        std::cout << "[DEBUG] midiDataHandler: channel=" << (int)msgChannel << ", status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2 << std::endl;
+        DEBUG_PRINT("[DEBUG] midiDataHandler: channel=" << (int)msgChannel << ", status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
         engine->midiDataHandler(msgChannel, midiData, 3);
     }
 }
