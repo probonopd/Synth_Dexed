@@ -453,7 +453,44 @@ void midiThread() {
         snd_seq_close(seq_handle);
         return;
     }
-    std::cout << "[ALSA] MIDI input port created. Connect your MIDI device using 'aconnect' or your ALSA tool." << std::endl;
+
+    // Enumerate available ALSA MIDI input ports
+    std::vector<std::pair<int, int>> available_ports; // (client, port)
+    snd_seq_client_info_t *cinfo;
+    snd_seq_port_info_t *pinfo;
+    snd_seq_client_info_alloca(&cinfo);
+    snd_seq_port_info_alloca(&pinfo);
+    snd_seq_client_info_set_client(cinfo, -1);
+    int idx = 0;
+    while (snd_seq_query_next_client(seq_handle, cinfo) >= 0) {
+        int client = snd_seq_client_info_get_client(cinfo);
+        snd_seq_port_info_set_client(pinfo, client);
+        snd_seq_port_info_set_port(pinfo, -1);
+        while (snd_seq_query_next_port(seq_handle, pinfo) >= 0) {
+            unsigned int caps = snd_seq_port_info_get_capability(pinfo);
+            if ((caps & SND_SEQ_PORT_CAP_READ) && (caps & SND_SEQ_PORT_CAP_SUBS_READ)) {
+                available_ports.emplace_back(client, snd_seq_port_info_get_port(pinfo));
+                std::cout << "  [" << idx << "] "
+                          << snd_seq_client_info_get_name(cinfo) << " - "
+                          << snd_seq_port_info_get_name(pinfo) << std::endl;
+                ++idx;
+            }
+        }
+    }
+    if (available_ports.empty()) {
+        std::cout << "[ALSA] No hardware MIDI input ports found. MIDI will not work." << std::endl;
+    } else if (midiDev >= 0 && midiDev < (int)available_ports.size()) {
+        int client = available_ports[midiDev].first;
+        int port = available_ports[midiDev].second;
+        int connect_err = snd_seq_connect_from(seq_handle, midi_in_port, client, port);
+        if (connect_err == 0) {
+            std::cout << "[ALSA] Connected to MIDI input port [" << midiDev << "] successfully." << std::endl;
+        } else {
+            std::cout << "[ALSA] Failed to connect to MIDI input port [" << midiDev << "]: " << snd_strerror(connect_err) << std::endl;
+        }
+    } else {
+        std::cout << "[ALSA] Invalid MIDI device index (" << midiDev << "). No connection made." << std::endl;
+    }
 
     struct pollfd *pfds;
     int npfds = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
