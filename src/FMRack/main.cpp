@@ -319,14 +319,38 @@ void audioThread() {
         std::cerr << "Warning: Failed to set real-time priority for audio thread." << std::endl;
     }
 
-    snd_pcm_t* pcm_handle;
-    // TODO: Use the audioDev parameter to select the device string, similar to native/main_linux.cpp
-    // For now, using "default". The command line --audio-device is currently ignored for Linux.
-    int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
+    // Try to open PCM device with retries when running as service
+    snd_pcm_t* pcm_handle = nullptr;
+    int err = -1;
+    int retry_count = 0;
+    const int max_retries = serviceMode ? 10 : 1;  // More retries in service mode
+    std::string device_name = "default";  // Start with default device
+
+    while (err < 0 && retry_count < max_retries && g_running) {
+        if (retry_count > 0) {
+            std::cout << "Retry " << retry_count << "/" << max_retries 
+                      << " opening PCM device after waiting..." << std::endl;
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            
+            // Try with explicit hw device if default fails
+            if (retry_count > max_retries/2) {
+                device_name = "hw:0,0";
+                std::cout << "Trying direct hardware device: " << device_name << std::endl;
+            }
+        }
+        
+        err = snd_pcm_open(&pcm_handle, device_name.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
+        retry_count++;
+    }
+
     if (err < 0) {
-        std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\\n";
+        std::cout << "Failed to open PCM device after " << retry_count << " attempts: " 
+                  << snd_strerror(err) << std::endl;
+        std::cout << "Audio thread exiting - check ALSA permissions and configuration." << std::endl;
         return;
     }
+
+    std::cout << "Successfully opened ALSA device: " << device_name << std::endl;
 
     // Configure PCM
     snd_pcm_hw_params_t* hw_params;
@@ -846,7 +870,7 @@ int main(int argc, char* argv[]) {
     if (!serviceMode) {
         // Check if stdin is connected to a terminal
         if (!isatty(STDIN_FILENO)) {
-            std::cout << "Stdin is not connected to a terminal, automatically enabling service mode.\n";
+            std::cout << "Stdin is not connected to a terminal, running in service mode.\n";
             serviceMode = true;
         }
     }
@@ -916,9 +940,9 @@ int main(int argc, char* argv[]) {
         std::thread midi_thread(midiThread);
         
         // Set up signal handlers for Linux
-            signal(SIGINT, signalHandler);
-            signal(SIGTERM, signalHandler);
-            signal(SIGHUP, signalHandler);
+        signal(SIGINT, signalHandler);
+        signal(SIGTERM, signalHandler);
+        signal(SIGHUP, signalHandler);
 #endif
 #endif
         
@@ -974,14 +998,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Press Ctrl+C to stop.\n";
         
         if (serviceMode) {
+            std::cout << "Running in service mode. Use SIGTERM to shut down.\n";
             // Instead of reading from stdin, we just wait until g_running becomes false
             while (g_running) {
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
         } else {
-            std::cout << "> ";
-            std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
-            
             // Interactive command loop
             char command;
             while (std::cin >> command && command != 'q') {
