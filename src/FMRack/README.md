@@ -334,7 +334,13 @@ FMRack has been tested on Raspberry Pi 5 with Raspberry Pi OS 64-bit.
 
 Create `/etc/systemd/system/FMRack.service`
 
-__TODO:__ Find a way to make MIDI devices hot-pluggable instead of hardcoding them.
+__TODO:__
+
+* Find a way to make MIDI devices hot-pluggable instead of hardcoding them
+* Find a way to run in high priority mode (`/etc/security/limits.conf`), see https://www.youtube.com/watch?v=ilmhX1j-ENU&t=280s
+* Overall learn from and improve over https://www.youtube.com/watch?v=ilmhX1j-ENU&t, e.g., how to script the menu in Python
+* Possibly allow to combine/stack performances with FM and Samples?
+* Find a way to build a minimal Linux system without a full distribution, e.g., using something like Buildroot, OpenWRT, Alpine Linux, or pi-gen-micro
 
 ```
 [Unit]
