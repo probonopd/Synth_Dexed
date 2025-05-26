@@ -11,6 +11,10 @@
 #include <memory>
 #include <filesystem> // Add for file system operations
 
+#ifdef __linux__
+#include <unistd.h> // For isatty() function
+#endif
+
 // Define M_PI if not available (common on Windows)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -75,6 +79,18 @@ static bool g_performanceSet = false;
 
 // Define multiprocessingEnabled variable
 int multiprocessingEnabled = 1;
+
+// Add global variable for service mode
+static bool serviceMode = false;
+
+#ifdef __linux__
+// Signal handler for Linux platforms
+#include <signal.h>
+void signalHandler(int signum) {
+    std::cout << "Received signal " << signum << ", shutting down...\n";
+    g_running = false;
+}
+#endif
 
 // Helper: wrapper for MIDI message handling
 void handleMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
@@ -824,6 +840,18 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     std::string performanceFile;
     parseCommandLineArgs(argc, argv, performanceFile);
+    
+    // Auto-detect service mode if not explicitly set via command line flag
+    #ifdef __linux__
+    if (!serviceMode) {
+        // Check if stdin is connected to a terminal
+        if (!isatty(STDIN_FILENO)) {
+            std::cout << "Stdin is not connected to a terminal, automatically enabling service mode.\n";
+            serviceMode = true;
+        }
+    }
+    #endif
+    
     // Track performance directory if set
     if (!performanceFile.empty()) {
         std::filesystem::path perfPath(performanceFile);
@@ -886,6 +914,11 @@ int main(int argc, char* argv[]) {
         std::thread audio_thread(audioThread);
 #ifdef __linux__
         std::thread midi_thread(midiThread);
+        
+        // Set up signal handlers for Linux
+            signal(SIGINT, signalHandler);
+            signal(SIGTERM, signalHandler);
+            signal(SIGHUP, signalHandler);
 #endif
 #endif
         
@@ -938,29 +971,37 @@ int main(int argc, char* argv[]) {
         std::cout << "  MIDI_DEVICE: " << midiDev << "\n";
         std::cout << "Commands:\n";
         std::cout << "  t - Send test MIDI note\n";
-        std::cout << "  q - Quit\n";
-        std::cout << "> ";
-        std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
+        std::cout << "Press Ctrl+C to stop.\n";
         
-        // Interactive command loop
-        char command;
-        while (std::cin >> command && command != 'q') {
-            switch (command) {
-                case 't':
-                    if (useSine) {
-                        std::cout << "Test note disabled in sine wave mode.\n";
-                    } else {
-                        std::cout << "Sending test MIDI note (C4)...\n";
-                        handleMidiMessage(0x90, 60, 100); // Note on C4
-                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                        handleMidiMessage(0x80, 60, 0);   // Note off C4
-                    }
-                    break;
-                default:
-                    std::cout << "Unknown command. Use 't' for test note, 'q' to quit.\n";
-                    break;
+        if (serviceMode) {
+            // Instead of reading from stdin, we just wait until g_running becomes false
+            while (g_running) {
+                std::this_thread::sleep_for(std::chrono::seconds(1));
             }
+        } else {
             std::cout << "> ";
+            std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
+            
+            // Interactive command loop
+            char command;
+            while (std::cin >> command && command != 'q') {
+                switch (command) {
+                    case 't':
+                        if (useSine) {
+                            std::cout << "Test note disabled in sine wave mode.\n";
+                        } else {
+                            std::cout << "Sending test MIDI note (C4)...\n";
+                            handleMidiMessage(0x90, 60, 100); // Note on C4
+                            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                            handleMidiMessage(0x80, 60, 0);   // Note off C4
+                        }
+                        break;
+                    default:
+                        std::cout << "Unknown command. Use 't' for test note, 'q' to quit.\n";
+                        break;
+                }
+                std::cout << "> ";
+            }
         }
         
         // Cleanup
