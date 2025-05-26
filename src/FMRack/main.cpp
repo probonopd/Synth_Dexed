@@ -11,10 +11,6 @@
 #include <memory>
 #include <filesystem> // Add for file system operations
 
-#ifdef __linux__
-#include <unistd.h> // For isatty() function
-#endif
-
 // Define M_PI if not available (common on Windows)
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -79,18 +75,6 @@ static bool g_performanceSet = false;
 
 // Define multiprocessingEnabled variable
 int multiprocessingEnabled = 1;
-
-// Add global variable for service mode
-static bool serviceMode = false;
-
-#ifdef __linux__
-// Signal handler for Linux platforms
-#include <signal.h>
-void signalHandler(int signum) {
-    std::cout << "Received signal " << signum << ", shutting down...\n";
-    g_running = false;
-}
-#endif
 
 // Helper: wrapper for MIDI message handling
 void handleMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
@@ -319,38 +303,14 @@ void audioThread() {
         std::cerr << "Warning: Failed to set real-time priority for audio thread." << std::endl;
     }
 
-    // Try to open PCM device with retries when running as service
-    snd_pcm_t* pcm_handle = nullptr;
-    int err = -1;
-    int retry_count = 0;
-    const int max_retries = serviceMode ? 10 : 1;  // More retries in service mode
-    std::string device_name = "default";  // Start with default device
-
-    while (err < 0 && retry_count < max_retries && g_running) {
-        if (retry_count > 0) {
-            std::cout << "Retry " << retry_count << "/" << max_retries 
-                      << " opening PCM device after waiting..." << std::endl;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-            
-            // Try with explicit hw device if default fails
-            if (retry_count > max_retries/2) {
-                device_name = "hw:0,0";
-                std::cout << "Trying direct hardware device: " << device_name << std::endl;
-            }
-        }
-        
-        err = snd_pcm_open(&pcm_handle, device_name.c_str(), SND_PCM_STREAM_PLAYBACK, 0);
-        retry_count++;
-    }
-
+    snd_pcm_t* pcm_handle;
+    // TODO: Use the audioDev parameter to select the device string, similar to native/main_linux.cpp
+    // For now, using "default". The command line --audio-device is currently ignored for Linux.
+    int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
     if (err < 0) {
-        std::cout << "Failed to open PCM device after " << retry_count << " attempts: " 
-                  << snd_strerror(err) << std::endl;
-        std::cout << "Audio thread exiting - check ALSA permissions and configuration." << std::endl;
+        std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\\n";
         return;
     }
-
-    std::cout << "Successfully opened ALSA device: " << device_name << std::endl;
 
     // Configure PCM
     snd_pcm_hw_params_t* hw_params;
@@ -864,18 +824,6 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     std::string performanceFile;
     parseCommandLineArgs(argc, argv, performanceFile);
-    
-    // Auto-detect service mode if not explicitly set via command line flag
-    #ifdef __linux__
-    if (!serviceMode) {
-        // Check if stdin is connected to a terminal
-        if (!isatty(STDIN_FILENO)) {
-            std::cout << "Stdin is not connected to a terminal, running in service mode.\n";
-            serviceMode = true;
-        }
-    }
-    #endif
-    
     // Track performance directory if set
     if (!performanceFile.empty()) {
         std::filesystem::path perfPath(performanceFile);
@@ -938,11 +886,6 @@ int main(int argc, char* argv[]) {
         std::thread audio_thread(audioThread);
 #ifdef __linux__
         std::thread midi_thread(midiThread);
-        
-        // Set up signal handlers for Linux
-        signal(SIGINT, signalHandler);
-        signal(SIGTERM, signalHandler);
-        signal(SIGHUP, signalHandler);
 #endif
 #endif
         
@@ -995,35 +938,29 @@ int main(int argc, char* argv[]) {
         std::cout << "  MIDI_DEVICE: " << midiDev << "\n";
         std::cout << "Commands:\n";
         std::cout << "  t - Send test MIDI note\n";
-        std::cout << "Press Ctrl+C to stop.\n";
+        std::cout << "  q - Quit\n";
+        std::cout << "> ";
+        std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
         
-        if (serviceMode) {
-            std::cout << "Running in service mode. Use SIGTERM to shut down.\n";
-            // Instead of reading from stdin, we just wait until g_running becomes false
-            while (g_running) {
-                std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Interactive command loop
+        char command;
+        while (std::cin >> command && command != 'q') {
+            switch (command) {
+                case 't':
+                    if (useSine) {
+                        std::cout << "Test note disabled in sine wave mode.\n";
+                    } else {
+                        std::cout << "Sending test MIDI note (C4)...\n";
+                        handleMidiMessage(0x90, 60, 100); // Note on C4
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        handleMidiMessage(0x80, 60, 0);   // Note off C4
+                    }
+                    break;
+                default:
+                    std::cout << "Unknown command. Use 't' for test note, 'q' to quit.\n";
+                    break;
             }
-        } else {
-            // Interactive command loop
-            char command;
-            while (std::cin >> command && command != 'q') {
-                switch (command) {
-                    case 't':
-                        if (useSine) {
-                            std::cout << "Test note disabled in sine wave mode.\n";
-                        } else {
-                            std::cout << "Sending test MIDI note (C4)...\n";
-                            handleMidiMessage(0x90, 60, 100); // Note on C4
-                            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                            handleMidiMessage(0x80, 60, 0);   // Note off C4
-                        }
-                        break;
-                    default:
-                        std::cout << "Unknown command. Use 't' for test note, 'q' to quit.\n";
-                        break;
-                }
-                std::cout << "> ";
-            }
+            std::cout << "> ";
         }
         
         // Cleanup
