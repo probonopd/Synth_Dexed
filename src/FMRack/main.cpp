@@ -10,6 +10,13 @@
 #include <cmath>  // Add for M_PI and sin functions
 #include <memory>
 #include <filesystem> // Add for file system operations
+#include <signal.h> // Use standard signal handling for compatibility
+#include <csignal> // Ensure csignal is included for signal
+
+#ifdef __linux__
+#include <unistd.h> // For pipe
+#include <fcntl.h>  // For fcntl
+#endif
 
 // Define M_PI if not available (common on Windows)
 #ifndef M_PI
@@ -36,9 +43,6 @@ static const int AUDIO_BUFFER_SIZE = 1024; // samples per channel
 #elif __linux__
 #include <alsa/asoundlib.h>
 #include <alsa/seq.h>
-#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
-#define SND_SEQ_EVENT_PROGRAMCHANGE 192
-#endif
 #endif
 
 using namespace FMRack;
@@ -52,6 +56,10 @@ static int numBuffers = 4;                // Default remains 4 (primarily for Wi
 static int audioDev = 0;                  // Audio device ID
 static int midiDev = 0;                   // MIDI device ID
 static bool useSine = false;              // Sine wave test mode
+
+#ifdef __linux__
+static int g_midi_shutdown_pipe[2] = {-1, -1}; // Read end [0], Write end [1]
+#endif
 
 // Add global UDP server pointer
 static std::unique_ptr<UdpServer> g_udpServer;
@@ -296,6 +304,7 @@ bool initializeAudioMidi() {
 #elif __linux__
 // Linux ALSA audio thread - updated to use BUFFER_FRAMES
 void audioThread() {
+    if (debugEnabled) std::cout << "[AUDIO THREAD] Started." << std::endl;
     // Set audio thread to high priority
     struct sched_param sch_params;
     sch_params.sched_priority = 20; // Consider increasing for SCHED_FIFO (e.g., 50) if system allows
@@ -394,7 +403,7 @@ void audioThread() {
                 static double phase = 0.0;
                 double freq = 440.0;
                 double phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
-                for (int i = 0; i < BUFFER_FRAMES; ++i) {
+                for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) { // Changed int to unsigned int
                     float sample = static_cast<float>(std::sin(phase) * 0.5);
                     leftBuffer[i] = rightBuffer[i] = sample;
                     phase += phaseInc;
@@ -431,13 +440,27 @@ void audioThread() {
         }
         // No explicit sleep needed here if snd_pcm_writei blocks for the period duration.
     }
+    if (debugEnabled) std::cout << "[AUDIO THREAD] Loop exited. Cleaning up ALSA..." << std::endl;
 
-    snd_pcm_drain(pcm_handle); // Drain any pending samples
-    snd_pcm_close(pcm_handle);
+    // snd_pcm_drain(pcm_handle); // Drain any pending samples
+    // snd_pcm_close(pcm_handle);
+    if (pcm_handle) { // Ensure pcm_handle is valid before using
+        int err_drop = snd_pcm_drop(pcm_handle); // Stop playback and drop pending frames
+        if (err_drop < 0) {
+            std::cerr << "ALSA: Failed to drop PCM stream: " << snd_strerror(err_drop) << std::endl;
+        }
+        int err_close = snd_pcm_close(pcm_handle);
+        if (err_close < 0) {
+            std::cerr << "ALSA: Failed to close PCM device: " << snd_strerror(err_close) << std::endl;
+        }
+        // pcm_handle is a local variable, so no need to nullify it here as the function is ending.
+    }
+    if (debugEnabled) std::cout << "[AUDIO THREAD] Finished." << std::endl;
 }
 
 // Linux ALSA MIDI thread
 void midiThread() {
+    if (debugEnabled) std::cout << "[MIDI THREAD] Started." << std::endl;
     snd_seq_t* seq_handle;
     int err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
     if (err < 0) {
@@ -492,76 +515,134 @@ void midiThread() {
         std::cout << "[ALSA] Invalid MIDI device index (" << midiDev << "). No connection made." << std::endl;
     }
 
-    struct pollfd *pfds;
-    int npfds = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
-    pfds = (struct pollfd*)alloca(npfds * sizeof(struct pollfd));
-    snd_seq_poll_descriptors(seq_handle, pfds, npfds, POLLIN);
+    struct pollfd *pfds_all;
+    int npfds_alsa = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
+    int total_pfds_count = npfds_alsa;
+    bool use_shutdown_pipe = (g_midi_shutdown_pipe[0] != -1);
+
+    if (use_shutdown_pipe) {
+        total_pfds_count++;
+    }
+
+    pfds_all = (struct pollfd*)alloca(total_pfds_count * sizeof(struct pollfd));
+    snd_seq_poll_descriptors(seq_handle, pfds_all, npfds_alsa, POLLIN);
+
+    if (use_shutdown_pipe) {
+        pfds_all[npfds_alsa].fd = g_midi_shutdown_pipe[0];
+        pfds_all[npfds_alsa].events = POLLIN;
+        pfds_all[npfds_alsa].revents = 0;
+    }
+
+    int poll_timeout = use_shutdown_pipe ? -1 : 100; // Infinite if pipe, else 100ms
+
+    if (debugEnabled) std::cout << "[MIDI THREAD] Starting poll loop (timeout: " << poll_timeout << "ms, using pipe: " << (use_shutdown_pipe ? "yes" : "no") << ")." << std::endl;
+
     while (g_running) {
-        if (poll(pfds, npfds, 100) > 0) {
-            snd_seq_event_t *ev = nullptr;
-            while (snd_seq_event_input(seq_handle, &ev) > 0) {
-                if (!ev) continue;
-                if (ev->type == SND_SEQ_EVENT_SYSEX) {
-                    uint8_t* data = (uint8_t*)ev->data.ext.ptr;
-                    uint16_t len = ev->data.ext.len;
-                    if (g_rack && data && len > 0) {
-                        uint8_t sysex_channel = 0;
-                        if (len > 2 && data[0] == 0xF0 && data[1] == 0x43) {
-                            sysex_channel = (data[2] & 0x0F) + 1;
-                        }
-                        g_rack->routeSysexToModules(data, len, sysex_channel);
-                    }
-                } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF ||
-                           ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND ||
-                           ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS ||
-                           ev->type == SND_SEQ_EVENT_PROGRAMCHANGE) {
-                    uint8_t status = 0, data1 = 0, data2 = 0;
-                    switch (ev->type) {
-                        case SND_SEQ_EVENT_NOTEON:
-                            status = 0x90 | (ev->data.note.channel & 0x0F);
-                            data1 = ev->data.note.note;
-                            data2 = ev->data.note.velocity;
-                            break;
-                        case SND_SEQ_EVENT_NOTEOFF:
-                            status = 0x80 | (ev->data.note.channel & 0x0F);
-                            data1 = ev->data.note.note;
-                            data2 = ev->data.note.velocity;
-                            break;
-                        case SND_SEQ_EVENT_CONTROLLER:
-                            status = 0xB0 | (ev->data.control.channel & 0x0F);
-                            data1 = ev->data.control.param;
-                            data2 = ev->data.control.value;
-                            break;
-                        case SND_SEQ_EVENT_PITCHBEND:
-                            status = 0xE0 | (ev->data.control.channel & 0x0F);
-                            data1 = ev->data.control.value & 0x7F;
-                            data2 = (ev->data.control.value >> 7) & 0x7F;
-                            break;
-                        case SND_SEQ_EVENT_CHANPRESS:
-                            status = 0xD0 | (ev->data.control.channel & 0x0F);
-                            data1 = ev->data.control.value;
-                            data2 = 0;
-                            break;
-                        case SND_SEQ_EVENT_KEYPRESS:
-                            status = 0xA0 | (ev->data.note.channel & 0x0F);
-                            data1 = ev->data.note.note;
-                            data2 = ev->data.note.velocity;
-                            break;
-                        case SND_SEQ_EVENT_PROGRAMCHANGE:
-                            status = 0xC0 | (ev->data.control.channel & 0x0F);
-                            data1 = ev->data.control.value;
-                            data2 = 0;
-                            break;
-                        default:
-                            break;
-                    }
-                    if (g_rack) handleMidiMessage(status, data1, data2);
+        int poll_ret = poll(pfds_all, total_pfds_count, poll_timeout);
+
+        if (!g_running) {
+            if (debugEnabled) std::cout << "[MIDI THREAD] g_running is false after poll, breaking loop." << std::endl;
+            break;
+        }
+
+        if (poll_ret > 0) {
+            if (use_shutdown_pipe && (pfds_all[npfds_alsa].revents & POLLIN)) {
+                if (debugEnabled) std::cout << "[MIDI THREAD] Shutdown pipe signaled." << std::endl;
+                char drain_buf[32];
+                // Drain the pipe (non-blocking read)
+                while (read(g_midi_shutdown_pipe[0], drain_buf, sizeof(drain_buf)) > 0);
+                // g_running should be false, loop will terminate on next check or break here
+                break;
+            }
+
+            bool alsa_fd_active = false;
+            for(int i=0; i < npfds_alsa; ++i) {
+                if (pfds_all[i].revents & POLLIN) {
+                    alsa_fd_active = true;
+                    break;
                 }
-                snd_seq_free_event(ev);
+            }
+
+            if (alsa_fd_active) {
+                if (debugEnabled) std::cout << "[MIDI THREAD] ALSA event detected by poll." << std::endl;
+                snd_seq_event_t *ev = nullptr;
+                while (true) { // Loop to drain all available events
+                    if (!g_running) {
+                        if (debugEnabled && ev) snd_seq_free_event(ev);
+                        if (debugEnabled) std::cout << "[MIDI THREAD] g_running false in event input loop." << std::endl;
+                        break;
+                    }
+                    int event_ret = snd_seq_event_input(seq_handle, &ev);
+                    if (event_ret > 0) {
+                        if (!ev) continue; // Should not happen
+                        if (ev->type == SND_SEQ_EVENT_SYSEX) {
+                            uint8_t* data = (uint8_t*)ev->data.ext.ptr;
+                            uint16_t len = ev->data.ext.len;
+                            if (g_rack && data && len > 0) {
+                                uint8_t sysex_channel = 0;
+                                if (len > 2 && data[0] == 0xF0 && data[1] == 0x43) {
+                                    sysex_channel = (data[2] & 0x0F) + 1;
+                                }
+                                g_rack->routeSysexToModules(data, len, sysex_channel);
+                            }
+                        } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF ||
+                                   ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND ||
+                                   ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS ||
+                                   ev->type == SND_SEQ_EVENT_PGMCHANGE) {
+                            uint8_t status = 0, data1 = 0, data2 = 0;
+                            switch (ev->type) {
+                                case SND_SEQ_EVENT_NOTEON:
+                                    status = 0x90 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
+                                case SND_SEQ_EVENT_NOTEOFF:
+                                    status = 0x80 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
+                                case SND_SEQ_EVENT_CONTROLLER:
+                                    status = 0xB0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.param; data2 = ev->data.control.value; break;
+                                case SND_SEQ_EVENT_PITCHBEND:
+                                    status = 0xE0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value & 0x7F; data2 = (ev->data.control.value >> 7) & 0x7F; break;
+                                case SND_SEQ_EVENT_CHANPRESS:
+                                    status = 0xD0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value; data2 = 0; break;
+                                case SND_SEQ_EVENT_KEYPRESS: // AKA Polyphonic Aftertouch
+                                    status = 0xA0 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
+                                case SND_SEQ_EVENT_PGMCHANGE:
+                                    status = 0xC0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value; data2 = 0; break;
+                                default: break;
+                            }
+                            if (g_rack) handleMidiMessage(status, data1, data2);
+                        }
+                        snd_seq_free_event(ev);
+                        ev = nullptr;
+                    } else if (event_ret == 0) {
+                        if (debugEnabled) std::cout << "[MIDI THREAD] snd_seq_event_input returned 0 (no more events)." << std::endl;
+                        break;
+                    } else if (event_ret == -EAGAIN) {
+                        if (debugEnabled) std::cout << "[MIDI THREAD] snd_seq_event_input returned EAGAIN." << std::endl;
+                        break;
+                    } else {
+                        std::cerr << "[MIDI THREAD] snd_seq_event_input error: " << snd_strerror(event_ret) << std::endl;
+                        g_running = false; // Critical error, stop MIDI thread
+                        break;
+                    }
+                }
+                if (!g_running) break; 
+            }
+        } else if (poll_ret < 0) {
+            if (errno == EINTR) {
+                if (debugEnabled) std::cout << "[MIDI THREAD] poll() interrupted by signal (EINTR)." << std::endl;
+            } else {
+                std::cerr << "[MIDI THREAD] poll() error: " << strerror(errno) << std::endl;
+                g_running = false; // Stop on poll error
+                break;
+            }
+        } else { // poll_ret == 0 (timeout)
+            // This case should only happen if not using the shutdown pipe (i.e., poll_timeout is not -1)
+            if (debugEnabled && !use_shutdown_pipe) {
+                // std::cout << "[MIDI THREAD] poll() timed out." << std::endl; // Can be spammy
             }
         }
     }
+    if (debugEnabled) std::cout << "[MIDI THREAD] Loop exited. Cleaning up ALSA Sequencer..." << std::endl;
     snd_seq_close(seq_handle);
+    if (debugEnabled) std::cout << "[MIDI THREAD] Finished." << std::endl;
 }
 
 bool initializeAudioMidi() {
@@ -634,6 +715,19 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) 
             std::cout << "  --multiprocessing <0|1>  Enable (1, default) or disable (0) multicore audio processing\n";
             std::cout << "  --help, -h               Show this help message\n";
             exit(0);
+        } else if (arg == "--test") {
+            // Play a test note when the program starts
+            if (g_rack) {
+                uint8_t status = 0x90; // Note On, channel 1
+                uint8_t note = 60;    // Middle C
+                uint8_t velocity = 100; // Velocity
+                g_rack->processMidiMessage(status, note, velocity);
+
+                // Schedule a Note Off after 1 second
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+                status = 0x80; // Note Off, channel 1
+                g_rack->processMidiMessage(status, note, 0);
+            }
         }
     }
 }
@@ -824,6 +918,23 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     std::string performanceFile;
     parseCommandLineArgs(argc, argv, performanceFile);
+
+#ifdef __linux__
+    if (pipe(g_midi_shutdown_pipe) == -1) {
+        perror("[MAIN THREAD] Failed to create MIDI shutdown pipe");
+        g_midi_shutdown_pipe[0] = g_midi_shutdown_pipe[1] = -1; // Ensure it's marked as unusable
+    } else {
+        int flags = fcntl(g_midi_shutdown_pipe[0], F_GETFL, 0);
+        if (flags == -1 || fcntl(g_midi_shutdown_pipe[0], F_SETFL, flags | O_NONBLOCK) == -1) {
+            perror("[MAIN THREAD] Failed to set MIDI shutdown pipe O_NONBLOCK");
+            close(g_midi_shutdown_pipe[0]);
+            close(g_midi_shutdown_pipe[1]);
+            g_midi_shutdown_pipe[0] = g_midi_shutdown_pipe[1] = -1;
+        } else {
+            if (debugEnabled) std::cout << "[MAIN THREAD] MIDI shutdown pipe created successfully." << std::endl;
+        }
+    }
+#endif
     // Track performance directory if set
     if (!performanceFile.empty()) {
         std::filesystem::path perfPath(performanceFile);
@@ -936,68 +1047,98 @@ int main(int argc, char* argv[]) {
         std::cout << "  NUM_BUFFERS: " << numBuffers << "\n";
         std::cout << "  AUDIO_DEVICE: " << audioDev << "\n";
         std::cout << "  MIDI_DEVICE: " << midiDev << "\n";
-        std::cout << "Commands:\n";
-        std::cout << "  t - Send test MIDI note\n";
-        std::cout << "  q - Quit\n";
-        std::cout << "> ";
         std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
-        
-        // Interactive command loop
-        char command;
-        while (std::cin >> command && command != 'q') {
-            switch (command) {
-                case 't':
-                    if (useSine) {
-                        std::cout << "Test note disabled in sine wave mode.\n";
-                    } else {
-                        std::cout << "Sending test MIDI note (C4)...\n";
-                        handleMidiMessage(0x90, 60, 100); // Note on C4
-                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
-                        handleMidiMessage(0x80, 60, 0);   // Note off C4
-                    }
-                    break;
-                default:
-                    std::cout << "Unknown command. Use 't' for test note, 'q' to quit.\n";
-                    break;
+
+        // Set up signal handler for clean termination
+        signal(SIGINT, [](int sig){ 
+            std::cout << "Received signal " << sig << " (SIGINT). Shutting down..." << std::endl;
+            if (!g_running.exchange(false)) { // If g_running was already false
+                if (debugEnabled) std::cout << "[SIGNAL HANDLER] Shutdown already in progress." << std::endl;
+                // Consider further action for repeated signals, e.g., forceful exit
+                return;
             }
-            std::cout << "> ";
-        }
-        
-        // Cleanup
-        g_running = false;
-        if (g_udpServer) g_udpServer->stop();
-        
-#ifdef _WIN32
-        // Cleanup Windows audio
-        if (g_hWaveOut) {
-            waveOutReset(g_hWaveOut);
-            for (auto& hdr : g_waveHeaders) {
-                waveOutUnprepareHeader(g_hWaveOut, &hdr, sizeof(WAVEHDR));
+
+#ifdef __linux__
+            if (g_midi_shutdown_pipe[1] != -1) {
+                char dummy = 's';
+                ssize_t written = write(g_midi_shutdown_pipe[1], &dummy, 1);
+                if (written <= 0) {
+                    if (debugEnabled) perror("[SIGNAL HANDLER] Write to MIDI shutdown pipe failed");
+                } else {
+                    if (debugEnabled) std::cout << "[SIGNAL HANDLER] Signaled MIDI thread via pipe." << std::endl;
+                }
             }
-            waveOutClose(g_hWaveOut);
-            g_hWaveOut = nullptr;
-        }
 #endif
-        
+        });
+
+        // Keep the main loop running until explicitly terminated
+        while (g_running) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+
+        std::cout << "[MAIN THREAD] Main loop exited." << std::endl;
+
+        #ifdef __linux__
+            if (g_midi_shutdown_pipe[1] != -1) {
+                char dummy = 'x';
+                ssize_t written = write(g_midi_shutdown_pipe[1], &dummy, 1);
+                if (written <= 0 && debugEnabled)
+                    perror("[MAIN THREAD] Failed to write to MIDI shutdown pipe");
+                else if (debugEnabled)
+                    std::cout << "[MAIN THREAD] Wrote to MIDI shutdown pipe to unblock poll." << std::endl;
+            }
+        #endif
+
+        // Cleanup
+        // g_running is already false at this point
+
+        if (g_udpServer) {
+            if (debugEnabled) std::cout << "[MAIN THREAD] Stopping UDP server..." << std::endl;
+            g_udpServer->stop();
+            if (debugEnabled) std::cout << "[MAIN THREAD] UDP server stopped." << std::endl;
+        }
+
 #if defined(_WIN32) || defined(__linux__)
+        if (debugEnabled) std::cout << "[MAIN THREAD] Attempting to join audio thread..." << std::endl;
         if (audio_thread.joinable()) {
             audio_thread.join();
+            if (debugEnabled) std::cout << "[MAIN THREAD] Audio thread successfully joined." << std::endl;
+        } else {
+            if (debugEnabled) std::cout << "[MAIN THREAD] Audio thread was not joinable." << std::endl;
         }
+
 #ifdef __linux__
+        if (debugEnabled) std::cout << "[MAIN THREAD] Attempting to join MIDI thread..." << std::endl;
         if (midi_thread.joinable()) {
             midi_thread.join();
+            if (debugEnabled) std::cout << "[MAIN THREAD] MIDI thread successfully joined." << std::endl;
+        } else {
+            if (debugEnabled) std::cout << "[MAIN THREAD] MIDI thread was not joinable." << std::endl;
         }
+#endif // __linux__
+#endif // defined(_WIN32) || defined(__linux__)
+
+#ifdef __linux__
+    if (g_midi_shutdown_pipe[0] != -1) {
+        close(g_midi_shutdown_pipe[0]);
+        g_midi_shutdown_pipe[0] = -1;
+    }
+    if (g_midi_shutdown_pipe[1] != -1) {
+        close(g_midi_shutdown_pipe[1]);
+        g_midi_shutdown_pipe[1] = -1;
+    }
+    if (debugEnabled) std::cout << "[MAIN THREAD] MIDI shutdown pipe closed." << std::endl;
 #endif
-#endif
-        
-        std::cout << "Audio processing stopped.\n";
-        
+
+    if (debugEnabled) std::cout << "[MAIN THREAD] All threads joined. FMRack shutdown sequence finished in main()." << std::endl;
+
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         g_running = false;
         return 1;
     }
-    
-    std::cout << "FMRack shutdown completed successfully.\n";
+
+    std::cout << "FMRack application shutdown completed." << std::endl;
+
     return 0;
 }
