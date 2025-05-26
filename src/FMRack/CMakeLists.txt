@@ -113,6 +113,7 @@ else()
     else()
         target_compile_options(FMRack PRIVATE -O3 -flto)
         set_target_properties(FMRack PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+        add_custom_command(TARGET FMRack POST_BUILD COMMAND ${CMAKE_STRIP} $<TARGET_FILE:FMRack>)
     endif()
 endif()
 
