@@ -36,9 +36,6 @@ static const int AUDIO_BUFFER_SIZE = 1024; // samples per channel
 #elif __linux__
 #include <alsa/asoundlib.h>
 #include <alsa/seq.h>
-#ifndef SND_SEQ_EVENT_PROGRAMCHANGE
-#define SND_SEQ_EVENT_PROGRAMCHANGE 192
-#endif
 #endif
 
 using namespace FMRack;
@@ -61,7 +58,7 @@ int udpPort = 50007; // Default UDP port, can be made configurable
 
 // Global variables for command line options
 static int numModules = 16; // Number of modules/parts
-static int unisonVoices = 2; // Unison voices per module
+static int unisonVoices = 1; // Unison voices per module
 static float unisonDetune = 7.0f; // Detune in cents
 static float unisonSpread = 0.5f; // Stereo spread
 
@@ -514,7 +511,7 @@ void midiThread() {
                 } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF ||
                            ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND ||
                            ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS ||
-                           ev->type == SND_SEQ_EVENT_PROGRAMCHANGE) {
+                           ev->type == SND_SEQ_EVENT_PGMCHANGE) { // Use SND_SEQ_EVENT_PGMCHANGE
                     uint8_t status = 0, data1 = 0, data2 = 0;
                     switch (ev->type) {
                         case SND_SEQ_EVENT_NOTEON:
@@ -547,9 +544,9 @@ void midiThread() {
                             data1 = ev->data.note.note;
                             data2 = ev->data.note.velocity;
                             break;
-                        case SND_SEQ_EVENT_PROGRAMCHANGE:
+                        case SND_SEQ_EVENT_PGMCHANGE: // Use SND_SEQ_EVENT_PGMCHANGE
                             status = 0xC0 | (ev->data.control.channel & 0x0F);
-                            data1 = ev->data.control.value;
+                            data1 = ev->data.control.value; // This is correct for program number
                             data2 = 0;
                             break;
                         default:
