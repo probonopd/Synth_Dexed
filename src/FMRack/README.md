@@ -312,7 +312,7 @@ The FMRack architecture is primarily focused on audio processing and MIDI handli
 
 FMRack has been tested on Windows 11.
 
-### Raspbery Pi
+### Raspbery Pi OS
 
 FMRack has been tested on Raspberry Pi 5 with Raspberry Pi OS 64-bit.
 
@@ -331,6 +331,87 @@ FMRack has been tested on Raspberry Pi 5 with Raspberry Pi OS 64-bit.
 * Run the same command as above to start FMRack in command-line mode
 * To stop FMRack, press `Ctrl+C` in the terminal
 * To return to the graphical interface, enter `sudo init 5`
+
+Create `/etc/systemd/system/FMRack.service`
+
+```
+[Unit]
+Description=FMRack Synthesizer
+Wants=sound.target
+After=network.target
+# Attempt to start before common sound services
+Before=sound.target alsa-restore.service alsa-state.service pipewire.service pipewire-pulse.service pulseaudio.service
+
+[Service]
+ExecStart=FMRack --performance "/home/pi/Desktop/Soundplantage/performance/001_Seed/000002_Concert D.ini" -m 3
+Type=Simple
+User=pi
+Group=pi
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Or, to get some output when it is loaded:
+
+```
+[Unit]
+Description=FMRack Synthesizer on TTY1
+# Wants sound, but tries to start before it.
+Wants=sound.target
+# After basic console setup, before login prompt on tty1 and sound services.
+After=systemd-vconsole-setup.service
+Before=getty.target getty@tty1.service sound.target alsa-restore.service alsa-state.service pipewire.service pipewire-pulse.service pulseaudio.service
+Conflicts=getty@tty1.service # This service replaces the login prompt on tty1
+
+[Service]
+ExecStart=FMRack --performance "/home/pi/Desktop/Soundplantage/performance/001_Seed/000002_Concert D.ini" -m 3
+# WorkingDirectory=/home/pi/Synth_Dexed/build/bin/
+Type=simple
+User=pi
+Group=pi
+Restart=on-failure
+
+# Redirect standard input, output, and error to TTY1
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+
+# Ensure the service has proper control over the TTY
+TTYReset=yes
+TTYVHangup=yes
+TTYVTDisallocate=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Run `systemd-analyze blame | cat` to see which services are started by systemd and which ones to disable. To disable, run
+
+```
+sudo systemctl disable cups.service
+```
+
+then reboot.
+
+### Without systemd
+
+TODO: Run on a minimal busybox based system, or even directly as PID 1
+
+
+### TODO:
+
+* Find a way to make MIDI devices hot-pluggable instead of hardcoding them
+* Find a way to run in high priority mode (`/etc/security/limits.conf`), see https://www.youtube.com/watch?v=ilmhX1j-ENU&t=280s
+* Overall learn from and improve over https://www.youtube.com/watch?v=ilmhX1j-ENU&t, e.g., how to script the menu in Python
+* Find a way to build a minimal Linux system without a full distribution, e.g., using something like Buildroot, OpenWRT, Alpine Linux, or pi-gen-micro
+* Possibly allow to combine/stack performances with FM and Samples?
+* Use `rtpmidid` to advertise rtpmidi on the network like MiniDexed does
+* Create MIDI and USB Sound gadgets (USB client mode) if e.g., Raspberry Pi Zero 2 is connected to host computer (no MIDI adapters, no DACs)
 
 ## macOS
 

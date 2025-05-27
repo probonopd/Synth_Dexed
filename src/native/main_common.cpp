@@ -61,7 +61,7 @@ std::atomic<bool> running{true};
 StereoDexed* synth = nullptr;
 std::mutex synthMutex;
 std::vector<std::vector<short>> audioBuffers;
-uint8_t fmpiano_sysex[156] = {
+uint8_t fmpiano_sysex[155] = { // Changed size from 156 to 155 to match initializer count
     95, 29, 20, 50, 99, 95, 00, 00, 41, 00, 19, 00, 00, 03, 00, 06, 79, 00, 01, 00, 14,
     95, 20, 20, 50, 99, 95, 00, 00, 00, 00, 00, 00, 00, 03, 00, 00, 99, 00, 01, 00, 00,
     95, 29, 20, 50, 99, 95, 00, 00, 00, 00, 00, 00, 00, 03, 00, 06, 89, 00, 01, 00, 07,
@@ -72,7 +72,7 @@ uint8_t fmpiano_sysex[156] = {
     04, 06, 00,
     34, 33, 00, 00, 00, 04,
     03, 24,
-    70, 77, 45, 80, 73, 65, 78, 79, 00, 00
+    70, 77, 45, 80, 73, 65, 78, 79, 00, 00,
 };
 
 // Global phase for sine test (shared across all buffer fills)
@@ -82,12 +82,12 @@ void signal_handler(int signal) {
     static std::atomic_flag handled = ATOMIC_FLAG_INIT;
     if (signal == SIGINT && !handled.test_and_set()) {
         running = false;
-        std::cout << "\n[INFO] Caught Ctrl+C, exiting..." << std::endl;
-        // Force exit after a short delay to ensure all threads terminate
-        std::thread([](){
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            std::exit(0);
-        }).detach();
+        std::cout << "\n[INFO] Caught Ctrl+C, initiating graceful shutdown..." << std::endl;
+        // Removed forced exit:
+        // std::thread([](){
+        //     std::this_thread::sleep_for(std::chrono::seconds(2));
+        //     std::exit(0);
+        // }).detach();
     }
 }
 
@@ -824,11 +824,14 @@ int main_common_entry(int argc, char* argv[], PlatformHooks hooks) {
             }
         }
     }
+    // Ensure the main loop keeps running until explicitly terminated
     while (running) {
         std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Add any necessary checks or operations to keep the program active
     }
+
     std::cout << "[MAIN THREAD] Exiting main loop." << std::endl;
-    running = false;
+    // running = false; // Redundant, loop condition 'running' already false
     audio.join();
     hooks.close_audio();
     hooks.close_midi();
