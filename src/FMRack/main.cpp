@@ -69,7 +69,7 @@ int udpPort = 50007; // Default UDP port, can be made configurable
 
 // Global variables for command line options
 static int numModules = 16; // Number of modules/parts
-static int unisonVoices = 2; // Unison voices per module
+static int unisonVoices = 1; // Unison voices per module
 static float unisonDetune = 7.0f; // Detune in cents
 static float unisonSpread = 0.5f; // Stereo spread
 
