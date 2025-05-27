@@ -1,6 +1,7 @@
 #include "Rack.h"
 #include "UdpServer.h"
 #include "Debug.h"
+#include "FileRenderer.h"
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -12,6 +13,10 @@
 #include <filesystem> // Add for file system operations
 #include <signal.h> // Use standard signal handling for compatibility
 #include <csignal> // Ensure csignal is included for signal
+#include <fstream>
+#include <cstdint>
+#include <cstring>
+#include <sstream>
 
 #ifdef __linux__
 #include <unistd.h> // For pipe
@@ -657,10 +662,14 @@ bool initializeAudioMidi() {
 bool initializeAudioMidi();
 
 // Parse command line arguments - matches native implementation
-void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile) {
+void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile, std::string& renderMidiFile, std::string& renderWavFile) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--performance" && i + 1 < argc) {
+        if (arg == "--render" && i + 2 < argc) {
+            renderMidiFile = argv[i + 1];
+            renderWavFile = argv[i + 2];
+            i += 2;
+        } else if (arg == "--performance" && i + 1 < argc) {
             performanceFile = argv[i + 1];
             ++i;
         } else if (arg == "--sample-rate" && i + 1 < argc) {
@@ -917,8 +926,18 @@ int main(int argc, char* argv[]) {
 
     // Parse command line arguments
     std::string performanceFile;
-    parseCommandLineArgs(argc, argv, performanceFile);
+    std::string renderMidiFile, renderWavFile;
+    parseCommandLineArgs(argc, argv, performanceFile, renderMidiFile, renderWavFile);
 
+    if (!renderMidiFile.empty() && !renderWavFile.empty()) {
+        // Render mode: render MIDI to WAV and exit
+        if (!FMRack::FileRenderer::renderMidiToWav(renderMidiFile, renderWavFile, 48000, 1024, numModules, unisonVoices, unisonDetune, unisonSpread)) {
+            std::cerr << "Failed to render MIDI to WAV." << std::endl;
+            return 1;
+        }
+        return 0;
+    }
+    
 #ifdef __linux__
     if (pipe(g_midi_shutdown_pipe) == -1) {
         perror("[MAIN THREAD] Failed to create MIDI shutdown pipe");

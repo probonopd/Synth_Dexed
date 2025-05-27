@@ -315,3 +315,5 @@ Synth_Dexed_exe
 *.a
 0*.ini
 .vscode/*
+*.mid
+*.wav

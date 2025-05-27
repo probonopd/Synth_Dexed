@@ -17,6 +17,7 @@ set(FMRACK_SOURCES
     Performance.cpp
     AudioEffectPlateReverb.cpp
     Module.cpp
+    FileRenderer.cpp
 )
 
 set(FMRACK_HEADERS
