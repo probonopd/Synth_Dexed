@@ -30,7 +30,27 @@ public:
         uint8_t portamentoGlissando = 0; // 0 .. 1
         uint8_t portamentoTime = 0;    // 0 .. 99
         uint8_t monoMode = 0;          // 0-off .. 1-On
-        
+        int16_t masterTune = 0;        // -100 .. 100 (cents)
+        uint8_t velocityScale = 64;    // 0 .. 127
+        uint8_t maxNotes = 16;         // 1 .. 32
+        uint8_t engineType = 0;        // 0: Dexed, 1: OPN, etc.
+        float gain = 1.0f;             // 0.0 .. 2.0
+        uint8_t sustain = 0;           // 0-off .. 1-On
+        uint8_t sostenuto = 0;         // 0-off .. 1-On
+        uint8_t hold = 0;              // 0-off .. 1-On
+        uint8_t noteRefreshMode = 0;   // 0-off .. 1-On
+
+        // Compressor settings
+        uint8_t compAttack = 0;        // 0 .. 127
+        uint8_t compRelease = 0;       // 0 .. 127
+        uint8_t compRatio = 0;         // 0 .. 127
+        int8_t compThreshold = 0;      // -64 .. 63
+
+        // Filter settings
+        bool filterEnabled = false;    // true/false
+        uint8_t filterCutoff = 127;    // 0 .. 127
+        uint8_t filterResonance = 0;   // 0 .. 127
+
         // Controller assignments
         uint8_t modulationWheelRange = 99;   // 0 .. 99
         uint8_t modulationWheelTarget = 1;   // 0 .. 7

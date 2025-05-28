@@ -37,21 +37,6 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
     reverbSend_ = config.reverbSend / 127.0f;
     monoMode_ = (config.monoMode != 0);
     
-    // Controller assignments
-    modulationWheelRange_ = config.modulationWheelRange;
-    modulationWheelTarget_ = config.modulationWheelTarget;
-    footControlRange_ = config.footControlRange;
-    footControlTarget_ = config.footControlTarget;
-    breathControlRange_ = config.breathControlRange;
-    breathControlTarget_ = config.breathControlTarget;
-    aftertouchRange_ = config.aftertouchRange;
-    aftertouchTarget_ = config.aftertouchTarget;
-    
-    // Portamento settings
-    portamentoMode_ = config.portamentoMode;
-    portamentoGlissando_ = config.portamentoGlissando;
-    portamentoTime_ = config.portamentoTime;
-    
     // Set up unison
     std::cout << "    Setting up unison configuration...\n";
     setupUnison(config.unisonVoices, config.unisonDetune, config.unisonSpread);
@@ -61,13 +46,48 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
     for (size_t i = 0; i < fmEngines_.size(); ++i) {
         auto& engine = fmEngines_[i];
         engine->loadVoiceParameters(const_cast<uint8_t*>(config.voiceData.data()));
-        engine->setMonoMode(monoMode_);
-        engine->setPortamento(portamentoMode_, portamentoGlissando_, portamentoTime_);
+        engine->setMonoMode(config.monoMode != 0);
+        engine->setPortamento(config.portamentoMode, 
+                              config.portamentoGlissando, 
+                              config.portamentoTime);
         
         if (fmEngines_.size() > 1) {
             std::cout << "      Engine " << (i + 1) << ": detune " << unisonDetune_[i] 
                       << " cents, pan " << (unisonPan_[i] * 100.0f) << "%\n";
         }
+
+        engine->setModWheelRange(config.modulationWheelRange);
+        engine->setModWheelTarget(config.modulationWheelTarget);
+        engine->setFootControllerRange(config.footControlRange);
+        engine->setFootControllerTarget(config.footControlTarget);
+        engine->setBreathControllerRange(config.breathControlRange);
+        engine->setBreathControllerTarget(config.breathControlTarget);
+        engine->setAftertouchRange(config.aftertouchRange);
+        engine->setAftertouchTarget(config.aftertouchTarget);
+        engine->setPitchbendRange(config.pitchBendRange);
+        engine->setPitchbendStep(config.pitchBendStep);
+        engine->setPortamentoMode(config.portamentoMode);
+        engine->setPortamentoGlissando(config.portamentoGlissando);
+        engine->setPortamentoTime(config.portamentoTime);
+        engine->setMonoMode(config.monoMode != 0);
+        engine->setMasterTune(config.masterTune);
+        engine->setVelocityScale(config.velocityScale);
+        engine->setMaxNotes(config.maxNotes);
+        engine->setEngineType(config.engineType);
+        engine->setGain(config.gain);
+        engine->setSustain(config.sustain != 0);
+        engine->setSostenuto(config.sostenuto != 0);
+        engine->setHold(config.hold != 0);
+
+        engine->setNoteRefreshMode(config.noteRefreshMode != 0);
+/*
+        engine->setCompAttack(config.compAttack);
+        engine->setCompRelease(config.compRelease);
+        engine->setCompRatio(config.compRatio);
+        engine->setCompThreshold(config.compThreshold);
+*/
+        engine->setFilterCutoff(config.filterCutoff);
+        engine->setFilterResonance(config.filterResonance);
     }
     
     std::cout << "    Module configuration complete.\n";

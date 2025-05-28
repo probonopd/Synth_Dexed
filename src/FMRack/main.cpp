@@ -1066,7 +1066,6 @@ int main(int argc, char* argv[]) {
         std::cout << "  NUM_BUFFERS: " << numBuffers << "\n";
         std::cout << "  AUDIO_DEVICE: " << audioDev << "\n";
         std::cout << "  MIDI_DEVICE: " << midiDev << "\n";
-        std::cout << "FIXME: Send a single voice dump for sound to start working.\n";
 
         // Set up signal handler for clean termination
         signal(SIGINT, [](int sig){ 

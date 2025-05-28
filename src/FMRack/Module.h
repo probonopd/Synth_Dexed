@@ -49,21 +49,6 @@ private:
     float reverbSend_;
     bool monoMode_;
     
-    // Controller settings
-    uint8_t modulationWheelRange_;
-    uint8_t modulationWheelTarget_;
-    uint8_t footControlRange_;
-    uint8_t footControlTarget_;
-    uint8_t breathControlRange_;
-    uint8_t breathControlTarget_;
-    uint8_t aftertouchRange_;
-    uint8_t aftertouchTarget_;
-    
-    // Portamento settings
-    uint8_t portamentoMode_;
-    uint8_t portamentoGlissando_;
-    uint8_t portamentoTime_;
-    
     // FM engines for unison
     std::vector<std::unique_ptr<Dexed>> fmEngines_;
     std::vector<float> unisonDetune_;
