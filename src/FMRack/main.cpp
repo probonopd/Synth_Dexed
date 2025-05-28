@@ -21,6 +21,8 @@
 #ifdef __linux__
 #include <unistd.h> // For pipe
 #include <fcntl.h>  // For fcntl
+#include <alsa/asoundlib.h>
+#include <alsa/seq.h>
 #endif
 
 // Define M_PI if not available (common on Windows)
@@ -307,6 +309,12 @@ bool initializeAudioMidi() {
 }
 
 #elif __linux__
+#include <unistd.h> // For pipe
+#include <fcntl.h>  // For fcntl
+#include <alsa/asoundlib.h>
+#include <alsa/seq.h>
+// Forward declaration for hotplug MIDI input connection
+void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
 // Linux ALSA audio thread - updated to use BUFFER_FRAMES
 void audioThread() {
     if (debugEnabled) std::cout << "[AUDIO THREAD] Started." << std::endl;
@@ -482,6 +490,21 @@ void midiThread() {
         return;
     }
 
+    // Create a bidirectional ALSA MIDI port named "FMRack" that is visible to aconnect
+    int midi_bidi_port = snd_seq_create_simple_port(
+        seq_handle,
+        "FMRack",
+        SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_READ |
+        SND_SEQ_PORT_CAP_SUBS_WRITE | SND_SEQ_PORT_CAP_SUBS_READ,
+        SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION
+    );
+    if (midi_bidi_port < 0) {
+        std::cerr << "[ERROR] Failed to create bidirectional ALSA MIDI port 'FMRack'." << std::endl;
+    } else {
+        std::cout << "[ALSA] Created bidirectional MIDI port 'FMRack' (port " << midi_bidi_port << ") for aconnect." << std::endl;
+        connect_all_midi_inputs(seq_handle, midi_bidi_port); // Connect all at startup
+    }
+
     // Enumerate available ALSA MIDI input ports
     std::vector<std::pair<int, int>> available_ports; // (client, port)
     snd_seq_client_info_t *cinfo;
@@ -648,6 +671,38 @@ void midiThread() {
     if (debugEnabled) std::cout << "[MIDI THREAD] Loop exited. Cleaning up ALSA Sequencer..." << std::endl;
     snd_seq_close(seq_handle);
     if (debugEnabled) std::cout << "[MIDI THREAD] Finished." << std::endl;
+}
+
+// Forward declaration for hotplug MIDI input connection
+void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
+
+// Helper: Connect all hardware MIDI input ports to the FMRack port
+void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port) {
+    snd_seq_client_info_t *cinfo;
+    snd_seq_port_info_t *pinfo;
+    snd_seq_client_info_alloca(&cinfo);
+    snd_seq_port_info_alloca(&pinfo);
+    snd_seq_client_info_set_client(cinfo, -1);
+    while (snd_seq_query_next_client(seq_handle, cinfo) >= 0) {
+        int client = snd_seq_client_info_get_client(cinfo);
+        snd_seq_port_info_set_client(pinfo, client);
+        snd_seq_port_info_set_port(pinfo, -1);
+        while (snd_seq_query_next_port(seq_handle, pinfo) >= 0) {
+            unsigned int caps = snd_seq_port_info_get_capability(pinfo);
+            if ((caps & SND_SEQ_PORT_CAP_READ) && (caps & SND_SEQ_PORT_CAP_SUBS_READ) &&
+                (snd_seq_port_info_get_type(pinfo) & SND_SEQ_PORT_TYPE_MIDI_GENERIC)) {
+                int port = snd_seq_port_info_get_port(pinfo);
+                // Don't connect to our own port
+                if (client == snd_seq_client_id(seq_handle) && port == fm_port) continue;
+                int res = snd_seq_connect_from(seq_handle, fm_port, client, port);
+                if (res == 0) {
+                    std::cout << "[ALSA] Connected FMRack to MIDI input: "
+                              << snd_seq_client_info_get_name(cinfo) << " - "
+                              << snd_seq_port_info_get_name(pinfo) << std::endl;
+                }
+            }
+        }
+    }
 }
 
 bool initializeAudioMidi() {
@@ -891,36 +946,6 @@ int main(int argc, char* argv[]) {
         if (idx == 0) std::cout << "  (none found)\n";
     } else {
         std::cout << "  (error listing devices)\n";
-    }
-
-    // List ALSA MIDI devices
-    std::cout << "Available ALSA MIDI input devices:\n";
-    snd_seq_t* seq;
-    if (snd_seq_open(&seq, "default", SND_SEQ_OPEN_INPUT, 0) == 0) {
-        snd_seq_client_info_t *cinfo;
-        snd_seq_port_info_t *pinfo;
-        snd_seq_client_info_alloca(&cinfo);
-        snd_seq_port_info_alloca(&pinfo);
-        int idx = 0;
-        snd_seq_client_info_set_client(cinfo, -1);
-        while (snd_seq_query_next_client(seq, cinfo) >= 0) {
-            int client = snd_seq_client_info_get_client(cinfo);
-            snd_seq_port_info_set_client(pinfo, client);
-            snd_seq_port_info_set_port(pinfo, -1);
-            while (snd_seq_query_next_port(seq, pinfo) >= 0) {
-                unsigned int caps = snd_seq_port_info_get_capability(pinfo);
-                if ((caps & SND_SEQ_PORT_CAP_WRITE) && (caps & SND_SEQ_PORT_CAP_SUBS_WRITE)) {
-                    std::cout << "  " << idx << ": "
-                              << snd_seq_client_info_get_name(cinfo) << " - "
-                              << snd_seq_port_info_get_name(pinfo) << "\n";
-                    ++idx;
-                }
-            }
-        }
-        if (idx == 0) std::cout << "  (none found)\n";
-        snd_seq_close(seq);
-    } else {
-        std::cout << "  (error listing MIDI devices)\n";
     }
 #endif
 

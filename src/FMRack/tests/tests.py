@@ -19,6 +19,18 @@ try:
 except ImportError:
     raise ImportError("This script requires the 'mido' library. Install it with 'pip install mido'.")
 
+def set_voice_data(track):
+    # Use the real DX7 single voice data you provided (155 bytes)
+    # Header: F0 43 00 09 20 ... 155 bytes ... CS F7
+    header = [0x43, 0x00, 0x09, 0x20]
+    # Replace the following with your actual 155-byte DX7 voice data
+    voice_data = [
+        0x5F, 0x1D, 0x14, 0x32, 0x63, 0x51, 0x52, 0x00, 0x29, 0x05, 0x13, 0x03, 0x00, 0x03, 0x00, 0x02, 0x48, 0x00, 0x01, 0x00, 0x0E, 0x5F, 0x14, 0x14, 0x3B, 0x63, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x01, 0x63, 0x00, 0x01, 0x00, 0x00, 0x5F, 0x45, 0x23, 0x4C, 0x58, 0x2E, 0x1B, 0x4D, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x06, 0x4C, 0x00, 0x0A, 0x00, 0x07, 0x5F, 0x14, 0x14, 0x49, 0x63, 0x5F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x03, 0x02, 0x63, 0x00, 0x01, 0x00, 0x07, 0x5F, 0x32, 0x23, 0x4E, 0x63, 0x63, 0x63, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x07, 0x4D, 0x00, 0x01, 0x00, 0x07, 0x60, 0x19, 0x19, 0x4D, 0x63, 0x4B, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x03, 0x02, 0x63, 0x00, 0x01, 0x00, 0x0A, 0x63, 0x63, 0x63, 0x63, 0x32, 0x32, 0x32, 0x32, 0x04, 0x07, 0x00, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00, 0x18, 0x45, 0x2E, 0x50, 0x49, 0x41, 0x4E, 0x4F, 0x20, 0x31, 0x41, 0x27, 0x31
+    ]
+    cs = (-(sum(voice_data)) & 0x7F)
+    sysex_data = header + voice_data + [cs]
+    track.append(Message('sysex', data=sysex_data, time=0))
+
 def sweep(track, msg_type, steps, duration, note=None, control=None):
     # Upward sweep
     for i in range(steps):
@@ -571,6 +583,7 @@ def test_38_sustain_pedal_polarity(track):
 def create_all_tests_midi(filename='dx7test_all.mid'):
     mid = MidiFile()
     track = MidiTrack()
+    set_voice_data(track)
     mid.tracks.append(track)
     tests = [
         test_01_basic_note,
@@ -613,8 +626,8 @@ def create_all_tests_midi(filename='dx7test_all.mid'):
     ]
     tick = 0
     for i, test in enumerate(tests, 1):
-        # Insert a marker for the start of each test
-        track.append(MetaMessage('marker', text=f'Test {i} start', time=0))
+        # Insert a marker for the start of each test using the function name
+        track.append(MetaMessage('marker', text=f'{test.__name__}', time=0))
         duration = test(track)
         tick += duration
         # Insert a gap (e.g., 240 ticks) between tests
@@ -624,4 +637,36 @@ def create_all_tests_midi(filename='dx7test_all.mid'):
 
 # Call to generate the overall MIDI file
 create_all_tests_midi()
+
+# --- DX7 SysEx Check ---
+from mido import MidiFile as MF
+
+def is_dx7_voice_sysex(msg):
+    # DX7 single voice parameter change: F0 43 1n 08 00 ... F7 (n = channel)
+    # DX7 bulk dump: F0 43 00 09 20 ... F7
+    if msg.type == 'sysex' and msg.data:
+        data = msg.data
+        # Check for single voice or bulk dump header
+        if (len(data) >= 6 and data[0] == 0x43 and (
+            (data[1] & 0xF0) == 0x10 and data[2] == 0x4C) # Used in this script
+            ):
+            # This is not a standard DX7 header (should be 08 for single, 09 for bulk)
+            return False, 'Header 0x4C is not standard for DX7 voice data. Should be 0x08 (single) or 0x09 (bulk).'
+        if (len(data) >= 6 and data[0] == 0x43 and data[2] in (0x08, 0x09)):
+            return True, 'DX7 voice data sysex detected.'
+    return False, 'No DX7 voice data sysex detected.'
+
+mid = MF('dx7test_all.mid')
+dx7_sysex_found = False
+for i, track in enumerate(mid.tracks):
+    for msg in track:
+        if msg.type == 'sysex':
+            ok, info = is_dx7_voice_sysex(msg)
+            if ok:
+                print(f"Track {i}: {info}")
+                dx7_sysex_found = True
+            else:
+                print(f"Track {i}: Warning: {info}")
+if not dx7_sysex_found:
+    print("No valid DX7 voice data sysex found in the generated MIDI file.")
 
