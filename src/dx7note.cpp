@@ -215,7 +215,19 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   pmod_1 = abs(pmod_1);
   int32_t pmod_2 = (int32_t)(((int64_t)ctrls->pitch_mod * (int64_t)senslfo) >> 14);
   pmod_2 = abs(pmod_2);
-  int32_t pitch_mod = std::max(pmod_1, pmod_2);
+  
+  // ==== POLYPHONIC AFTERTOUCH - PITCH MODULATION ====
+  // Apply polyphonic aftertouch to pitch if configured
+  int32_t poly_pitch_mod = 0;
+  if (aftertouch_ > 0 && ctrls->at.pitch) {
+    // Apply same scaling and sensitivity as other pitch mod sources
+    float range = ctrls->at.range / 100.0f;
+    uint8_t scaled_aftertouch = uint8_t(float(aftertouch_) * range);
+    poly_pitch_mod = (int32_t)(((int64_t)scaled_aftertouch * (int64_t)senslfo) >> 14);
+    poly_pitch_mod = abs(poly_pitch_mod);
+  }
+  
+  int32_t pitch_mod = std::max({pmod_1, pmod_2, poly_pitch_mod});
   pitch_mod = pitchenv_.getsample() + (pitch_mod * (senslfo < 0 ? -1 : 1));
 
   // ---- PITCH BEND ----
@@ -238,10 +250,33 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   uint32_t amod_1 = (uint32_t)(((int64_t) ampmoddepth_ * (int64_t) lfo_delay) >> 8); // Q24 :D
   amod_1 = (uint32_t)(((int64_t) amod_1 * (int64_t) lfo_val) >> 24);
   uint32_t amod_2 = (uint32_t)(((int64_t) ctrls->amp_mod * (int64_t) lfo_val) >> 7); // Q?? :|
-  uint32_t amd_mod = std::max(amod_1, amod_2);
+  
+  // ==== POLYPHONIC AFTERTOUCH - AMP MODULATION ====
+  // Apply polyphonic aftertouch to amplitude if configured
+  uint32_t poly_amp_mod = 0;
+  if (aftertouch_ > 0 && ctrls->at.amp) {
+    // Apply same scaling as other amp mod sources
+    float range = ctrls->at.range / 100.0f;
+    uint8_t scaled_aftertouch = uint8_t(float(aftertouch_) * range);
+    poly_amp_mod = (uint32_t)(((int64_t) scaled_aftertouch * (int64_t) lfo_val) >> 7);
+  }
+  
+  uint32_t amd_mod = std::max({amod_1, amod_2, poly_amp_mod});
 
   // ==== EG AMP MOD ====
   uint32_t amod_3 = (ctrls->eg_mod + 1) << 17;
+  
+  // ==== POLYPHONIC AFTERTOUCH - EG MODULATION ====
+  // Apply polyphonic aftertouch to EG if configured
+  if (aftertouch_ > 0 && ctrls->at.eg) {
+    // Apply same scaling as other EG mod sources
+    float range = ctrls->at.range / 100.0f;
+    uint8_t scaled_aftertouch = uint8_t(float(aftertouch_) * range);
+    // Reduce EG modulation when polyphonic aftertouch is applied
+    uint32_t poly_eg_reduction = (scaled_aftertouch + 1) << 17;
+    amod_3 = std::min(amod_3, poly_eg_reduction);
+  }
+  
   amd_mod = std::max((1 << 24) - amod_3, amd_mod);
 
   // ==== OP RENDER ====
