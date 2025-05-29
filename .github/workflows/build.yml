@@ -118,4 +118,4 @@ jobs:
           cd release
           ls -lh * # Show what we're about to upload
           wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
-          bash upload.sh *
+          bash upload.sh FMRack-*
