@@ -74,3 +74,45 @@ jobs:
             Synth_Dexed/build/bin/FMRack
             Synth_Dexed/build/FMRack
           if-no-files-found: warn # Optional: warn if no files are found, default is error
+
+  release:
+    name: Upload to GitHub Releases
+    runs-on: ubuntu-latest
+    needs: build  # Wait for all build jobs to complete
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'  # Only on push or manual trigger
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          # Rename and organize files for release
+          find artifacts -name "FMRack.exe" -exec cp {} release/FMRack-windows.exe \;
+          find artifacts -name "FMRack" -path "*/linux/*" -exec cp {} release/FMRack-linux \;
+          find artifacts -name "FMRack" -path "*/linux-arm64/*" -exec cp {} release/FMRack-linux-arm64 \;
+          find artifacts -name "FMRack" -path "*/macos/*" -exec cp {} release/FMRack-macos \;
+          find artifacts -name "FMRack" -path "*/alpine-static/*" -exec cp {} release/FMRack-linux-static \;
+          find artifacts -name "FMRack" -path "*/alpine-static-arm64/*" -exec cp {} release/FMRack-linux-static-arm64 \;
+          
+          # Make Linux/macOS binaries executable
+          chmod +x release/FMRack-linux* release/FMRack-macos
+          
+          # List final release files
+          ls -la release/
+
+      - name: Upload binaries to release using uploadtool
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPLOADTOOL_BODY: "Automated build from commit ${{ github.sha }}\\nBuilt on ${{ github.event.head_commit.timestamp }}\\nBranch: ${{ github.ref_name }}"
+        run: |
+          set -e
+          cd release
+          ls -lh * # Show what we're about to upload
+          wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
+          bash upload.sh *
