@@ -820,9 +820,9 @@ int main(int argc, char* argv[]) {
 
 #ifdef __linux__
     // Try to stop PulseAudio and PipeWire user services (failures are expected and are ok)
-    (void)system("systemctl --user stop pulseaudio.socket && systemctl --user stop pulseaudio.service");
-    (void)system("systemctl --user stop pipewire.socket && systemctl --user stop pipewire.service");
-    (void)system("systemctl --user stop pipewire-pulse.socket && systemctl --user stop pipewire-pulse.service");
+        (void)system("systemctl --user stop pulseaudio.socket && systemctl --user stop pulseaudio.service 2>/dev/null >/dev/null");
+        (void)system("systemctl --user stop pipewire.socket && systemctl --user stop pipewire.service 2>/dev/null >/dev/null");
+        (void)system("systemctl --user stop pipewire-pulse.socket && systemctl --user stop pipewire-pulse.service 2>/dev/null >/dev/null");
 
     // Pre-scan ALSA devices for "sysdefault" if user did not specify -a/--audio-device
     bool userSetAudioDev = false;
