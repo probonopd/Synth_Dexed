@@ -1,4 +1,4 @@
-name: Build Wheels for luma.oled
+name: Build Wheels
 
 on:
   push:
@@ -27,13 +27,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build wheels in Alpine container
+      - name: Build wheels for multiple packages in Alpine
         run: |
           mkdir -p wheels
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace python:3.11-alpine sh -c "
-            apk add --no-cache build-base python3-dev musl-dev libffi-dev \
+            set -e
+            apk add --no-cache build-base python3-dev musl-dev libffi-dev portmidi-dev \
             && pip install --upgrade pip setuptools wheel \
-            && pip wheel luma.oled --wheel-dir=/workspace/wheels \
+            && PACKAGES='luma.oled luma.lcd luma.examples mido python-rtmidi rtmidi-python' \
+            && for pkg in \$PACKAGES; do pip wheel \$pkg --wheel-dir=/workspace/wheels; done \
             && pip freeze > /tmp/requirements.txt \
             && pip wheel -r /tmp/requirements.txt --wheel-dir=/workspace/wheels
           "
