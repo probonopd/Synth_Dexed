@@ -24,7 +24,7 @@ jobs:
             -kmod-nft-offload -libustream-wolfssl -logd  
             -nftables -odhcpd-ipv6only -opkg -ppp -ppp-mod-pppoe -uclient-fetch 
           files: test/files
-          rootfs-size: 10
+          rootfs-size: 20
           #debug: 1
           #disabled-services: dhcp
          # extra-image-name: useless
