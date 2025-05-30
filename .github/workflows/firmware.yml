@@ -16,8 +16,8 @@ jobs:
        
       - uses: izer-xyz/openwrt-imagebuilder-action@main
         with:
-          image: rpi3
-          profile: Default
+          image: bcm27xx-bcm2710
+          profile: rpi3
           openwrt-version: 24.10.1
           packages: >-
             -firewall4 -ca-bundle -dnsmasq -dropbear   
