@@ -24,7 +24,7 @@ jobs:
             -kmod-nft-offload -libustream-wolfssl -logd  
             -nftables -odhcpd-ipv6only -ppp -ppp-mod-pppoe -uclient-fetch 
           files: firmware/overlay
-          rootfs-size: 20
+          rootfs-size: 30
           #debug: 1
           #disabled-services: dhcp
           extra-image-name: FMRack
