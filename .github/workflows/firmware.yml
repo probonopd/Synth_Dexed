@@ -9,6 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: openwrt/imagebuilder:latest
+      options: --user root
 
     steps:
       - name: Checkout repository
