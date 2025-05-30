@@ -1,31 +1,36 @@
 name: Firmware
 
 on:
-  workflow_dispatch:
   push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
+ 
   build:
     runs-on: ubuntu-latest
-    container:
-      image: openwrt/imagebuilder:24.10.1
-      options: --user root
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+       
+      - uses: izer-xyz/openwrt-imagebuilder-action@main
+        with:
+          image: rpi3
+          profile: Default
+          openwrt-version: 24.10.1
+          packages: >-
+            -firewall4 -ca-bundle -dnsmasq -dropbear   
+            -kmod-nft-offload -libustream-wolfssl -logd  
+            -nftables -odhcpd-ipv6only -opkg -ppp -ppp-mod-pppoe -uclient-fetch 
+          files: test/files
+          rootfs-size: 10
+          #debug: 1
+          #disabled-services: dhcp
+         # extra-image-name: useless
 
-      - name: Build firmware image
-        run: |
-          mkdir -p files/
-          make image \
-          PROFILE="rpi-3" \
-          PACKAGES="nano" \
-          FILES="files" \
-          DISABLED_SERVICES="dnsmasq firewall odhcpd"
-
-      - name: Upload built images
+      - name: Store packages
         uses: actions/upload-artifact@v4
         with:
-          name: openwrt-images
-          path: bin/targets/bcm27xx/bcm2710/openwrt-*-rpi-3-squashfs-factory.img.gz
+          path: bin/*
+          retention-time: 1d
