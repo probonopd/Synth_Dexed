@@ -8,7 +8,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: openwrt/imagebuilder:latest
+      image: openwrt/imagebuilder:24.10.1
       options: --user root
 
     steps:
