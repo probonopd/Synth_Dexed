@@ -15,16 +15,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Adjust permissions for GitHub Actions temp directories
+      - name: Build firmware image
         run: |
-          mkdir -p /github/workspace
-          mkdir -p /github/home
-          mkdir -p /github/temp
-          chmod -R 777 /github
-
-      - name: Build OpenWrt image
-        run: |
-          make image PROFILE="rpi-3" PACKAGES="luci nano" FILES="./files"
+          mkdir -p files/
+          make image \
+          PROFILE="rpi-3" \
+          PACKAGES="nano" \
+          FILES="files" \
+          DISABLED_SERVICES="dnsmasq firewall odhcpd"
 
       - name: Upload built images
         uses: actions/upload-artifact@v4
