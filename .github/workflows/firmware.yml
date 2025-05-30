@@ -22,15 +22,15 @@ jobs:
           packages: >-
             -firewall4 -ca-bundle -dnsmasq -dropbear   
             -kmod-nft-offload -libustream-wolfssl -logd  
-            -nftables -odhcpd-ipv6only -opkg -ppp -ppp-mod-pppoe -uclient-fetch 
-          files: test/files
+            -nftables -odhcpd-ipv6only -ppp -ppp-mod-pppoe -uclient-fetch 
+          files: firmware/overlay
           rootfs-size: 20
           #debug: 1
           #disabled-services: dhcp
-         # extra-image-name: useless
+          extra-image-name: FMRack
 
       - name: Store packages
         uses: actions/upload-artifact@v4
         with:
           path: bin/*
-          retention-time: 1d
+          retention-days: 1
