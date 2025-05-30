@@ -22,7 +22,14 @@ jobs:
           packages: >-
             -firewall4 -ca-bundle -dnsmasq -dropbear   
             -kmod-nft-offload -libustream-wolfssl -logd  
-            -nftables -odhcpd-ipv6only -ppp -ppp-mod-pppoe -uclient-fetch 
+            -nftables -odhcpd-ipv6only -ppp -ppp-mod-pppoe -uclient-fetch
+            kmod-sound-arm-bcm2835 kmod-sound-core kmod-usb-hid libc
+            libgcc libustream-mbedtls logd mkf2fs mtd netifd nftables odhcp6c odhcpd-ipv6only opkg partx-utils
+            uci uclient-fetch urandom-seed cypress-firmware-43430-sdio brcmfmac-nvram-43430-sdio cypress-firmware-43455-sdio
+            brcmfmac-nvram-43455-sdio kmod-brcmfmac wpad-basic-mbedtls iwinfo luci
+            alsa-utils alsa-lib kmod-usb-audio i2c-tools kmod-i2c-bcm2835 kmod-i2c-gpio
+            rtpmidid ttymidi alsa-utils alsa-utils-seq kmod-sound-seq kmod-sound-hda-codec-hdmi kmod-sound-hda-codec-cmedia
+            kmod-usb-audio nano unzip wget dropbear
           files: firmware/overlay
           rootfs-size: 30
           #debug: 1
