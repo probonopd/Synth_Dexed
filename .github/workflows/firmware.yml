@@ -14,6 +14,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Adjust permissions for GitHub Actions temp directories
+        run: |
+          mkdir -p /github/workspace
+          mkdir -p /github/home
+          mkdir -p /github/temp
+          chmod -R 777 /github
+
       - name: Build OpenWrt image
         run: |
           make image PROFILE="rpi-3" PACKAGES="luci nano" FILES="./files"
