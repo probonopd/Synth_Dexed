@@ -56,7 +56,8 @@ bool MidiFile::load(const std::string& filename) {
         while (pos < trklen) {
             std::istringstream s(std::string((char*)&trkdata[pos], trklen-pos));
             uint32_t dt = read_vlq(s);
-            size_t vlq_len = s.tellg();
+            std::streamoff vlq_len_off = s.tellg();
+            size_t vlq_len = vlq_len_off >= 0 ? static_cast<size_t>(vlq_len_off) : 0;
             pos += vlq_len; tick += dt;
             uint8_t b = trkdata[pos++];
             if (b < 0x80) { --pos; b = running; } else { running = b; }
@@ -64,18 +65,24 @@ bool MidiFile::load(const std::string& filename) {
             if ((b & 0xF0) == 0xF0) {
                 if (b == 0xFF) {
                     uint8_t type = trkdata[pos++];
-                    uint32_t len = read_vlq(s = std::istringstream(std::string((char*)&trkdata[pos], trklen-pos)));
-                    size_t vlq2 = s.tellg();
+                    std::istringstream s2(std::string((char*)&trkdata[pos], trklen-pos));
+                    uint32_t len = read_vlq(s2);
+                    std::streamoff vlq2_off = s2.tellg();
+                    size_t vlq2 = vlq2_off >= 0 ? static_cast<size_t>(vlq2_off) : 0;
                     pos += vlq2;
                     ev.data = {0xFF, type};
-                    ev.data.insert(ev.data.end(), trkdata.begin()+pos, trkdata.begin()+pos+len);
+                    using diff_t = std::vector<uint8_t>::difference_type;
+                    ev.data.insert(ev.data.end(), trkdata.begin()+static_cast<diff_t>(pos), trkdata.begin()+static_cast<diff_t>(pos+len));
                     pos += len;
                 } else if (b == 0xF0 || b == 0xF7) {
-                    uint32_t len = read_vlq(s = std::istringstream(std::string((char*)&trkdata[pos], trklen-pos)));
-                    size_t vlq2 = s.tellg();
+                    std::istringstream s2(std::string((char*)&trkdata[pos], trklen-pos));
+                    uint32_t len = read_vlq(s2);
+                    std::streamoff vlq2_off = s2.tellg();
+                    size_t vlq2 = vlq2_off >= 0 ? static_cast<size_t>(vlq2_off) : 0;
                     pos += vlq2;
                     ev.data = {b};
-                    ev.data.insert(ev.data.end(), trkdata.begin()+pos, trkdata.begin()+pos+len);
+                    using diff_t = std::vector<uint8_t>::difference_type;
+                    ev.data.insert(ev.data.end(), trkdata.begin()+static_cast<diff_t>(pos), trkdata.begin()+static_cast<diff_t>(pos+len));
                     pos += len;
                 }
             } else {
@@ -122,46 +129,46 @@ bool FileRenderer::renderMidiToWav(Rack* rack,
     double ticksPerQuarter = midi.division;
     double tempo = 500000.0; // default 120 BPM (microseconds per quarter)
     double tickTime = tempo / 1000000.0 / ticksPerQuarter; // seconds per tick
-    size_t eventIdx = 0;
-    double curTime = 0.0;
-    uint32_t curTick = 0;
+    // Removed unused: double curTime = 0.0;
+    // Removed unused: uint32_t curTick = 0;
     std::vector<int16_t> audio;
-    std::vector<float> left(bufferFrames), right(bufferFrames);
+    std::vector<float> left(static_cast<size_t>(bufferFrames)), right(static_cast<size_t>(bufferFrames));
     // Render loop (sample-accurate MIDI timing)
     int tailFrames = sampleRate * 2; // render 2s tail after last event
     int tailLeft = 0;
     double bufferStartTime = 0.0;
-    uint32_t bufferStartTick = 0;
-    int loopCount = 0;
+    // Removed unused: uint32_t bufferStartTick = 0;
+    // Removed unused: int loopCount = 0;
+    size_t eventIdx = 0;
     while (eventIdx < events.size() || tailLeft > 0) {
         int framesRendered = 0;
         while (framesRendered < bufferFrames) {
             int framesToNextEvent = bufferFrames - framesRendered;
             if (eventIdx < events.size()) {
                 double eventTime = events[eventIdx].tick * tickTime;
-                double curTime = bufferStartTime + (framesRendered / (double)sampleRate);
-                int eventOffset = (int)std::round((eventTime - curTime) * sampleRate);
+                double curTimeInner = bufferStartTime + (framesRendered / (double)sampleRate);
+                int eventOffset = (int)std::round((eventTime - curTimeInner) * sampleRate);
                 if (eventOffset < 0) eventOffset = 0;
                 if (eventOffset < framesToNextEvent) framesToNextEvent = eventOffset;
             } else {
                 framesToNextEvent = bufferFrames - framesRendered;
             }
             if (framesToNextEvent <= 0) framesToNextEvent = 1;
-            rack->processAudio(left.data() + framesRendered, right.data() + framesRendered, framesToNextEvent);
+            rack->processAudio(left.data() + static_cast<size_t>(framesRendered), right.data() + static_cast<size_t>(framesRendered), framesToNextEvent);
             for (int i = 0; i < framesToNextEvent; ++i) {
-                int16_t l = (int16_t)std::clamp(left[framesRendered + i] * 32767.0f, -32768.0f, 32767.0f);
-                int16_t r = (int16_t)std::clamp(right[framesRendered + i] * 32767.0f, -32768.0f, 32767.0f);
+                int16_t l = (int16_t)std::clamp(left[static_cast<size_t>(framesRendered) + static_cast<size_t>(i)] * 32767.0f, -32768.0f, 32767.0f);
+                int16_t r = (int16_t)std::clamp(right[static_cast<size_t>(framesRendered) + static_cast<size_t>(i)] * 32767.0f, -32768.0f, 32767.0f);
                 audio.push_back(l);
                 audio.push_back(r);
             }
             framesRendered += framesToNextEvent;
             bufferStartTime += framesToNextEvent / (double)sampleRate;
-            bufferStartTick = (uint32_t)(bufferStartTime / tickTime + 0.5);
+            // Removed unused: bufferStartTick = (uint32_t)(bufferStartTime / tickTime + 0.5);
             if (eventIdx >= events.size() && tailLeft > 0) tailLeft -= framesToNextEvent;
             while (eventIdx < events.size()) {
                 double eventTime = events[eventIdx].tick * tickTime;
-                double curTime = bufferStartTime;
-                if (eventTime <= curTime + (framesToNextEvent / (double)sampleRate)) {
+                double curTimeInner2 = bufferStartTime;
+                if (eventTime <= curTimeInner2 + (framesToNextEvent / (double)sampleRate)) {
                     const auto& data = events[eventIdx].data;
                     if (data.size() >= 1 && data[0] == 0xFF && data.size() >= 3 && data[1] == 0x51) {
                         if (data.size() >= 6) {

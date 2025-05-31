@@ -45,5 +45,5 @@ jobs:
       - name: Upload artefacts
         uses: actions/upload-artifact@v4
         with:
-          path: out/*
+          path: AudioPlugin/out/*
           if-no-files-found: warn
