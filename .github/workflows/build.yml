@@ -120,12 +120,12 @@ jobs:
           
           # Rename and organize files for release - using correct paths
           find artifacts -name "FMRack.exe" -exec cp {} release/FMRack-windows.exe \;
-          find artifacts -name "FMRack" -path "*ubuntu-22.04-linux*" -exec cp {} release/FMRack-linux \;
-          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-linux-arm64*" -exec cp {} release/FMRack-linux-arm64 \;
-          find artifacts -name "FMRack" -path "*macos-13-macos*" -exec cp {} release/FMRack-macos \;
-          find artifacts -name "FMRack" -path "*ubuntu-22.04-alpine-static*" -exec cp {} release/FMRack-linux-static \;
-          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-alpine-static-arm64*" -exec cp {} release/FMRack-linux-static-arm64 \;
-          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-alpine-static-arm*" -exec cp {} release/FMRack-linux-static-arm \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-linux" -exec cp {} release/FMRack-linux \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-linux-arm64" -exec cp {} release/FMRack-linux-arm64 \;
+          find artifacts -name "FMRack" -path "*macos-13-macos" -exec cp {} release/FMRack-macos \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-alpine-static" -exec cp {} release/FMRack-linux-static \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-alpine-static-arm64" -exec cp {} release/FMRack-linux-static-arm64 \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-alpine-static-arm" -exec cp {} release/FMRack-linux-static-arm \;
           
           # Make Linux/macOS binaries executable (only if they exist)
           find release -name "FMRack-linux*" -o -name "FMRack-macos" | xargs -r chmod +x
