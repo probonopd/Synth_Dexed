@@ -630,6 +630,10 @@ def create_all_tests_midi(filename='dx7test_all.mid'):
         track.append(MetaMessage('marker', text=f'{test.__name__}', time=0))
         duration = test(track)
         tick += duration
+        # Insert a 1 second pause (assuming 480 ticks per quarter note, 120 BPM, 1 quarter note = 0.5 sec)
+        # 1 second = 960 ticks at 120 BPM
+        track.append(Message('note_off', note=0, velocity=0, time=960))
+        tick += 960
         # Insert a gap (e.g., 240 ticks) between tests
         track.append(Message('note_off', note=0, velocity=0, time=240))
         tick += 240
