@@ -7,6 +7,9 @@
 #include <vector>
 #include <cstdint>
 
+// Add global debug flag
+extern bool debugEnabled;
+
 namespace FMRack {
 
 Performance::Performance() {
@@ -19,10 +22,10 @@ Performance::~Performance() {
 }
 
 bool Performance::loadFromFile(const std::string& filename) {
-    std::cout << "[DEBUG] Attempting to load performance file: " << filename << std::endl;
+    std::cout << "Attempting to load performance file: " << filename << std::endl;
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cout << "[DEBUG] Could not open performance file: " << filename << std::endl;
+        std::cout << "Could not open performance file: " << filename << std::endl;
         return false;
     }
     std::string line;
@@ -48,7 +51,7 @@ bool Performance::loadFromFile(const std::string& filename) {
         key.erase(key.find_last_not_of(" \t") + 1);
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t") + 1);
-        std::cout << "[DEBUG] Parsed key: '" << key << "', value: '" << value << "' (line " << lineNum << ")" << std::endl;
+        if (debugEnabled) std::cout << "[DEBUG] Parsed key: '" << key << "', value: '" << value << "' (line " << lineNum << ")" << std::endl;
         // Parse numbered parameters for parts 1-8
         for (int part_num = 1; part_num <= 8; ++part_num) { // part_num is 1-based
             bool setting_found_for_this_part_key = false;
@@ -373,28 +376,28 @@ bool Performance::handleSysex(const uint8_t* data, int len, std::vector<uint8_t>
             offset += 4;
             switch (param) {
                 case 0x0000:
-                    std::cout << "Setting CompressorEnable to " << (value != 0) << std::endl;
+                    if (debugEnabled) std::cout << "Setting CompressorEnable to " << (value != 0) << std::endl;
                     effects.compressorEnable = (value != 0); break;
                 case 0x0001:
-                    std::cout << "Setting ReverbEnable to " << (value != 0) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbEnable to " << (value != 0) << std::endl;
                     effects.reverbEnable = (value != 0); break;
                 case 0x0002:
-                    std::cout << "Setting ReverbSize to " << (value & 0x7F) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbSize to " << (value & 0x7F) << std::endl;
                     effects.reverbSize = value & 0x7F; break;
                 case 0x0003:
-                    std::cout << "Setting ReverbHighDamp to " << (value & 0x7F) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbHighDamp to " << (value & 0x7F) << std::endl;
                     effects.reverbHighDamp = value & 0x7F; break;
                 case 0x0004:
-                    std::cout << "Setting ReverbLowDamp to " << (value & 0x7F) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbLowDamp to " << (value & 0x7F) << std::endl;
                     effects.reverbLowDamp = value & 0x7F; break;
                 case 0x0005:
-                    std::cout << "Setting ReverbLowPass to " << (value & 0x7F) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbLowPass to " << (value & 0x7F) << std::endl;
                     effects.reverbLowPass = value & 0x7F; break;
                 case 0x0006:
-                    std::cout << "Setting ReverbDiffusion to " << (value & 0x7F) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbDiffusion to " << (value & 0x7F) << std::endl;
                     effects.reverbDiffusion = value & 0x7F; break;
                 case 0x0007:
-                    std::cout << "Setting ReverbLevel to " << (value & 0x7F) << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbLevel to " << (value & 0x7F) << std::endl;
                     effects.reverbLevel = value & 0x7F; break;
                 default: break;
             }
@@ -412,86 +415,86 @@ bool Performance::handleSysex(const uint8_t* data, int len, std::vector<uint8_t>
             offset += 4;
             switch (param) {
                 case 0x0000:
-                    std::cout << "Setting BankNumber to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting BankNumber to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.bankNumber = value & 0x7F; break;
                 case 0x0001:
-                    std::cout << "Setting VoiceNumber to " << (value & 0x1F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting VoiceNumber to " << (value & 0x1F) << " (part " << partIndex << ")" << std::endl;
                     p.voiceNumber = value & 0x1F; break;
                 case 0x0002:
-                    std::cout << "Setting MIDIChannel to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting MIDIChannel to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.midiChannel = value & 0x7F; break;
                 case 0x0003:
-                    std::cout << "Setting Volume to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting Volume to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.volume = value & 0x7F; break;
                 case 0x0004:
-                    std::cout << "Setting Pan to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting Pan to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.pan = value & 0x7F; break;
                 case 0x0005: {
                     int8_t detune = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F);
-                    std::cout << "Setting Detune to " << static_cast<int>(detune) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting Detune to " << static_cast<int>(detune) << " (part " << partIndex << ")" << std::endl;
                     p.detune = detune; break;
                 }
                 case 0x0006:
-                    std::cout << "Setting Cutoff to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting Cutoff to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.cutoff = value & 0x7F; break;
                 case 0x0007:
-                    std::cout << "Setting Resonance to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting Resonance to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.resonance = value & 0x7F; break;
                 case 0x0008:
-                    std::cout << "Setting NoteLimitLow to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting NoteLimitLow to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.noteLimitLow = value & 0x7F; break;
                 case 0x0009:
-                    std::cout << "Setting NoteLimitHigh to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting NoteLimitHigh to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.noteLimitHigh = value & 0x7F; break;
                 case 0x000A: {
                     int8_t noteShift = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F);
-                    std::cout << "Setting NoteShift to " << static_cast<int>(noteShift) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting NoteShift to " << static_cast<int>(noteShift) << " (part " << partIndex << ")" << std::endl;
                     p.noteShift = noteShift; break;
                 }
                 case 0x000B:
-                    std::cout << "Setting ReverbSend to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting ReverbSend to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.reverbSend = value & 0x7F; break;
                 case 0x000C:
-                    std::cout << "Setting PitchBendRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting PitchBendRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.pitchBendRange = value & 0x7F; break;
                 case 0x000D:
-                    std::cout << "Setting PitchBendStep to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting PitchBendStep to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.pitchBendStep = value & 0x7F; break;
                 case 0x000E:
-                    std::cout << "Setting PortamentoMode to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting PortamentoMode to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.portamentoMode = value & 0x7F; break;
                 case 0x000F:
-                    std::cout << "Setting PortamentoGlissando to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting PortamentoGlissando to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.portamentoGlissando = value & 0x7F; break;
                 case 0x0010:
-                    std::cout << "Setting PortamentoTime to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting PortamentoTime to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.portamentoTime = value & 0x7F; break;
                 case 0x0011:
-                    std::cout << "Setting MonoMode to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting MonoMode to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.monoMode = value & 0x7F; break;
                 case 0x0012:
-                    std::cout << "Setting ModulationWheelRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting ModulationWheelRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.modulationWheelRange = value & 0x7F; break;
                 case 0x0013:
-                    std::cout << "Setting ModulationWheelTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting ModulationWheelTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.modulationWheelTarget = value & 0x7F; break;
                 case 0x0014:
-                    std::cout << "Setting FootControlRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting FootControlRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.footControlRange = value & 0x7F; break;
                 case 0x0015:
-                    std::cout << "Setting FootControlTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting FootControlTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.footControlTarget = value & 0x7F; break;
                 case 0x0016:
-                    std::cout << "Setting BreathControlRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting BreathControlRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.breathControlRange = value & 0x7F; break;
                 case 0x0017:
-                    std::cout << "Setting BreathControlTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting BreathControlTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.breathControlTarget = value & 0x7F; break;
                 case 0x0018:
-                    std::cout << "Setting AftertouchRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting AftertouchRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.aftertouchRange = value & 0x7F; break;
                 case 0x0019:
-                    std::cout << "Setting AftertouchTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
+                    if (debugEnabled) std::cout << "Setting AftertouchTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
                     p.aftertouchTarget = value & 0x7F; break;
                 default: break;
             }

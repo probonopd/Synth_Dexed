@@ -94,60 +94,63 @@ void Rack::createModulesFromPerformance() {
     DEBUG_PRINT("  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n");
     DEBUG_PRINT("  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n");
     for (int i = 0; i < 16; ++i) {
-        std::cout << "[DEBUG] Looping module index: " << i << std::endl;
         if (i >= static_cast<int>(performance_->parts.size())) {
             std::cout << "[DEBUG] Index " << i << " out of bounds for parts.size() " << performance_->parts.size() << std::endl;
             break;
         }
         auto config = performance_->getPartConfig(i);
-        std::cout << "[DEBUG] Got part config for index: " << i << std::endl;
+        if (debugEnabled) {
+            std::cout << "[DEBUG] Got part config for index: " << i << std::endl;
+        }
 
         if (config.midiChannel > 0 ) {
             // Force each part to its own MIDI channel (1-16)
             // config.midiChannel = i + 1;
-            std::string voiceName = extractVoiceName(config.voiceData);
-            std::cout << "Creating module " << (i + 1) << " on MIDI channel "
-                      << static_cast<int>(config.midiChannel) << " with voice: \"" << voiceName << "\"\n";
-            
-            // Show detailed configuration
-            std::cout << "  Voice parameters:\n";
-            std::cout << "    Volume: " << static_cast<int>(config.volume) << "/127 (" 
-                      << (config.volume / 127.0f * 100.0f) << "%)\n";
-            std::cout << "    Pan: " << static_cast<int>(config.pan) << "/127 (" 
-                      << (config.pan / 127.0f * 100.0f) << "%)\n";
-            std::cout << "    Note range: " << static_cast<int>(config.noteLimitLow) 
-                      << "-" << static_cast<int>(config.noteLimitHigh) << "\n";
-            std::cout << "    Note shift: " << static_cast<int>(config.noteShift) << " semitones\n";
-            std::cout << "    Detune: " << static_cast<int>(config.detune) << " cents\n";
-            std::cout << "    Reverb send: " << static_cast<int>(config.reverbSend) << "/127\n";
-            std::cout << "    Unison voices: " << static_cast<int>(config.unisonVoices) << "\n";
-            if (config.unisonVoices > 1) {
-                std::cout << "    Unison detune: " << config.unisonDetune << " cents\n";
-                std::cout << "    Unison spread: " << (config.unisonSpread * 100.0f) << "%\n";
+
+            if (debugEnabled) {
+                std::string voiceName = extractVoiceName(config.voiceData);
+                std::cout << "Creating module " << (i + 1) << " on MIDI channel "
+                        << static_cast<int>(config.midiChannel) << " with voice: \"" << voiceName << "\"\n";
+                
+                // Show detailed configuration
+                std::cout << "  Voice parameters:\n";
+                std::cout << "    Volume: " << static_cast<int>(config.volume) << "/127 (" 
+                        << (config.volume / 127.0f * 100.0f) << "%)\n";
+                std::cout << "    Pan: " << static_cast<int>(config.pan) << "/127 (" 
+                        << (config.pan / 127.0f * 100.0f) << "%)\n";
+                std::cout << "    Note range: " << static_cast<int>(config.noteLimitLow) 
+                        << "-" << static_cast<int>(config.noteLimitHigh) << "\n";
+                std::cout << "    Note shift: " << static_cast<int>(config.noteShift) << " semitones\n";
+                std::cout << "    Detune: " << static_cast<int>(config.detune) << " cents\n";
+                std::cout << "    Reverb send: " << static_cast<int>(config.reverbSend) << "/127\n";
+                std::cout << "    Unison voices: " << static_cast<int>(config.unisonVoices) << "\n";
+                if (config.unisonVoices > 1) {
+                    std::cout << "    Unison detune: " << config.unisonDetune << " cents\n";
+                    std::cout << "    Unison spread: " << (config.unisonSpread * 100.0f) << "%\n";
+                }
+                std::cout << "    Mono mode: " << (config.monoMode ? "ON" : "OFF") << "\n";
+                
+                // Show controller assignments
+                if (config.modulationWheelRange > 0) {
+                    std::cout << "    Mod wheel -> " << getControllerTargetName(config.modulationWheelTarget) 
+                            << " (range: " << static_cast<int>(config.modulationWheelRange) << ")\n";
+                }
+                if (config.footControlRange > 0) {
+                    std::cout << "    Foot control -> " << getControllerTargetName(config.footControlTarget) 
+                            << " (range: " << static_cast<int>(config.footControlRange) << ")\n";
+                }
+                if (config.breathControlRange > 0) {
+                    std::cout << "    Breath control -> " << getControllerTargetName(config.breathControlTarget) 
+                            << " (range: " << static_cast<int>(config.breathControlRange) << ")\n";
+                }
+                if (config.aftertouchRange > 0) {
+                    std::cout << "    Aftertouch -> " << getControllerTargetName(config.aftertouchTarget) 
+                            << " (range: " << static_cast<int>(config.aftertouchRange) << ")\n";
+                }
+                
+                // Show pitch bend range if applicable
+                std::cout << "    Pitch bend range: " << static_cast<int>(config.pitchBendRange) << " semitones\n";
             }
-            std::cout << "    Mono mode: " << (config.monoMode ? "ON" : "OFF") << "\n";
-            
-            // Show controller assignments
-            if (config.modulationWheelRange > 0) {
-                std::cout << "    Mod wheel -> " << getControllerTargetName(config.modulationWheelTarget) 
-                          << " (range: " << static_cast<int>(config.modulationWheelRange) << ")\n";
-            }
-            if (config.footControlRange > 0) {
-                std::cout << "    Foot control -> " << getControllerTargetName(config.footControlTarget) 
-                          << " (range: " << static_cast<int>(config.footControlRange) << ")\n";
-            }
-            if (config.breathControlRange > 0) {
-                std::cout << "    Breath control -> " << getControllerTargetName(config.breathControlTarget) 
-                          << " (range: " << static_cast<int>(config.breathControlRange) << ")\n";
-            }
-            if (config.aftertouchRange > 0) {
-                std::cout << "    Aftertouch -> " << getControllerTargetName(config.aftertouchTarget) 
-                          << " (range: " << static_cast<int>(config.aftertouchRange) << ")\n";
-            }
-            
-            // Show pitch bend range if applicable
-            std::cout << "    Pitch bend range: " << static_cast<int>(config.pitchBendRange) << " semitones\n";
-            
             auto module = std::make_unique<Module>(sampleRate_);
             module->configureFromPerformance(config);
             DEBUG_PRINT("[DEBUG] Module " << (i + 1)
@@ -155,9 +158,9 @@ void Rack::createModulesFromPerformance() {
                 << " Note range: " << (int)config.noteLimitLow << "-" << (int)config.noteLimitHigh
                 << " Pan: " << (int)config.pan);
             modules_.push_back(std::move(module));
-            std::cout << "  Module " << (i + 1) << " created successfully\n\n";
-        } else {
-            std::cout << "Skipping module " << (i + 1) << " (MIDI channel 0 = disabled)\n";
+            std::string voiceName = extractVoiceName(config.voiceData);
+            std::cout << "Module " << (i + 1) << " created and configured with MIDI channel "
+                      << static_cast<int>(config.midiChannel) << " and voice: \"" << voiceName << "\"\n";
         }
     }
 

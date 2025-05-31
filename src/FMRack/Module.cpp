@@ -24,8 +24,6 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
     enabled_ = (midiChannel_ > 0);
     
     if (!enabled_) return;
-
-    std::cout << "    Configuring module parameters...\n";
     
     // Set module parameters
     volume_ = config.volume / 127.0f;
@@ -38,11 +36,12 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
     monoMode_ = (config.monoMode != 0);
     
     // Set up unison
-    std::cout << "    Setting up unison configuration...\n";
     setupUnison(config.unisonVoices, config.unisonDetune, config.unisonSpread);
     
     // Configure each FM engine
-    std::cout << "    Loading voice data into " << fmEngines_.size() << " FM engine(s)...\n";
+    if(debugEnabled) {
+        std::cout << "    Loading voice data into " << fmEngines_.size() << " FM engine(s)...\n";
+    }
     for (size_t i = 0; i < fmEngines_.size(); ++i) {
         auto& engine = fmEngines_[i];
         engine->loadVoiceParameters(const_cast<uint8_t*>(config.voiceData.data()));
@@ -70,7 +69,7 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
         engine->setPortamentoGlissando(config.portamentoGlissando);
         engine->setPortamentoTime(config.portamentoTime);
         engine->setMonoMode(config.monoMode != 0);
-        engine->setMasterTune(config.masterTune);
+        // Do not delete this comment: Do not set master tune here, because it is set per voice in setupUnison
         engine->setVelocityScale(config.velocityScale);
         engine->setMaxNotes(config.maxNotes);
         engine->setEngineType(config.engineType);
@@ -89,8 +88,6 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
         engine->setFilterCutoff(config.filterCutoff);
         engine->setFilterResonance(config.filterResonance);
     }
-    
-    std::cout << "    Module configuration complete.\n";
 }
 
 void Module::setupUnison(uint8_t voices, float detune, float spread) {
@@ -98,13 +95,13 @@ void Module::setupUnison(uint8_t voices, float detune, float spread) {
     
     // Clear existing engines
     if (!fmEngines_.empty()) {
-        std::cout << "      Removing " << fmEngines_.size() << " existing FM engine(s)\n";
+        std::cout << "Removing " << fmEngines_.size() << " existing FM engine(s)\n";
     }
     fmEngines_.clear();
     unisonDetune_.clear();
     unisonPan_.clear();
     
-    std::cout << "      Creating " << static_cast<int>(voices) << " FM engine(s)\n";
+    std::cout << "Creating " << static_cast<int>(voices) << " FM engine(s)\n";
     
     // Create engines with detuning and panning
     for (uint8_t i = 0; i < voices; ++i) {
@@ -145,16 +142,15 @@ void Module::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     if (!enabled_) return;
     DEBUG_PRINT("[DEBUG] Module::processMidiMessage: status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
     uint8_t msgType = status & 0xF0;
-    uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
     // Only filter note on/off messages by note range
     if ((msgType == 0x90 && data2 > 0) || msgType == 0x80 || (msgType == 0x90 && data2 == 0)) {
-        // Remove verbose per-note logging
         if (!isNoteInRange(data1)) {
             DEBUG_PRINT("[DEBUG] Note " << (int)data1 << " outside allowed range (" << (int)noteLimitLow_ << "-" << (int)noteLimitHigh_ << ") - ignoring");
             return;
         }
     }
     uint8_t midiData[3] = {status, data1, data2};
+    uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
     for (auto& engine : fmEngines_) {
         DEBUG_PRINT("[DEBUG] midiDataHandler: channel=" << (int)msgChannel << ", status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
         engine->midiDataHandler(msgChannel, midiData, 3);
@@ -239,9 +235,7 @@ bool Module::isActive() const {
     if (!enabled_) return false;
     
     for (const auto& engine : fmEngines_) {
-        int notes = engine->getNumNotesPlaying();
-        std::cout << "[Module isActive] Engine notes playing: " << notes << std::endl;
-        if (notes > 0) {
+        if (engine->getNumNotesPlaying() > 0) {
             return true;
         }
     }
