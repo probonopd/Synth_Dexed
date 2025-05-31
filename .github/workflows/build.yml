@@ -46,7 +46,6 @@ jobs:
       - name: Build in Alpine Docker Container (ARMv7/armhf)
         if: matrix.build_type == 'alpine-static-arm' && runner.arch == 'ARM64'
         run: |
-          docker run --rm --privileged --platform linux/arm/v7 multiarch/qemu-user-static --reset -p yes
           docker run --rm --platform linux/arm/v7 -v ${{ github.workspace }}:/workspace -w /workspace arm32v7/alpine:3.20 sh -c "
             apk add --no-cache build-base wget git autoconf automake libtool linux-headers qemu-arm-static && \
             wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
