@@ -43,12 +43,12 @@ jobs:
         if: startsWith(matrix.os, 'windows')
         uses: lukka/get-cmake@latest
 
-      - name: Build in Alpine Docker Container (ARMv7/armhf)
+      - name: Build in Alpine Docker Container (armv6l)
         if: matrix.build_type == 'alpine-static-arm' && runner.arch == 'ARM64'
         run: |
-          docker run --rm --platform linux/arm/v7 \
+          docker run --rm --platform linux/arm/v6 \
             -v ${{ github.workspace }}:/workspace \
-            -w /workspace arm32v7/alpine:3.20 sh -c "
+            -w /workspace armv6l/alpine:3.20 sh -c "
               apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \
               wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
               tar -xjf alsa-lib-1.2.9.tar.bz2 && \
