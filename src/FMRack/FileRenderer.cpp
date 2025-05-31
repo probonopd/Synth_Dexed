@@ -117,6 +117,7 @@ bool FileRenderer::renderMidiToWav(Rack* rack,
         }
     }
     std::sort(events.begin(), events.end(), [](const FlatEvent& a, const FlatEvent& b) { return a.tick < b.tick; });
+    // std::cout << "Loaded MIDI events: " << events.size() << std::endl;
     // MIDI timing
     double ticksPerQuarter = midi.division;
     double tempo = 500000.0; // default 120 BPM (microseconds per quarter)
@@ -126,43 +127,61 @@ bool FileRenderer::renderMidiToWav(Rack* rack,
     uint32_t curTick = 0;
     std::vector<int16_t> audio;
     std::vector<float> left(bufferFrames), right(bufferFrames);
-    // Render loop
-    int tailFrames = sampleRate / 2; // render 0.5s tail after last event
+    // Render loop (sample-accurate MIDI timing)
+    int tailFrames = sampleRate * 2; // render 2s tail after last event
     int tailLeft = 0;
-    while (eventIdx < events.size() || tailLeft > 0 || rack->getActiveVoices() > 0) {
-        // Process all events up to this tick
-        while (eventIdx < events.size() && events[eventIdx].tick <= curTick) {
-            const auto& data = events[eventIdx].data;
-            if (data.size() >= 1 && data[0] == 0xFF && data.size() >= 3 && data[1] == 0x51) {
-                // Set Tempo meta event
-                if (data.size() >= 6) {
-                    tempo = (data[3] << 16) | (data[4] << 8) | data[5];
-                    tickTime = tempo / 1000000.0 / ticksPerQuarter;
-                }
-            } else if (data.size() == 3 && (data[0] & 0xF0) != 0xF0) {
-                rack->processMidiMessage(data[0], data[1], data[2]);
-            } else if (data.size() == 2 && (data[0] & 0xF0) == 0xC0) {
-                rack->processMidiMessage(data[0], data[1], 0);
-            } else if (data.size() > 0 && data[0] == 0xF0) {
-                rack->routeSysexToModules(data.data(), (int)data.size(), 0);
+    double bufferStartTime = 0.0;
+    uint32_t bufferStartTick = 0;
+    int loopCount = 0;
+    while (eventIdx < events.size() || tailLeft > 0) {
+        int framesRendered = 0;
+        while (framesRendered < bufferFrames) {
+            int framesToNextEvent = bufferFrames - framesRendered;
+            if (eventIdx < events.size()) {
+                double eventTime = events[eventIdx].tick * tickTime;
+                double curTime = bufferStartTime + (framesRendered / (double)sampleRate);
+                int eventOffset = (int)std::round((eventTime - curTime) * sampleRate);
+                if (eventOffset < 0) eventOffset = 0;
+                if (eventOffset < framesToNextEvent) framesToNextEvent = eventOffset;
+            } else {
+                framesToNextEvent = bufferFrames - framesRendered;
             }
-            ++eventIdx;
-            tailLeft = tailFrames; // reset tail after each event
+            if (framesToNextEvent <= 0) framesToNextEvent = 1;
+            rack->processAudio(left.data() + framesRendered, right.data() + framesRendered, framesToNextEvent);
+            for (int i = 0; i < framesToNextEvent; ++i) {
+                int16_t l = (int16_t)std::clamp(left[framesRendered + i] * 32767.0f, -32768.0f, 32767.0f);
+                int16_t r = (int16_t)std::clamp(right[framesRendered + i] * 32767.0f, -32768.0f, 32767.0f);
+                audio.push_back(l);
+                audio.push_back(r);
+            }
+            framesRendered += framesToNextEvent;
+            bufferStartTime += framesToNextEvent / (double)sampleRate;
+            bufferStartTick = (uint32_t)(bufferStartTime / tickTime + 0.5);
+            if (eventIdx >= events.size() && tailLeft > 0) tailLeft -= framesToNextEvent;
+            while (eventIdx < events.size()) {
+                double eventTime = events[eventIdx].tick * tickTime;
+                double curTime = bufferStartTime;
+                if (eventTime <= curTime + (framesToNextEvent / (double)sampleRate)) {
+                    const auto& data = events[eventIdx].data;
+                    if (data.size() >= 1 && data[0] == 0xFF && data.size() >= 3 && data[1] == 0x51) {
+                        if (data.size() >= 6) {
+                            tempo = (data[3] << 16) | (data[4] << 8) | data[5];
+                            tickTime = tempo / 1000000.0 / ticksPerQuarter;
+                        }
+                    } else if (data.size() == 3 && (data[0] & 0xF0) != 0xF0) {
+                        rack->processMidiMessage(data[0], data[1], data[2]);
+                    } else if (data.size() == 2 && (data[0] & 0xF0) == 0xC0) {
+                        rack->processMidiMessage(data[0], data[1], 0);
+                    } else if (data.size() > 0 && data[0] == 0xF0) {
+                        rack->routeSysexToModules(data.data(), (int)data.size(), 0);
+                    }
+                    ++eventIdx;
+                    tailLeft = tailFrames;
+                } else {
+                    break;
+                }
+            }
         }
-        // Render audio
-        rack->processAudio(left.data(), right.data(), bufferFrames);
-        for (int i = 0; i < bufferFrames; ++i) {
-            int16_t l = (int16_t)std::clamp(left[i] * 32767.0f, -32768.0f, 32767.0f);
-            int16_t r = (int16_t)std::clamp(right[i] * 32767.0f, -32768.0f, 32767.0f);
-            audio.push_back(l);
-            audio.push_back(r);
-        }
-        // Advance time
-        double frameTime = bufferFrames / (double)sampleRate;
-        uint32_t nextTick = (uint32_t)(curTime / tickTime + 0.5);
-        curTime += frameTime;
-        curTick = nextTick;
-        if (eventIdx >= events.size() && tailLeft > 0) tailLeft -= bufferFrames;
     }
     write_wav(wavFile, audio, sampleRate);
     std::cout << "Rendered " << audio.size() / 2 << " stereo samples to " << wavFile << std::endl;

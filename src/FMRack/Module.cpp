@@ -145,15 +145,16 @@ void Module::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     if (!enabled_) return;
     DEBUG_PRINT("[DEBUG] Module::processMidiMessage: status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
     uint8_t msgType = status & 0xF0;
+    uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
     // Only filter note on/off messages by note range
     if ((msgType == 0x90 && data2 > 0) || msgType == 0x80 || (msgType == 0x90 && data2 == 0)) {
+        // Remove verbose per-note logging
         if (!isNoteInRange(data1)) {
             DEBUG_PRINT("[DEBUG] Note " << (int)data1 << " outside allowed range (" << (int)noteLimitLow_ << "-" << (int)noteLimitHigh_ << ") - ignoring");
             return;
         }
     }
     uint8_t midiData[3] = {status, data1, data2};
-    uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
     for (auto& engine : fmEngines_) {
         DEBUG_PRINT("[DEBUG] midiDataHandler: channel=" << (int)msgChannel << ", status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
         engine->midiDataHandler(msgChannel, midiData, 3);
@@ -238,7 +239,9 @@ bool Module::isActive() const {
     if (!enabled_) return false;
     
     for (const auto& engine : fmEngines_) {
-        if (engine->getNumNotesPlaying() > 0) {
+        int notes = engine->getNumNotesPlaying();
+        std::cout << "[Module isActive] Engine notes playing: " << notes << std::endl;
+        if (notes > 0) {
             return true;
         }
     }
