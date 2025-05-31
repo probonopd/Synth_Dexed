@@ -18,6 +18,7 @@ set(FMRACK_SOURCES
     AudioEffectPlateReverb.cpp
     Module.cpp
     FileRenderer.cpp
+    UdpServer.cpp
 )
 
 set(FMRACK_HEADERS
@@ -46,7 +47,7 @@ set(DEXED_SOURCES
 )
 
 # Create the executable
-add_executable(FMRack ${FMRACK_SOURCES} ${FMRACK_HEADERS} ${DEXED_SOURCES} UdpServer.cpp)
+add_executable(FMRack ${FMRACK_SOURCES} ${FMRACK_HEADERS} ${DEXED_SOURCES})
 
 # Platform-specific configurations
 if(WIN32)

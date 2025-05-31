@@ -954,31 +954,6 @@ int main(int argc, char* argv[]) {
     std::string renderMidiFile, renderWavFile;
     parseCommandLineArgs(argc, argv, performanceFile, renderMidiFile, renderWavFile);
 
-    if (!renderMidiFile.empty() && !renderWavFile.empty()) {
-        // Render mode: render MIDI to WAV and exit
-        if (!FMRack::FileRenderer::renderMidiToWav(renderMidiFile, renderWavFile, 48000, 1024, numModules, unisonVoices, unisonDetune, unisonSpread)) {
-            std::cerr << "Failed to render MIDI to WAV." << std::endl;
-            return 1;
-        }
-        return 0;
-    }
-    
-#ifdef __linux__
-    if (pipe(g_midi_shutdown_pipe) == -1) {
-        perror("[MAIN THREAD] Failed to create MIDI shutdown pipe");
-        g_midi_shutdown_pipe[0] = g_midi_shutdown_pipe[1] = -1; // Ensure it's marked as unusable
-    } else {
-        int flags = fcntl(g_midi_shutdown_pipe[0], F_GETFL, 0);
-        if (flags == -1 || fcntl(g_midi_shutdown_pipe[0], F_SETFL, flags | O_NONBLOCK) == -1) {
-            perror("[MAIN THREAD] Failed to set MIDI shutdown pipe O_NONBLOCK");
-            close(g_midi_shutdown_pipe[0]);
-            close(g_midi_shutdown_pipe[1]);
-            g_midi_shutdown_pipe[0] = g_midi_shutdown_pipe[1] = -1;
-        } else {
-            if (debugEnabled) std::cout << "[MAIN THREAD] MIDI shutdown pipe created successfully." << std::endl;
-        }
-    }
-#endif
     // Track performance directory if set
     if (!performanceFile.empty()) {
         std::filesystem::path perfPath(performanceFile);
@@ -990,32 +965,23 @@ int main(int argc, char* argv[]) {
     } else {
         g_performanceSet = false;
     }
-    
+
     try {
         // Initialize the rack with configured sample rate
         g_rack = std::make_unique<Rack>(SAMPLE_RATE);
-        
-        std::cout << "Rack initialized successfully.\n";
-        
-        // Initialize audio/MIDI hardware
-        if (!initializeAudioMidi()) {
-            std::cerr << "Failed to initialize audio/MIDI interface.\n";
-            return 1;
-        }
-        
+
         // Load performance file if specified, otherwise use default
         if (!performanceFile.empty()) {
             if (!g_rack->loadInitialPerformance(performanceFile)) {
                 return 1;
             }
         } else {
-            // Custom default setup using command line options
             FMRack::Performance perf;
-            perf.setDefaults(numModules, unisonVoices); // Pass unisonVoices to setDefaults
+            perf.setDefaults(numModules, unisonVoices);
             for (int i = 0; i < 8; ++i) {
                 if (i < numModules) {
                     perf.parts[i].midiChannel = i + 1;
-                    perf.parts[i].unisonVoices = unisonVoices; // Use the value from the command line argument
+                    perf.parts[i].unisonVoices = unisonVoices;
                     perf.parts[i].unisonDetune = 7.0f;
                     perf.parts[i].unisonSpread = 0.5f;
                     perf.parts[i].volume = 100;
@@ -1024,14 +990,19 @@ int main(int argc, char* argv[]) {
                 }
             }
             g_rack->setPerformance(perf);
-            std::cout << "Default configuration: " << numModules << " modules, "
-                      << unisonVoices << " unison voices, detune " << unisonDetune
-                      << ", spread " << unisonSpread << std::endl;
-            if (useSine) {
-                std::cout << "Running in sine wave test mode.\n";
-            } else {
-                std::cout << "Running with custom FM synthesizer configuration.\n";
+        }
+
+        // Render mode: render MIDI to WAV and exit (after rack is set up)
+        if (!renderMidiFile.empty() && !renderWavFile.empty()) {
+            if (!g_rack) {
+                std::cerr << "Rack not initialized." << std::endl;
+                return 1;
             }
+            if (!FMRack::FileRenderer::renderMidiToWav(g_rack.get(), renderMidiFile, renderWavFile, SAMPLE_RATE, BUFFER_FRAMES)) {
+                std::cerr << "Failed to render MIDI to WAV." << std::endl;
+                return 1;
+            }
+            return 0;
         }
         
         // Start audio processing

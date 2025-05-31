@@ -1,6 +1,6 @@
-/*  Stereo plate reverb for Teensy 4
+/*  Stereo plate reverb
  *
- *  Adapted for MiniDexed (Holger Wirtz <dcoredump@googlemail.com>)
+ *  Adapted from MiniDexed (Holger Wirtz <dcoredump@googlemail.com>)
  *
  *  Author: Piotr Zapart
  *          www.hexefx.com

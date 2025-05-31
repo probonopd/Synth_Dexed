@@ -100,30 +100,14 @@ static void write_wav(const std::string& filename, const std::vector<int16_t>& d
     f.write("data",4); f.write((char*)&datasz,4); f.write((char*)data.data(), datasz);
 }
 
-bool FileRenderer::renderMidiToWav(const std::string& midiFile, const std::string& wavFile,
-                                   int sampleRate, int bufferFrames,
-                                   int numModules, int unisonVoices, float unisonDetune, float unisonSpread) {
+bool FileRenderer::renderMidiToWav(Rack* rack,
+                                   const std::string& midiFile, const std::string& wavFile,
+                                   int sampleRate, int bufferFrames) {
     MidiFile midi;
     if (!midi.load(midiFile)) {
         std::cerr << "Failed to load MIDI file: " << midiFile << std::endl;
         return false;
     }
-    // Set up synth
-    auto rack = std::make_unique<Rack>(sampleRate);
-    Performance perf;
-    perf.setDefaults(numModules, unisonVoices);
-    for (int i = 0; i < 8; ++i) {
-        if (i < numModules) {
-            perf.parts[i].midiChannel = i + 1;
-            perf.parts[i].unisonVoices = unisonVoices;
-            perf.parts[i].unisonDetune = unisonDetune;
-            perf.parts[i].unisonSpread = unisonSpread;
-            perf.parts[i].volume = 100;
-        } else {
-            perf.parts[i].midiChannel = 0;
-        }
-    }
-    rack->setPerformance(perf);
     // Flatten all events from all tracks, sort by tick
     struct FlatEvent { uint32_t tick; std::vector<uint8_t> data; };
     std::vector<FlatEvent> events;
