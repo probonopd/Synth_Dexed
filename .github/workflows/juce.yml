@@ -39,28 +39,11 @@ jobs:
         working-directory: AudioPlugin
         shell: bash
         run: |
-          ARTIFACTS=""
-          # VST3, DLL, SO, DYLIB, EXE
-          ARTIFACTS=$(find build -type f \( -name "*.vst3" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" -o -name "*.exe" \))
-          # Windows Standalone EXE (commonly in FMRack_artefacts/Release/Standalone)
-          if [ -f "build/FMRack_artefacts/Release/Standalone/FMRack.exe" ]; then
-            ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack.exe"
-          fi
-          # Linux Standalone (no extension, executable)
-          if [ -f "build/FMRack_artefacts/Release/Standalone/FMRack" ]; then
-            ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack"
-          fi
-          # macOS .app bundle
-          if [ -d "build/FMRack_artefacts/Release/Standalone/FMRack.app" ]; then
-            ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack.app"
-          fi
-          ARTIFACTS=$(echo $ARTIFACTS | xargs) # Trim whitespace
-          echo "ARTIFACTS=$ARTIFACTS" >> $GITHUB_ENV
-          echo "artifacts=$ARTIFACTS" >> $GITHUB_OUTPUT
-          echo "Build artifacts found: $ARTIFACTS"  # Added logging for artifacts found
+          mkdir -p out
+          find build -type f \( -name "FMRack.vst3" -o -name "FMRack.dll" -o -name "FMRack.so" -o -name "FMRack.dylib" -o -name "FMRack.exe" \) -exec cp -r {} out \;
 
       - name: Upload artefacts
         uses: actions/upload-artifact@v4
         with:
-          path: ${{ steps.find_artifacts.outputs.artifacts }}
+          path: out/*
           if-no-files-found: warn
