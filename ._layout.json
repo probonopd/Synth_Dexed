@@ -1,66 +1,114 @@
 {
     "items": {
-        "CMakeLists.txt": [
+        "AudioPlugin.zip": [
             0.0,
+            0.0
+        ],
+        "CMakeLists.txt": [
+            600.0,
             0.0
         ],
         "LICENSE-APACHE2.txt": [
+            400.0,
+            60.0
+        ],
+        "LICENSE-GPL3.txt": [
+            500.0,
+            60.0
+        ],
+        "README.md": [
+            500.0,
+            120.0
+        ],
+        "Source": [
+            600.0,
+            120.0
+        ],
+        "bildlx": [
             100.0,
             0.0
         ],
-        "LICENSE-GPL3.txt": [
+        "breath_controller_sweep.mid": [
             200.0,
-            0.0
-        ],
-        "README.md": [
-            300.0,
-            0.0
-        ],
-        "bildlx": [
-            400.0,
             0.0
         ],
         "build": [
-            500.0,
+            300.0,
             0.0
         ],
         "buildlinux": [
-            600.0,
+            400.0,
             0.0
         ],
-        "examples": [
+        "channel_aftertouch_sweep.mid": [
+            500.0,
+            0.0
+        ],
+        "dx7test_all.mid": [
+            700.0,
+            0.0
+        ],
+        "firmware": [
             0.0,
             60.0
         ],
-        "keywords.txt": [
+        "foot_controller_sweep.mid": [
             100.0,
             60.0
         ],
-        "library.properties": [
+        "keywords.txt": [
             200.0,
             60.0
         ],
-        "name.c": [
+        "library.properties": [
             300.0,
             60.0
         ],
-        "platformio.ini": [
-            400.0,
-            60.0
-        ],
-        "python": [
-            500.0,
-            60.0
-        ],
-        "src": [
+        "modwheel_sweep.mid": [
             600.0,
             60.0
         ],
-        "tools": [
+        "name.c": [
+            700.0,
+            60.0
+        ],
+        "peaks": [
             0.0,
             120.0
+        ],
+        "pitchbend_sweep.mid": [
+            100.0,
+            120.0
+        ],
+        "platformio.ini": [
+            200.0,
+            120.0
+        ],
+        "poly_aftertouch_sweep.mid": [
+            300.0,
+            120.0
+        ],
+        "python": [
+            400.0,
+            120.0
+        ],
+        "src": [
+            700.0,
+            120.0
+        ],
+        "test.wav": [
+            0.0,
+            180.0
+        ],
+        "testfmrack.wav": [
+            100.0,
+            180.0
+        ],
+        "tools": [
+            200.0,
+            180.0
         ]
     },
-    "window_geometry": "AdnQywADAAAAAABkAAAARQAAA4MAAAK7AAAAZAAAAGQAAAODAAACuwAAAAAAAAAAB4AAAABkAAAAZAAAA4MAAAK7",
+    "window_geometry": "AdnQywADAAAAAARJAAAAXQAAB2gAAALTAAAESQAAAHwAAAdoAAAC0wAAAAAAAAAAB4AAAARJAAAAfAAAB2gAAALT",
     "app.snap_to_grid": false
 }
