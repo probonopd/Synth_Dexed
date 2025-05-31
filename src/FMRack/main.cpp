@@ -1,3 +1,6 @@
+// =====================
+// Includes
+// =====================
 #include "Rack.h"
 #include "UdpServer.h"
 #include "Debug.h"
@@ -8,21 +11,23 @@
 #include <atomic>
 #include <chrono>
 #include <algorithm>
-#include <cmath>  // Add for M_PI and sin functions
+#include <cmath>
 #include <memory>
-#include <filesystem> // Add for file system operations
-#include <signal.h> // Use standard signal handling for compatibility
-#include <csignal> // Ensure csignal is included for signal
+#include <filesystem>
+#include <signal.h>
+#include <csignal>
 #include <fstream>
 #include <cstdint>
 #include <cstring>
 #include <sstream>
 
 #ifdef __linux__
-#include <unistd.h> // For pipe
-#include <fcntl.h>  // For fcntl
+#include <unistd.h>
+#include <fcntl.h>
 #include <alsa/asoundlib.h>
 #include <alsa/seq.h>
+// Forward declaration for connect_all_midi_inputs
+void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
 #endif
 
 // Define M_PI if not available (common on Windows)
@@ -31,41 +36,32 @@
 #endif
 
 #ifdef _WIN32
-#define NOMINMAX  // Prevent Windows from defining min/max macros
+#define NOMINMAX
 #include <windows.h>
 #include <mmeapi.h>
 #pragma comment(lib, "winmm.lib")
+#endif
 
-// Windows audio output variables
-static HWAVEOUT g_hWaveOut = nullptr;
-static std::vector<WAVEHDR> g_waveHeaders;
-static std::vector<std::vector<short>> g_audioBuffers;
-static int g_currentBuffer = 0;
-static const int AUDIO_BUFFER_SIZE = 1024; // samples per channel
-
-#elif __APPLE__
+#ifdef __APPLE__
 #include <CoreAudio/CoreAudio.h>
 #include <AudioUnit/AudioUnit.h>
 #include <CoreMIDI/CoreMIDI.h>
-#elif __linux__
-#include <alsa/asoundlib.h>
-#include <alsa/seq.h>
 #endif
 
 using namespace FMRack;
 
-// Global state for audio/MIDI interface - updated to match native implementation
+// =====================
+// Global Variables & Config
+// =====================
 static std::unique_ptr<Rack> g_rack;
 static std::atomic<bool> g_running{false};
-static unsigned int SAMPLE_RATE = 48000;  // Match native default
-static unsigned int BUFFER_FRAMES = 1024; // Default changed from 256 to 1024 to reduce stuttering on Windows
-static int numBuffers = 4;                // Default remains 4 (primarily for Windows)
-static int audioDev = 0;                  // Audio device ID
-static int midiDev = 0;                   // MIDI device ID
-static bool useSine = false;              // Sine wave test mode
+static unsigned int SAMPLE_RATE = 48000, BUFFER_FRAMES = 1024;
+static int numBuffers = 4, audioDev = 0, midiDev = 0, numModules = 16, unisonVoices = 1;
+int multiprocessingEnabled = 1;
+static bool useSine = false;
 
 #ifdef __linux__
-static int g_midi_shutdown_pipe[2] = {-1, -1}; // Read end [0], Write end [1]
+static int g_midi_shutdown_pipe[2] = {-1, -1};
 #endif
 
 // Add global UDP server pointer
@@ -75,97 +71,64 @@ static std::unique_ptr<UdpServer> g_udpServer;
 int udpPort = 50007; // Default UDP port, can be made configurable
 
 // Global variables for command line options
-static int numModules = 16; // Number of modules/parts
-static int unisonVoices = 1; // Unison voices per module
-static float unisonDetune = 7.0f; // Detune in cents
-static float unisonSpread = 0.5f; // Stereo spread
-
-// Debug flag for controlling debug output
+static float unisonDetune = 7.0f, unisonSpread = 0.5f;
 bool debugEnabled = false;
 
 // Store the directory of the initial performance file if set
-static std::string g_performanceDir;
-static std::string g_performanceBase;
-static bool g_performanceSet = false;
+static std::string g_performanceDir, g_performanceBase; static bool g_performanceSet = false;
 
-// Define multiprocessingEnabled variable
-int multiprocessingEnabled = 1;
+// =====================
+// Helper Functions
+// =====================
 
 // Helper: wrapper for MIDI message handling
 void handleMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     // If --performance was set and this is a Program Change (0xC0-0xCF)
-    if (g_performanceSet && (status & 0xF0) == 0xC0) {
-        int programNum = data1; // 0-based
-        if (g_rack) {
-            g_rack->handleProgramChange(programNum, g_performanceDir);
-        }
-    } else if (g_rack) {
-        g_rack->processMidiMessage(status, data1, data2);
-    }
+    if (g_performanceSet && (status & 0xF0) == 0xC0) { if (g_rack) g_rack->handleProgramChange(data1, g_performanceDir); }
+    else if (g_rack) g_rack->processMidiMessage(status, data1, data2);
 }
 
+// =====================
+// Platform-Specific Audio/MIDI
+// =====================
 #ifdef _WIN32
+// Windows audio output variables
+static HWAVEOUT g_hWaveOut = nullptr;
+static std::vector<WAVEHDR> g_waveHeaders;
+static std::vector<std::vector<short>> g_audioBuffers;
+static int g_currentBuffer = 0;
+static const int AUDIO_BUFFER_SIZE = 1024; // samples per channel
+
 // Windows MIDI callback
-void CALLBACK midiInProc(HMIDIIN hmi, UINT wMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
+void CALLBACK midiInProc(HMIDIIN, UINT wMsg, DWORD_PTR, DWORD_PTR dwParam1, DWORD_PTR) {
     if (wMsg == MIM_DATA && g_rack) {
         DWORD midiMsg = static_cast<DWORD>(dwParam1);
-        int status = midiMsg & 0xFF;
-        int data1 = (midiMsg >> 8) & 0xFF;
-        int data2 = (midiMsg >> 16) & 0xFF;
-        handleMidiMessage(status, data1, data2);
+        handleMidiMessage(midiMsg & 0xFF, (midiMsg >> 8) & 0xFF, (midiMsg >> 16) & 0xFF);
     }
 }
 
 // Windows audio thread function
 void audioThread() {
     // Set audio thread to high priority
-    HANDLE hThread = GetCurrentThread();
-    SetThreadPriority(hThread, THREAD_PRIORITY_HIGHEST);
-    
-    std::vector<float> leftBuffer(BUFFER_FRAMES);
-    std::vector<float> rightBuffer(BUFFER_FRAMES);
-    float outputGain = 1.0f; // Add this line to define outputGain, adjust as needed
-    
+    HANDLE hThread = GetCurrentThread(); SetThreadPriority(hThread, THREAD_PRIORITY_HIGHEST);
+    std::vector<float> leftBuffer(BUFFER_FRAMES), rightBuffer(BUFFER_FRAMES); float outputGain = 1.0f;
     while (g_running) {
-        if (g_rack && g_hWaveOut) {
-            // Check if current buffer is done playing
-            if (g_waveHeaders[g_currentBuffer].dwFlags & WHDR_DONE || 
-                !(g_waveHeaders[g_currentBuffer].dwFlags & WHDR_INQUEUE)) {
-                
-                // Generate audio
-                if (useSine) {
-                    // Generate test sine wave
-                    static double phase = 0.0;
-                    double freq = 440.0;
-                    double phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
-                    for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) {
-                        float sample = static_cast<float>(std::sin(phase) * 0.5);
-                        leftBuffer[i] = rightBuffer[i] = sample;
-                        phase += phaseInc;
-                        if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
-                    }
-                } else {
-                    g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), BUFFER_FRAMES);
-                }
-                
-                // Convert float to 16-bit PCM and interleave
-                for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) {
-                    // Clamp and convert to 16-bit
-                    short leftSample = static_cast<short>(std::clamp(leftBuffer[i] * 32767.0f, -32768.0f, 32767.0f));
-                    short rightSample = static_cast<short>(std::clamp(rightBuffer[i] * 32767.0f, -32768.0f, 32767.0f));
-                    g_audioBuffers[g_currentBuffer][i * 2] = leftSample;   // Left channel
-                    g_audioBuffers[g_currentBuffer][i * 2 + 1] = rightSample; // Right channel
-                }
-                
-                // Send buffer to audio device
-                waveOutWrite(g_hWaveOut, &g_waveHeaders[g_currentBuffer], sizeof(WAVEHDR));
-                
-                // Switch to next buffer
-                g_currentBuffer = (g_currentBuffer + 1) % numBuffers;
+        if (g_rack && g_hWaveOut && (g_waveHeaders[g_currentBuffer].dwFlags & WHDR_DONE || !(g_waveHeaders[g_currentBuffer].dwFlags & WHDR_INQUEUE))) {
+            if (useSine) {
+                // Generate test sine wave
+                static double phase = 0.0, freq = 440.0, phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
+                for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) { float s = static_cast<float>(std::sin(phase) * 0.5); leftBuffer[i] = rightBuffer[i] = s; phase += phaseInc; if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI; }
+            } else g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), BUFFER_FRAMES);
+            // Convert float to 16-bit PCM and interleave
+            for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) {
+                // Clamp and convert to 16-bit
+                short l = static_cast<short>(std::clamp(leftBuffer[i] * 32767.0f, -32768.0f, 32767.0f));
+                short r = static_cast<short>(std::clamp(rightBuffer[i] * 32767.0f, -32768.0f, 32767.0f));
+                g_audioBuffers[g_currentBuffer][i * 2] = l; g_audioBuffers[g_currentBuffer][i * 2 + 1] = r;
             }
+            waveOutWrite(g_hWaveOut, &g_waveHeaders[g_currentBuffer], sizeof(WAVEHDR));
+            g_currentBuffer = (g_currentBuffer + 1) % numBuffers;
         }
-        
-        // Small sleep to prevent busy waiting
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
@@ -200,14 +163,7 @@ bool initializeAudioMidi() {
     
     // Initialize audio output with configurable settings
     std::cout << "[DEBUG] Number of audio devices: " << waveOutGetNumDevs() << std::endl;
-    WAVEFORMATEX waveFormat;
-    waveFormat.wFormatTag = WAVE_FORMAT_PCM;
-    waveFormat.nChannels = 2;
-    waveFormat.nSamplesPerSec = SAMPLE_RATE;
-    waveFormat.wBitsPerSample = 16;
-    waveFormat.nBlockAlign = (waveFormat.nChannels * waveFormat.wBitsPerSample) / 8;
-    waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
-    waveFormat.cbSize = 0;
+    WAVEFORMATEX waveFormat = {WAVE_FORMAT_PCM, 2, SAMPLE_RATE, SAMPLE_RATE*4, 4, 16, 0};
     std::cout << "[DEBUG] Attempting to open audio device " << audioDev << std::endl;
     MMRESULT result = waveOutOpen(&g_hWaveOut, audioDev, &waveFormat, 0, 0, CALLBACK_NULL);
     if (result != MMSYSERR_NOERROR) {
@@ -216,8 +172,7 @@ bool initializeAudioMidi() {
     }
     
     // Prepare multiple wave headers like native implementation
-    g_waveHeaders.resize(numBuffers);
-    g_audioBuffers.resize(numBuffers);
+    g_waveHeaders.resize(numBuffers); g_audioBuffers.resize(numBuffers);
     for (int i = 0; i < numBuffers; ++i) {
         g_audioBuffers[i].resize(BUFFER_FRAMES * 2); // stereo
         ZeroMemory(&g_waveHeaders[i], sizeof(WAVEHDR));
@@ -234,571 +189,158 @@ bool initializeAudioMidi() {
 }
 
 #elif __APPLE__
-// macOS Core Audio callback
-OSStatus audioCallback(void* inRefCon, AudioUnitRenderActionFlags* ioActionFlags,
-                      const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber,
-                      UInt32 inNumberFrames, AudioBufferList* ioData) {
-    
-    if (g_rack && ioData->mNumberBuffers >= 2) {
-        float* leftOut = static_cast<float*>(ioData->mBuffers[0].mData);
-        float* rightOut = static_cast<float*>(ioData->mBuffers[1].mData);
-        
-        g_rack->processAudio(leftOut, rightOut, inNumberFrames);
-    }
-    
+OSStatus audioCallback(void*, AudioUnitRenderActionFlags*, const AudioTimeStamp*, UInt32, UInt32 n, AudioBufferList* ioData) {
+    if (g_rack && ioData->mNumberBuffers >= 2) g_rack->processAudio((float*)ioData->mBuffers[0].mData, (float*)ioData->mBuffers[1].mData, n);
     return noErr;
 }
-
-// macOS Core MIDI callback
-void midiReadProc(const MIDIPacketList* pktlist, void* refCon, void* connRefCon) {
+void midiReadProc(const MIDIPacketList* pktlist, void*, void*) {
     if (!g_rack) return;
-    const MIDIPacket* packet = &pktlist->packet[0];
-    for (UInt32 i = 0; i < pktlist->numPackets; ++i) {
-        if (packet->length >= 3) {
-            handleMidiMessage(packet->data[0], packet->data[1], packet->data[2]);
-        }
-        packet = MIDIPacketNext(packet);
-    }
+    const MIDIPacket* p = &pktlist->packet[0];
+    for (UInt32 i = 0; i < pktlist->numPackets; ++i) { if (p->length >= 3) handleMidiMessage(p->data[0], p->data[1], p->data[2]); p = MIDIPacketNext(p); }
 }
-
 bool initializeAudioMidi() {
-    // Initialize Core Audio
-    AudioUnit audioUnit;
-    AudioComponentDescription desc = {};
-    desc.componentType = kAudioUnitType_Output;
-    desc.componentSubType = kAudioUnitSubType_DefaultOutput;
-    desc.componentManufacturer = kAudioUnitManufacturer_Apple;
-    
-    AudioComponent comp = AudioComponentFindNext(NULL, &desc);
-    if (!comp) {
-        std::cout << "Failed to find audio component.\n";
-        return false;
-    }
-    
-    OSStatus status = AudioComponentInstanceNew(comp, &audioUnit);
-    if (status != noErr) {
-        std::cout << "Failed to create audio unit instance.\n";
-        return false;
-    }
-    
-    AURenderCallbackStruct callbackStruct = {};
-    callbackStruct.inputProc = audioCallback;
-    callbackStruct.inputProcRefCon = nullptr;
-    
-    status = AudioUnitSetProperty(audioUnit, kAudioUnitProperty_SetRenderCallback,
-                                 kAudioUnitScope_Input, 0, &callbackStruct, sizeof(callbackStruct));
-    
-    if (status == noErr) {
-        AudioUnitInitialize(audioUnit);
-        AudioOutputUnitStart(audioUnit);
-        std::cout << "Core Audio initialized successfully.\n";
-    }
-    
-    // Initialize Core MIDI
-    MIDIClientRef midiClient;
-    MIDIPortRef inputPort;
-    
-    status = MIDIClientCreate(CFSTR("FMRack"), NULL, NULL, &midiClient);
-    if (status == noErr) {
-        status = MIDIInputPortCreate(midiClient, CFSTR("Input"), midiReadProc, NULL, &inputPort);
-        
-        // Connect to all MIDI sources
-        ItemCount sourceCount = MIDIGetNumberOfSources();
-        for (ItemCount i = 0; i < sourceCount; ++i) {
-            MIDIEndpointRef source = MIDIGetSource(i);
-            MIDIPortConnectSource(inputPort, source, NULL);
+    AudioUnit au; AudioComponentDescription d = {kAudioUnitType_Output, kAudioUnitSubType_DefaultOutput, kAudioUnitManufacturer_Apple};
+    AudioComponent c = AudioComponentFindNext(NULL, &d); if (!c) return false;
+    if (AudioComponentInstanceNew(c, &au) != noErr) return false;
+    AURenderCallbackStruct cb = {audioCallback, nullptr};
+    if (AudioUnitSetProperty(au, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof(cb)) == noErr) { AudioUnitInitialize(au); AudioOutputUnitStart(au); }
+    MIDIClientRef mc; MIDIPortRef ip;
+    if (MIDIClientCreate(CFSTR("FMRack"), NULL, NULL, &mc) == noErr) {
+        if (MIDIInputPortCreate(mc, CFSTR("Input"), midiReadProc, NULL, &ip) == noErr) {
+            for (ItemCount i = 0, n = MIDIGetNumberOfSources(); i < n; ++i) MIDIPortConnectSource(ip, MIDIGetSource(i), NULL);
         }
-        
-        std::cout << "Core MIDI initialized successfully.\n";
     }
-    
     return true;
 }
-
 #elif __linux__
-#include <unistd.h> // For pipe
-#include <fcntl.h>  // For fcntl
-#include <alsa/asoundlib.h>
-#include <alsa/seq.h>
-// Forward declaration for hotplug MIDI input connection
-void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
-// Linux ALSA audio thread - updated to use BUFFER_FRAMES
 void audioThread() {
-    if (debugEnabled) std::cout << "[AUDIO THREAD] Started." << std::endl;
-    // Set audio thread to high priority
-    struct sched_param sch_params;
-    sch_params.sched_priority = 20; // Consider increasing for SCHED_FIFO (e.g., 50) if system allows
-    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params) != 0) {
-        std::cerr << "Warning: Failed to set real-time priority for audio thread." << std::endl;
-    }
-
-    snd_pcm_t* pcm_handle;
-    // TODO: Use the audioDev parameter to select the device string, similar to native/main_linux.cpp
-    // For now, using "default". The command line --audio-device is currently ignored for Linux.
-    int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0);
-    if (err < 0) {
-        std::cout << "Failed to open PCM device: " << snd_strerror(err) << "\\n";
-        return;
-    }
-
-    // Configure PCM
-    snd_pcm_hw_params_t* hw_params;
-    snd_pcm_hw_params_alloca(&hw_params);
-    err = snd_pcm_hw_params_any(pcm_handle, hw_params);
-    if (err < 0) { std::cout << "Failed to init hw_params: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-
-    err = snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED);
-    if (err < 0) { std::cout << "Failed to set access: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-
-    err = snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_FLOAT_LE);
-    if (err < 0) { std::cout << "Failed to set format: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-
-    err = snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2);
-    if (err < 0) { std::cout << "Failed to set channels: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-
-    unsigned int current_rate_alsa = SAMPLE_RATE;
-    err = snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, &current_rate_alsa, 0);
-    if (err < 0) { std::cout << "Failed to set rate: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-    if (current_rate_alsa != SAMPLE_RATE) {
-        std::cout << "Warning: ALSA sample rate set to " << current_rate_alsa << " (requested " << SAMPLE_RATE 
-                  << "). This might cause audio issues as synth engine uses " << SAMPLE_RATE << "." << std::endl;
-        // Ideally, g_rack should be reconfigured or app should exit.
-    }
-
-    snd_pcm_uframes_t period_size_frames = BUFFER_FRAMES;
-    int dir = 0; // exact value
-    err = snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &period_size_frames, &dir);
-    if (err < 0) { std::cout << "Failed to set period size near " << BUFFER_FRAMES << ": " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-    if (period_size_frames != BUFFER_FRAMES) {
-        std::cout << "Info: ALSA period size set to " << period_size_frames << " (requested " << BUFFER_FRAMES << ", dir=" << dir << ")." << std::endl;
-        // Note: The application's audio buffers (leftBuffer, rightBuffer, audioBuffer) and g_rack->processAudio
-        // are still using BUFFER_FRAMES. If period_size_frames is different, this could lead to issues.
-        // A more robust solution would adapt to period_size_frames. For now, we proceed with BUFFER_FRAMES for snd_pcm_writei.
-    }
-
-
-    // Attempt to set total buffer size to 2 periods
-    snd_pcm_uframes_t num_periods = 2;
-    // Use the (potentially adjusted) period_size_frames for calculating target buffer size
-    snd_pcm_uframes_t target_buffer_size_frames = period_size_frames * num_periods;
-    dir = 0; // exact value
-    err = snd_pcm_hw_params_set_buffer_size_near(pcm_handle, hw_params, &target_buffer_size_frames);
-    if (err < 0) {
-        std::cout << "Warning: Failed to set ALSA buffer size near " << (period_size_frames * num_periods) 
-                  << " (" << num_periods << " periods of " << period_size_frames << "): " << snd_strerror(err)
-                  << ". ALSA will use its default buffer size, which might be large." << std::endl;
-    } else {
-         std::cout << "Info: ALSA buffer size set to " << target_buffer_size_frames << " frames ("
-                  << target_buffer_size_frames / period_size_frames << " periods of " << period_size_frames << " frames, dir=" << dir << ")." << std::endl;
-    }
-
-    err = snd_pcm_hw_params(pcm_handle, hw_params);
-    if (err < 0) { std::cout << "Failed to apply ALSA hardware parameters: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-
-    // Log actual parameters
-    snd_pcm_uframes_t actual_period_size, actual_buffer_size;
-    snd_pcm_hw_params_get_period_size(hw_params, &actual_period_size, &dir);
-    snd_pcm_hw_params_get_buffer_size(hw_params, &actual_buffer_size);
-    std::cout << "Info: Final ALSA period size: " << actual_period_size << " frames. Buffer size: " << actual_buffer_size << " frames." << std::endl;
-    if (actual_period_size != BUFFER_FRAMES) {
-        std::cout << "Warning: Final ALSA period size (" << actual_period_size << ") differs from engine BUFFER_FRAMES (" << BUFFER_FRAMES << ")."
-                  << " Audio processing and snd_pcm_writei will use BUFFER_FRAMES. This mismatch might cause issues." << std::endl;
-    }
-
-
-    err = snd_pcm_prepare(pcm_handle);
-    if (err < 0) { std::cout << "Failed to prepare ALSA PCM device: " << snd_strerror(err) << "\\n"; snd_pcm_close(pcm_handle); return; }
-
-    std::vector<float> audioBuffer(BUFFER_FRAMES * 2); // Interleaved stereo for ALSA
-    std::vector<float> leftBuffer(BUFFER_FRAMES);
-    std::vector<float> rightBuffer(BUFFER_FRAMES);
-    
-    // Declare and initialize outputGain before use
-    float outputGain = 1.0f; // Set to appropriate value or make configurable
-    
+    struct sched_param sch_params; sch_params.sched_priority = 20;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params);
+    snd_pcm_t* pcm_handle; if (snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, 0) < 0) return;
+    snd_pcm_hw_params_t* hw_params; snd_pcm_hw_params_alloca(&hw_params);
+    if (snd_pcm_hw_params_any(pcm_handle, hw_params) < 0 ||
+        snd_pcm_hw_params_set_access(pcm_handle, hw_params, SND_PCM_ACCESS_RW_INTERLEAVED) < 0 ||
+        snd_pcm_hw_params_set_format(pcm_handle, hw_params, SND_PCM_FORMAT_FLOAT_LE) < 0 ||
+        snd_pcm_hw_params_set_channels(pcm_handle, hw_params, 2) < 0) { snd_pcm_close(pcm_handle); return; }
+    unsigned int r = SAMPLE_RATE; snd_pcm_hw_params_set_rate_near(pcm_handle, hw_params, &r, 0);
+    snd_pcm_uframes_t ps = BUFFER_FRAMES; int dir = 0;
+    snd_pcm_hw_params_set_period_size_near(pcm_handle, hw_params, &ps, &dir);
+    snd_pcm_uframes_t bs = ps * 2; snd_pcm_hw_params_set_buffer_size_near(pcm_handle, hw_params, &bs);
+    snd_pcm_hw_params(pcm_handle, hw_params); snd_pcm_prepare(pcm_handle);
+    std::vector<float> audioBuffer(BUFFER_FRAMES * 2), leftBuffer(BUFFER_FRAMES), rightBuffer(BUFFER_FRAMES); float outputGain = 1.0f;
     while (g_running) {
         if (g_rack) {
-            if (useSine) {
-                // Generate test sine wave
-                static double phase = 0.0;
-                double freq = 440.0;
-                double phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
-                for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) { // Changed int to unsigned int
-                    float sample = static_cast<float>(std::sin(phase) * 0.5);
-                    leftBuffer[i] = rightBuffer[i] = sample;
-                    phase += phaseInc;
-                    if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
-                }
-            } else {
-                g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), BUFFER_FRAMES);
-            }
-            
-            // Interleave samples
-            for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) {
-                audioBuffer[i * 2] = leftBuffer[i] * static_cast<float>(outputGain);
-                audioBuffer[i * 2 + 1] = rightBuffer[i] * static_cast<float>(outputGain);
-            }
-
-            // snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
-            snd_pcm_sframes_t frames_written = snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
-            if (frames_written < 0) {
-                frames_written = snd_pcm_recover(pcm_handle, frames_written, 0); // 0 = silent recovery
-            }
-            if (frames_written < 0) {
-                std::cout << "ALSA write error after recover: " << snd_strerror(frames_written) << "\\n";
-                g_running = false; // Stop on persistent error
-                break;
-            }
-            // It's normal for frames_written to be equal to BUFFER_FRAMES in blocking mode.
-            // A short write (frames_written < BUFFER_FRAMES but > 0) would be unusual here unless an error occurred.
-            if (frames_written > 0 && (snd_pcm_uframes_t)frames_written < BUFFER_FRAMES) {
-                 std::cout << "Warning: ALSA short write. Expected " << BUFFER_FRAMES << ", wrote " << frames_written << "\\n";
-            }
-        } else {
-            // If g_rack is not available but we are running, sleep a bit.
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        // No explicit sleep needed here if snd_pcm_writei blocks for the period duration.
+            if (useSine) { static double phase = 0.0, freq = 440.0, inc = 2.0 * M_PI * freq / SAMPLE_RATE;
+                for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) { float s = std::sin(phase) * 0.5f; leftBuffer[i] = rightBuffer[i] = s; phase += inc; if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI; }
+            } else g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), BUFFER_FRAMES);
+            for (unsigned int i = 0; i < BUFFER_FRAMES; ++i) { audioBuffer[i * 2] = leftBuffer[i] * outputGain; audioBuffer[i * 2 + 1] = rightBuffer[i] * outputGain; }
+            snd_pcm_sframes_t fw = snd_pcm_writei(pcm_handle, audioBuffer.data(), BUFFER_FRAMES);
+            if (fw < 0) fw = snd_pcm_recover(pcm_handle, fw, 0);
+            if (fw < 0) { g_running = false; break; }
+        } else std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
-    if (debugEnabled) std::cout << "[AUDIO THREAD] Loop exited. Cleaning up ALSA..." << std::endl;
-
-    // snd_pcm_drain(pcm_handle); // Drain any pending samples
-    // snd_pcm_close(pcm_handle);
-    if (pcm_handle) { // Ensure pcm_handle is valid before using
-        int err_drop = snd_pcm_drop(pcm_handle); // Stop playback and drop pending frames
-        if (err_drop < 0) {
-            std::cerr << "ALSA: Failed to drop PCM stream: " << snd_strerror(err_drop) << std::endl;
-        }
-        int err_close = snd_pcm_close(pcm_handle);
-        if (err_close < 0) {
-            std::cerr << "ALSA: Failed to close PCM device: " << snd_strerror(err_close) << std::endl;
-        }
-        // pcm_handle is a local variable, so no need to nullify it here as the function is ending.
-    }
-    if (debugEnabled) std::cout << "[AUDIO THREAD] Finished." << std::endl;
+    snd_pcm_drop(pcm_handle); snd_pcm_close(pcm_handle);
 }
-
-// Linux ALSA MIDI thread
 void midiThread() {
-    if (debugEnabled) std::cout << "[MIDI THREAD] Started." << std::endl;
-    snd_seq_t* seq_handle;
-    int err = snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0);
-    if (err < 0) {
-        std::cout << "Failed to open ALSA sequencer: " << snd_strerror(err) << "\n";
-        return;
-    }
+    snd_seq_t* seq_handle; if (snd_seq_open(&seq_handle, "default", SND_SEQ_OPEN_INPUT, 0) < 0) return;
     snd_seq_set_client_name(seq_handle, "FMRack");
-    int midi_in_port = snd_seq_create_simple_port(seq_handle, "Input",
-        SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE,
-        SND_SEQ_PORT_TYPE_APPLICATION);
-    if (midi_in_port < 0) {
-        std::cerr << "[ERROR] Failed to create ALSA MIDI input port." << std::endl;
-        snd_seq_close(seq_handle);
-        return;
-    }
-
-    // Create a bidirectional ALSA MIDI port named "FMRack" that is visible to aconnect
-    int midi_bidi_port = snd_seq_create_simple_port(
-        seq_handle,
-        "FMRack",
-        SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_READ |
-        SND_SEQ_PORT_CAP_SUBS_WRITE | SND_SEQ_PORT_CAP_SUBS_READ,
-        SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION
-    );
-    if (midi_bidi_port < 0) {
-        std::cerr << "[ERROR] Failed to create bidirectional ALSA MIDI port 'FMRack'." << std::endl;
-    } else {
-        std::cout << "[ALSA] Created bidirectional MIDI port 'FMRack' (port " << midi_bidi_port << ") for aconnect." << std::endl;
-        connect_all_midi_inputs(seq_handle, midi_bidi_port); // Connect all at startup
-    }
-
-    // Enumerate available ALSA MIDI input ports
-    std::vector<std::pair<int, int>> available_ports; // (client, port)
-    snd_seq_client_info_t *cinfo;
-    snd_seq_port_info_t *pinfo;
-    snd_seq_client_info_alloca(&cinfo);
-    snd_seq_port_info_alloca(&pinfo);
-    snd_seq_client_info_set_client(cinfo, -1);
-    int idx = 0;
-    while (snd_seq_query_next_client(seq_handle, cinfo) >= 0) {
-        int client = snd_seq_client_info_get_client(cinfo);
-        snd_seq_port_info_set_client(pinfo, client);
-        snd_seq_port_info_set_port(pinfo, -1);
-        while (snd_seq_query_next_port(seq_handle, pinfo) >= 0) {
-            unsigned int caps = snd_seq_port_info_get_capability(pinfo);
-            if ((caps & SND_SEQ_PORT_CAP_READ) && (caps & SND_SEQ_PORT_CAP_SUBS_READ)) {
-                available_ports.emplace_back(client, snd_seq_port_info_get_port(pinfo));
-                std::cout << "  [" << idx << "] "
-                          << snd_seq_client_info_get_name(cinfo) << " - "
-                          << snd_seq_port_info_get_name(pinfo) << std::endl;
-                ++idx;
-            }
-        }
-    }
-    if (available_ports.empty()) {
-        std::cout << "[ALSA] No hardware MIDI input ports found. MIDI will not work." << std::endl;
-    } else if (midiDev >= 0 && midiDev < (int)available_ports.size()) {
-        int client = available_ports[midiDev].first;
-        int port = available_ports[midiDev].second;
-        int connect_err = snd_seq_connect_from(seq_handle, midi_in_port, client, port);
-        if (connect_err == 0) {
-            std::cout << "[ALSA] Connected to MIDI input port [" << midiDev << "] successfully." << std::endl;
-        } else {
-            std::cout << "[ALSA] Failed to connect to MIDI input port [" << midiDev << "]: " << snd_strerror(connect_err) << std::endl;
-        }
-    } else {
-        std::cout << "[ALSA] Invalid MIDI device index (" << midiDev << "). No connection made." << std::endl;
-    }
-
-    struct pollfd *pfds_all;
-    int npfds_alsa = snd_seq_poll_descriptors_count(seq_handle, POLLIN);
-    int total_pfds_count = npfds_alsa;
-    bool use_shutdown_pipe = (g_midi_shutdown_pipe[0] != -1);
-
-    if (use_shutdown_pipe) {
-        total_pfds_count++;
-    }
-
-    pfds_all = (struct pollfd*)alloca(total_pfds_count * sizeof(struct pollfd));
-    snd_seq_poll_descriptors(seq_handle, pfds_all, npfds_alsa, POLLIN);
-
-    if (use_shutdown_pipe) {
-        pfds_all[npfds_alsa].fd = g_midi_shutdown_pipe[0];
-        pfds_all[npfds_alsa].events = POLLIN;
-        pfds_all[npfds_alsa].revents = 0;
-    }
-
-    int poll_timeout = use_shutdown_pipe ? -1 : 100; // Infinite if pipe, else 100ms
-
-    if (debugEnabled) std::cout << "[MIDI THREAD] Starting poll loop (timeout: " << poll_timeout << "ms, using pipe: " << (use_shutdown_pipe ? "yes" : "no") << ")." << std::endl;
-
+    int midi_in_port = snd_seq_create_simple_port(seq_handle, "Input", SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_SUBS_WRITE, SND_SEQ_PORT_TYPE_APPLICATION);
+    int midi_bidi_port = snd_seq_create_simple_port(seq_handle, "FMRack", SND_SEQ_PORT_CAP_WRITE | SND_SEQ_PORT_CAP_READ | SND_SEQ_PORT_CAP_SUBS_WRITE | SND_SEQ_PORT_CAP_SUBS_READ, SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
+    if (midi_bidi_port >= 0) connect_all_midi_inputs(seq_handle, midi_bidi_port);
+    std::vector<std::pair<int, int>> available_ports; snd_seq_client_info_t *cinfo; snd_seq_port_info_t *pinfo;
+    snd_seq_client_info_alloca(&cinfo); snd_seq_port_info_alloca(&pinfo); snd_seq_client_info_set_client(cinfo, -1);
+    int idx = 0; while (snd_seq_query_next_client(seq_handle, cinfo) >= 0) { int client = snd_seq_client_info_get_client(cinfo); snd_seq_port_info_set_client(pinfo, client); snd_seq_port_info_set_port(pinfo, -1); while (snd_seq_query_next_port(seq_handle, pinfo) >= 0) { unsigned int caps = snd_seq_port_info_get_capability(pinfo); if ((caps & SND_SEQ_PORT_CAP_READ) && (caps & SND_SEQ_PORT_CAP_SUBS_READ)) { available_ports.emplace_back(client, snd_seq_port_info_get_port(pinfo)); ++idx; } } }
+    if (!available_ports.empty() && midiDev >= 0 && midiDev < (int)available_ports.size()) snd_seq_connect_from(seq_handle, midi_in_port, available_ports[midiDev].first, available_ports[midiDev].second);
+    struct pollfd *pfds_all; int npfds_alsa = snd_seq_poll_descriptors_count(seq_handle, POLLIN), total_pfds_count = npfds_alsa; bool use_shutdown_pipe = (g_midi_shutdown_pipe[0] != -1); if (use_shutdown_pipe) total_pfds_count++;
+    pfds_all = (struct pollfd*)alloca(total_pfds_count * sizeof(struct pollfd)); snd_seq_poll_descriptors(seq_handle, pfds_all, npfds_alsa, POLLIN);
+    if (use_shutdown_pipe) { pfds_all[npfds_alsa].fd = g_midi_shutdown_pipe[0]; pfds_all[npfds_alsa].events = POLLIN; pfds_all[npfds_alsa].revents = 0; }
+    int poll_timeout = use_shutdown_pipe ? -1 : 100;
     while (g_running) {
         int poll_ret = poll(pfds_all, total_pfds_count, poll_timeout);
-
-        if (!g_running) {
-            if (debugEnabled) std::cout << "[MIDI THREAD] g_running is false after poll, breaking loop." << std::endl;
-            break;
-        }
-
+        if (!g_running) break;
         if (poll_ret > 0) {
-            if (use_shutdown_pipe && (pfds_all[npfds_alsa].revents & POLLIN)) {
-                if (debugEnabled) std::cout << "[MIDI THREAD] Shutdown pipe signaled." << std::endl;
-                char drain_buf[32];
-                // Drain the pipe (non-blocking read)
-                while (read(g_midi_shutdown_pipe[0], drain_buf, sizeof(drain_buf)) > 0);
-                // g_running should be false, loop will terminate on next check or break here
-                break;
-            }
-
-            bool alsa_fd_active = false;
-            for(int i=0; i < npfds_alsa; ++i) {
-                if (pfds_all[i].revents & POLLIN) {
-                    alsa_fd_active = true;
-                    break;
-                }
-            }
-
+            if (use_shutdown_pipe && (pfds_all[npfds_alsa].revents & POLLIN)) { char drain_buf[32]; while (read(g_midi_shutdown_pipe[0], drain_buf, sizeof(drain_buf)) > 0); break; }
+            bool alsa_fd_active = false; for(int i=0; i < npfds_alsa; ++i) if (pfds_all[i].revents & POLLIN) { alsa_fd_active = true; break; }
             if (alsa_fd_active) {
-                if (debugEnabled) std::cout << "[MIDI THREAD] ALSA event detected by poll." << std::endl;
                 snd_seq_event_t *ev = nullptr;
-                while (true) { // Loop to drain all available events
-                    if (!g_running) {
-                        if (debugEnabled && ev) snd_seq_free_event(ev);
-                        if (debugEnabled) std::cout << "[MIDI THREAD] g_running false in event input loop." << std::endl;
-                        break;
-                    }
+                while (true) {
+                    if (!g_running) break;
                     int event_ret = snd_seq_event_input(seq_handle, &ev);
-                    if (event_ret > 0) {
-                        if (!ev) continue; // Should not happen
+                    if (event_ret > 0 && ev) {
                         if (ev->type == SND_SEQ_EVENT_SYSEX) {
-                            uint8_t* data = (uint8_t*)ev->data.ext.ptr;
-                            uint16_t len = ev->data.ext.len;
-                            if (g_rack && data && len > 0) {
-                                uint8_t sysex_channel = 0;
-                                if (len > 2 && data[0] == 0xF0 && data[1] == 0x43) {
-                                    sysex_channel = (data[2] & 0x0F) + 1;
-                                }
-                                g_rack->routeSysexToModules(data, len, sysex_channel);
-                            }
-                        } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF ||
-                                   ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND ||
-                                   ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS ||
-                                   ev->type == SND_SEQ_EVENT_PGMCHANGE) {
+                            uint8_t* data = (uint8_t*)ev->data.ext.ptr; uint16_t len = ev->data.ext.len;
+                            if (g_rack && data && len > 0) { uint8_t sysex_channel = 0; if (len > 2 && data[0] == 0xF0 && data[1] == 0x43) sysex_channel = (data[2] & 0x0F) + 1; g_rack->routeSysexToModules(data, len, sysex_channel); }
+                        } else if (ev->type == SND_SEQ_EVENT_NOTEON || ev->type == SND_SEQ_EVENT_NOTEOFF || ev->type == SND_SEQ_EVENT_CONTROLLER || ev->type == SND_SEQ_EVENT_PITCHBEND || ev->type == SND_SEQ_EVENT_CHANPRESS || ev->type == SND_SEQ_EVENT_KEYPRESS || ev->type == SND_SEQ_EVENT_PGMCHANGE) {
                             uint8_t status = 0, data1 = 0, data2 = 0;
                             switch (ev->type) {
-                                case SND_SEQ_EVENT_NOTEON:
-                                    status = 0x90 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
-                                case SND_SEQ_EVENT_NOTEOFF:
-                                    status = 0x80 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
-                                case SND_SEQ_EVENT_CONTROLLER:
-                                    status = 0xB0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.param; data2 = ev->data.control.value; break;
-                                case SND_SEQ_EVENT_PITCHBEND:
-                                    status = 0xE0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value & 0x7F; data2 = (ev->data.control.value >> 7) & 0x7F; break;
-                                case SND_SEQ_EVENT_CHANPRESS:
-                                    status = 0xD0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value; data2 = 0; break;
-                                case SND_SEQ_EVENT_KEYPRESS: // AKA Polyphonic Aftertouch
-                                    status = 0xA0 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
-                                case SND_SEQ_EVENT_PGMCHANGE:
-                                    status = 0xC0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value; data2 = 0; break;
+                                case SND_SEQ_EVENT_NOTEON: status = 0x90 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
+                                case SND_SEQ_EVENT_NOTEOFF: status = 0x80 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
+                                case SND_SEQ_EVENT_CONTROLLER: status = 0xB0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.param; data2 = ev->data.control.value; break;
+                                case SND_SEQ_EVENT_PITCHBEND: status = 0xE0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value & 0x7F; data2 = (ev->data.control.value >> 7) & 0x7F; break;
+                                case SND_SEQ_EVENT_CHANPRESS: status = 0xD0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value; data2 = 0; break;
+                                case SND_SEQ_EVENT_KEYPRESS: status = 0xA0 | (ev->data.note.channel & 0x0F); data1 = ev->data.note.note; data2 = ev->data.note.velocity; break;
+                                case SND_SEQ_EVENT_PGMCHANGE: status = 0xC0 | (ev->data.control.channel & 0x0F); data1 = ev->data.control.value; data2 = 0; break;
                                 default: break;
                             }
                             if (g_rack) handleMidiMessage(status, data1, data2);
                         }
-                        snd_seq_free_event(ev);
-                        ev = nullptr;
-                    } else if (event_ret == 0) {
-                        if (debugEnabled) std::cout << "[MIDI THREAD] snd_seq_event_input returned 0 (no more events)." << std::endl;
-                        break;
-                    } else if (event_ret == -EAGAIN) {
-                        if (debugEnabled) std::cout << "[MIDI THREAD] snd_seq_event_input returned EAGAIN." << std::endl;
-                        break;
-                    } else {
-                        std::cerr << "[MIDI THREAD] snd_seq_event_input error: " << snd_strerror(event_ret) << std::endl;
-                        g_running = false; // Critical error, stop MIDI thread
-                        break;
-                    }
+                        snd_seq_free_event(ev); ev = nullptr;
+                    } else break;
                 }
-                if (!g_running) break; 
+                if (!g_running) break;
             }
-        } else if (poll_ret < 0) {
-            if (errno == EINTR) {
-                if (debugEnabled) std::cout << "[MIDI THREAD] poll() interrupted by signal (EINTR)." << std::endl;
-            } else {
-                std::cerr << "[MIDI THREAD] poll() error: " << strerror(errno) << std::endl;
-                g_running = false; // Stop on poll error
-                break;
-            }
-        } else { // poll_ret == 0 (timeout)
-            // This case should only happen if not using the shutdown pipe (i.e., poll_timeout is not -1)
-            if (debugEnabled && !use_shutdown_pipe) {
-                // std::cout << "[MIDI THREAD] poll() timed out." << std::endl; // Can be spammy
-            }
-        }
+        } else if (poll_ret < 0 && errno != EINTR) { g_running = false; break; }
     }
-    if (debugEnabled) std::cout << "[MIDI THREAD] Loop exited. Cleaning up ALSA Sequencer..." << std::endl;
     snd_seq_close(seq_handle);
-    if (debugEnabled) std::cout << "[MIDI THREAD] Finished." << std::endl;
 }
-
-// Forward declaration for hotplug MIDI input connection
+// Forward declaration for connect_all_midi_inputs
 void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
-
-// Helper: Connect all hardware MIDI input ports to the FMRack port
 void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port) {
-    snd_seq_client_info_t *cinfo;
-    snd_seq_port_info_t *pinfo;
-    snd_seq_client_info_alloca(&cinfo);
-    snd_seq_port_info_alloca(&pinfo);
-    snd_seq_client_info_set_client(cinfo, -1);
+    snd_seq_client_info_t *cinfo; snd_seq_port_info_t *pinfo;
+    snd_seq_client_info_alloca(&cinfo); snd_seq_port_info_alloca(&pinfo); snd_seq_client_info_set_client(cinfo, -1);
     while (snd_seq_query_next_client(seq_handle, cinfo) >= 0) {
         int client = snd_seq_client_info_get_client(cinfo);
-        snd_seq_port_info_set_client(pinfo, client);
-        snd_seq_port_info_set_port(pinfo, -1);
+        snd_seq_port_info_set_client(pinfo, client); snd_seq_port_info_set_port(pinfo, -1);
         while (snd_seq_query_next_port(seq_handle, pinfo) >= 0) {
             unsigned int caps = snd_seq_port_info_get_capability(pinfo);
-            if ((caps & SND_SEQ_PORT_CAP_READ) && (caps & SND_SEQ_PORT_CAP_SUBS_READ) &&
-                (snd_seq_port_info_get_type(pinfo) & SND_SEQ_PORT_TYPE_MIDI_GENERIC)) {
+            if ((caps & SND_SEQ_PORT_CAP_READ) && (caps & SND_SEQ_PORT_CAP_SUBS_READ) && (snd_seq_port_info_get_type(pinfo) & SND_SEQ_PORT_TYPE_MIDI_GENERIC)) {
                 int port = snd_seq_port_info_get_port(pinfo);
-                // Don't connect to our own port
                 if (client == snd_seq_client_id(seq_handle) && port == fm_port) continue;
-                int res = snd_seq_connect_from(seq_handle, fm_port, client, port);
-                if (res == 0) {
-                    std::cout << "[ALSA] Connected FMRack to MIDI input: "
-                              << snd_seq_client_info_get_name(cinfo) << " - "
-                              << snd_seq_port_info_get_name(pinfo) << std::endl;
-                }
+                snd_seq_connect_from(seq_handle, fm_port, client, port);
             }
         }
     }
 }
-
-bool initializeAudioMidi() {
-    std::cout << "ALSA audio/MIDI interface initialized.\n";
-    std::cout << "  Sample Rate: " << SAMPLE_RATE << " Hz\n";
-    std::cout << "  Buffer Frames: " << BUFFER_FRAMES << "\n";
-    return true;
-}
+bool initializeAudioMidi() { return true; }
 #endif
 
-// Forward declaration for platform-specific audio/MIDI initialization
-bool initializeAudioMidi();
-
-// Parse command line arguments - matches native implementation
+// =====================
+// Command-Line Parsing
+// =====================
 void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile, std::string& renderMidiFile, std::string& renderWavFile) {
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--render" && i + 2 < argc) {
-            renderMidiFile = argv[i + 1];
-            renderWavFile = argv[i + 2];
-            i += 2;
-        } else if (arg == "--performance" && i + 1 < argc) {
-            performanceFile = argv[i + 1];
-            ++i;
-        } else if (arg == "--sample-rate" && i + 1 < argc) {
-            SAMPLE_RATE = std::atoi(argv[i + 1]);
-            ++i;
-        } else if (arg == "--buffer-frames" && i + 1 < argc) {
-            BUFFER_FRAMES = std::atoi(argv[i + 1]);
-            ++i;
-        } else if (arg == "--num-buffers" && i + 1 < argc) {
-            numBuffers = std::atoi(argv[i + 1]);
-            ++i;
-        } else if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) {
-            audioDev = std::atoi(argv[i + 1]);
-            ++i;
-        } else if ((arg == "--midi-device" || arg == "-m") && i + 1 < argc) {
-            midiDev = std::atoi(argv[i + 1]);
-            ++i;
-        } else if (arg == "--num-modules" && i + 1 < argc) {
-            numModules = std::clamp(std::atoi(argv[i + 1]), 1, 16);
-            ++i;
-        } else if (arg == "--unison-voices" && i + 1 < argc) {
-            unisonVoices = std::clamp(std::atoi(argv[i + 1]), 1, 4);
-            ++i;
-        } else if (arg == "--unison-detune" && i + 1 < argc) {
-            unisonDetune = std::stof(argv[i + 1]);
-            ++i;
-        } else if (arg == "--unison-spread" && i + 1 < argc) {
-            unisonSpread = std::clamp(std::stof(argv[i + 1]), 0.0f, 1.0f);
-            ++i;
-        } else if (arg == "--sine") {
-            useSine = true;
-        } else if (arg == "--debug") {
-            debugEnabled = true;
-        } else if (arg == "--multiprocessing" && i + 1 < argc) {
-            multiprocessingEnabled = std::atoi(argv[i + 1]);
-            ++i;
-        } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: " << argv[0] << " [options]\n";
-            std::cout << "Options:\n";
-            std::cout << "  --performance <file>     Load performance file at startup\n";
-            std::cout << "  --sample-rate <rate>     Set sample rate (default: " << SAMPLE_RATE << ")\n";
-            std::cout << "  --buffer-frames <frames> Set buffer size (default: " << BUFFER_FRAMES << ")\n";
-            std::cout << "  --num-buffers <count>    Set number of buffers (default: " << numBuffers << ")\n";
-            std::cout << "  --audio-device <id>      Audio device ID (default: " << audioDev << ")\n";
-            std::cout << "  --midi-device <id>       MIDI device ID (default: " << midiDev << ")\n";
-            std::cout << "  --num-modules <n>        Number of modules/parts (default: " << numModules << ")\n";
-            std::cout << "  --unison-voices <n>      Unison voices per module (default: " << unisonVoices << ")\n";
-            std::cout << "  --unison-detune <cents>  Unison detune in cents (default: " << unisonDetune << ")\n";
-            std::cout << "  --unison-spread <0-1>    Unison stereo spread (default: " << unisonSpread << ")\n";
-            std::cout << "  --sine                   Generate test sine wave\n";
-            std::cout << "  --debug                  Enable debug output (print [DEBUG] messages)\n";
-            std::cout << "  --multiprocessing <0|1>  Enable (1, default) or disable (0) multicore audio processing\n";
-            std::cout << "  --help, -h               Show this help message\n";
-            exit(0);
-        } else if (arg == "--test") {
-            // Play a test note when the program starts
-            if (g_rack) {
-                uint8_t status = 0x90; // Note On, channel 1
-                uint8_t note = 60;    // Middle C
-                uint8_t velocity = 100; // Velocity
-                g_rack->processMidiMessage(status, note, velocity);
-
-                // Schedule a Note Off after 1 second
-                std::this_thread::sleep_for(std::chrono::seconds(1));
-                status = 0x80; // Note Off, channel 1
-                g_rack->processMidiMessage(status, note, 0);
-            }
+        if (arg == "--render" && i + 2 < argc) { renderMidiFile = argv[i + 1]; renderWavFile = argv[i + 2]; i += 2; }
+        else if (arg == "--performance" && i + 1 < argc) { performanceFile = argv[i + 1]; ++i; }
+        else if (arg == "--sample-rate" && i + 1 < argc) { SAMPLE_RATE = std::atoi(argv[i + 1]); ++i; }
+        else if (arg == "--buffer-frames" && i + 1 < argc) { BUFFER_FRAMES = std::atoi(argv[i + 1]); ++i; }
+        else if (arg == "--num-buffers" && i + 1 < argc) { numBuffers = std::atoi(argv[i + 1]); ++i; }
+        else if ((arg == "--audio-device" || arg == "-a") && i + 1 < argc) { audioDev = std::atoi(argv[i + 1]); ++i; }
+        else if ((arg == "--midi-device" || arg == "-m") && i + 1 < argc) { midiDev = std::atoi(argv[i + 1]); ++i; }
+        else if (arg == "--num-modules" && i + 1 < argc) { numModules = std::clamp(std::atoi(argv[i + 1]), 1, 16); ++i; }
+        else if (arg == "--unison-voices" && i + 1 < argc) { unisonVoices = std::clamp(std::atoi(argv[i + 1]), 1, 4); ++i; }
+        else if (arg == "--unison-detune" && i + 1 < argc) { unisonDetune = std::stof(argv[i + 1]); ++i; }
+        else if (arg == "--unison-spread" && i + 1 < argc) { unisonSpread = std::clamp(std::stof(argv[i + 1]), 0.0f, 1.0f); ++i; }
+        else if (arg == "--sine") useSine = true;
+        else if (arg == "--debug") debugEnabled = true;
+        else if (arg == "--multiprocessing" && i + 1 < argc) { multiprocessingEnabled = std::atoi(argv[i + 1]); ++i; }
+        else if (arg == "--help" || arg == "-h") {
+            std::cout << "Usage: " << argv[0] << " [options]\nOptions:\n  --performance <file>     Load performance file at startup\n  --sample-rate <rate>     Set sample rate (default: " << SAMPLE_RATE << ")\n  --buffer-frames <frames> Set buffer size (default: " << BUFFER_FRAMES << ")\n  --num-buffers <count>    Set number of buffers (default: " << numBuffers << ")\n  --audio-device <id>      Audio device ID (default: " << audioDev << ")\n  --midi-device <id>       MIDI device ID (default: " << midiDev << ")\n  --num-modules <n>        Number of modules/parts (default: " << numModules << ")\n  --unison-voices <n>      Unison voices per module (default: " << unisonVoices << ")\n  --unison-detune <cents>  Unison detune in cents (default: " << unisonDetune << ")\n  --unison-spread <0-1>    Unison stereo spread (default: " << unisonSpread << ")\n  --sine                   Generate test sine wave\n  --debug                  Enable debug output (print [DEBUG] messages)\n  --multiprocessing <0|1>  Enable (1, default) or disable (0) multicore audio processing\n  --help, -h               Show this help message\n"; exit(0); }
+        else if (arg == "--test" && g_rack) {
+            uint8_t status = 0x90, note = 60, velocity = 100;
+            g_rack->processMidiMessage(status, note, velocity);
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            g_rack->processMidiMessage(0x80, note, 0);
         }
     }
 }
@@ -816,6 +358,9 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
 }
 #endif
 
+// =====================
+// Main Entry Point
+// =====================
 int main(int argc, char* argv[]) {
     std::cout << "FMRack Multi-Timbral FM Synthesizer\n";
     std::cout << "===================================\n";
