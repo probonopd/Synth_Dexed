@@ -84,7 +84,7 @@ jobs:
           "
 
       - name: Build with CMake (Non-Alpine)
-        if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64'
+        if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64' != 'alpine-static-arm'
         run: |
           git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && cd Synth_Dexed && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
 
