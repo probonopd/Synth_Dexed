@@ -7,6 +7,7 @@
 #include <memory> // Added for std::unique_ptr
 #include "../../src/FMRack/Module.h"
 #include "../../src/FMRack/Performance.h"
+#include "../../src/FMRack/Rack.h" // Add this include
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -60,7 +61,8 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout(); // Added
     
     std::unique_ptr<FMRack::Module> module; // Use FMRack::Module
-    FMRack::Performance::PartConfig partConfig; // Store config for the module
+    std::unique_ptr<FMRack::Rack> rack; // Use FMRack::Rack for multi-part support
+    std::unique_ptr<FMRack::Performance> performance; // Store the loaded performance
 
     std::unique_ptr<juce::FileLogger> fileLogger; // Added for file logging
 
@@ -72,6 +74,7 @@ private:
 public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
     void logToGui(const juce::String& message);
+    bool loadPerformanceFile(const juce::String& path); // Add this
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

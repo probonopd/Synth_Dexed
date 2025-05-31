@@ -1,7 +1,10 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-bool debugEnabled = true; // Enable debug logging for plugin
+bool debugEnabled = false; // Enable debug logging for plugin
+
+// Global multiprocessing flag for FMRack
+int multiprocessingEnabled = 1;
 
 //==============================================================================
 // Helper function to create plugin parameters
@@ -17,15 +20,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
 }
 
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
-     : AudioProcessor (BusesProperties()
-                     #if ! JucePlugin_IsMidiEffect
-                      #if ! JucePlugin_IsSynth
-                       .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-                      #endif
-                       .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
-                     #endif
-                       ),
-       treeState (*this, nullptr, juce::Identifier ("PluginParameters"), createParameterLayout())
+    : AudioProcessor (BusesProperties()
+        #if ! JucePlugin_IsMidiEffect
+         #if ! JucePlugin_IsSynth
+          .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
+         #endif
+          .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+        #endif
+          ),
+      treeState (*this, nullptr, juce::Identifier ("PluginParameters"), createParameterLayout())
 {
     // Initialize FileLogger - logs to a file in the User's Documents directory
     auto documentsDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
@@ -33,6 +36,9 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
     fileLogger = std::make_unique<juce::FileLogger>(logFile, "Log started: " + juce::Time::getCurrentTime().toString (true, true), 1024 * 1024);
     juce::Logger::setCurrentLogger (fileLogger.get());
     DBG("Constructor: FileLogger initialized. Logging to: " + logFile.getFullPathName());
+
+    performance = std::make_unique<FMRack::Performance>();
+    rack = std::make_unique<FMRack::Rack>(44100.0f); // Use actual sampleRate in prepareToPlay
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
@@ -113,40 +119,15 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 {
     juce::Logger::writeToLog("AudioPluginAudioProcessor::prepareToPlay called. Sample rate: " + juce::String(sampleRate));
     juce::ignoreUnused (samplesPerBlock);
-    module.reset();
-    module = std::make_unique<FMRack::Module>(static_cast<float>(sampleRate));
-
-    // Set up a default PartConfig (FM Piano)
-    partConfig = FMRack::Performance::PartConfig{};
-    partConfig.midiChannel = 1;
-    partConfig.volume = 127;
-    partConfig.pan = 64;
-    partConfig.unisonVoices = 1;
-    partConfig.unisonDetune = 0.0f;
-    partConfig.unisonSpread = 0.5f;
-    // Copy FM Piano voice data
-    const uint8_t fmpiano_sysex[156] = {
-        95, 29, 20, 50, 99, 95, 00, 00, 41, 00, 19, 00, 00, 03, 00, 06, 79, 00, 01, 00, 14,
-        95, 20, 20, 50, 99, 95, 00, 00, 00, 00, 00, 00, 00, 03, 00, 00, 99, 00, 01, 00, 00,
-        95, 29, 20, 50, 99, 95, 00, 00, 00, 00, 00, 00, 00, 03, 00, 06, 89, 00, 01, 00, 07,
-        95, 20, 20, 50, 99, 95, 00, 00, 00, 00, 00, 00, 00, 03, 00, 02, 99, 00, 01, 00, 07,
-        95, 50, 35, 78, 99, 75, 00, 00, 00, 00, 00, 00, 00, 03, 00, 07, 58, 00, 14, 00, 07,
-        96, 25, 25, 67, 99, 75, 00, 00, 00, 00, 00, 00, 00, 03, 00, 02, 99, 00, 01, 00, 10,
-        94, 67, 95, 60, 50, 50, 50, 50,
-        04, 06, 00,
-        34, 33, 00, 00, 00, 04,
-        03, 24,
-        70, 77, 45, 80, 73, 65, 78, 79, 00, 00
-    };
-    std::copy(std::begin(fmpiano_sysex), std::end(fmpiano_sysex), partConfig.voiceData.begin());
-    module->configureFromPerformance(partConfig);
-    juce::Logger::writeToLog("FMRack::Module configured and default voice loaded.");
+    rack = std::make_unique<FMRack::Rack>(static_cast<float>(sampleRate));
+    if (performance)
+        rack->setPerformance(*performance);
 }
 
 void AudioPluginAudioProcessor::releaseResources()
 {
     juce::Logger::writeToLog("AudioPluginAudioProcessor::releaseResources called.");
-    module.reset();
+    rack.reset();
 }
 
 bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -177,7 +158,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
-    process(buffer, midiMessages); // Call templated version
+    process(buffer, midiMessages);
 }
 
 // Add the double-precision overload
@@ -219,36 +200,21 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
     for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, numSamples);
 
-    // Route MIDI to module and log to GUI
-    if (module) {
+    // Route MIDI to rack and log to GUI
+    if (rack) {
         for (const auto metadata : midiMessages) {
             const auto msg = metadata.getMessage();
-            juce::String midiDesc;
-            if (msg.isNoteOn()) {
-                module->processMidiMessage(0x90 | ((msg.getChannel()-1)&0x0F), (uint8_t)msg.getNoteNumber(), (uint8_t)msg.getVelocity());
-                midiDesc = juce::String::formatted("MIDI: NoteOn ch=%d note=%d vel=%d", msg.getChannel(), msg.getNoteNumber(), msg.getVelocity());
-            } else if (msg.isNoteOff()) {
-                module->processMidiMessage(0x80 | ((msg.getChannel()-1)&0x0F), (uint8_t)msg.getNoteNumber(), 0);
-                midiDesc = juce::String::formatted("MIDI: NoteOff ch=%d note=%d", msg.getChannel(), msg.getNoteNumber());
-            } else if (msg.isController()) {
-                module->processMidiMessage(0xB0 | ((msg.getChannel()-1)&0x0F), (uint8_t)msg.getControllerNumber(), (uint8_t)msg.getControllerValue());
-                midiDesc = juce::String::formatted("MIDI: CC ch=%d cc=%d val=%d", msg.getChannel(), msg.getControllerNumber(), msg.getControllerValue());
-            } else if (msg.isPitchWheel()) {
-                int value = msg.getPitchWheelValue();
-                module->processMidiMessage(0xE0 | ((msg.getChannel()-1)&0x0F), (uint8_t)(value & 0x7F), (uint8_t)((value >> 7) & 0x7F));
-                midiDesc = juce::String::formatted("MIDI: PitchBend ch=%d val=%d", msg.getChannel(), value);
+            if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() || msg.isPitchWheel()) {
+                rack->processMidiMessage(msg.getRawData()[0],
+                                        msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
+                                        msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
             }
-            if (!midiDesc.isEmpty()) logToGui(midiDesc);
         }
     }
-
-    // Render audio from module and log nonzero output
-    if (module) {
-        std::vector<float> left(numSamples, 0.0f), right(numSamples, 0.0f), revL(numSamples, 0.0f), revR(numSamples, 0.0f);
-        module->processAudio(left.data(), right.data(), revL.data(), revR.data(), numSamples);
-        float sum = 0.0f;
-        for (int i = 0; i < std::min(numSamples, 8); ++i) sum += std::abs(left[i]) + std::abs(right[i]);
-        if (sum > 0.0f) logToGui(juce::String::formatted("Audio: nonzero output (sum first 8 samples = %.4f)", sum));
+    // Render audio from rack
+    if (rack) {
+        std::vector<float> left(numSamples, 0.0f), right(numSamples, 0.0f);
+        rack->processAudio(left.data(), right.data(), numSamples);
         for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
             FloatType* out = buffer.getWritePointer(ch);
             const float* src = (ch == 0) ? left.data() : right.data();
@@ -305,4 +271,19 @@ void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeI
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new AudioPluginAudioProcessor();
+}
+
+bool AudioPluginAudioProcessor::loadPerformanceFile(const juce::String& path)
+{
+    if (!performance)
+        performance = std::make_unique<FMRack::Performance>();
+    if (!performance->loadFromFile(path.toStdString())) {
+        logToGui("Performance loadFromFile failed: " + path);
+        return false;
+    }
+    if (!rack)
+        rack = std::make_unique<FMRack::Rack>(44100.0f); // Use actual sampleRate if available
+    rack->setPerformance(*performance);
+    logToGui("Performance loaded and rack configured from: " + path);
+    return true;
 }

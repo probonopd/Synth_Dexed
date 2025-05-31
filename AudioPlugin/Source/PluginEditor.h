@@ -31,5 +31,10 @@ private:
 
     juce::TextEditor logTextBox; // For displaying log messages
 
+    juce::TextButton loadPerformanceButton { "Load Performance .ini" };
+    void loadPerformanceButtonClicked();
+
+    std::unique_ptr<juce::FileChooser> fileChooser; // Added to keep the FileChooser alive while the dialog is open
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };
