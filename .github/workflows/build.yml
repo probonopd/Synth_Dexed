@@ -6,13 +6,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  checkout:
-    name: Checkout Code
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
