@@ -317,3 +317,6 @@ Synth_Dexed_exe
 .vscode/*
 *.mid
 *.wav
+*.sln
+FMRack
+FMRack.exe
