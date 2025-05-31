@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p out/items
           find build -type f \( -name "FMRack.vst3" -o -name "FMRack.dll" -o -name "FMRack.so" -o -name "FMRack.dylib" -o -name "FMRack.exe" \) -exec cp -r {} out/items \;
-          ( cd out/items && zip -r ../FMRack-${{ matrix.os }}.zip . )
+          ( cd out/items && zip -r ../FMRack-${{ matrix.os }}.zip * )
 
       - name: Upload binaries to release using uploadtool
         env:
