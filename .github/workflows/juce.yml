@@ -54,8 +54,9 @@ jobs:
           if [ -d "build/FMRack_artefacts/Release/Standalone/FMRack.app" ]; then
             ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack.app"
           fi
+          ARTIFACTS=$(echo $ARTIFACTS | xargs) # Trim whitespace
           echo "ARTIFACTS=$ARTIFACTS" >> $GITHUB_ENV
-          echo "::set-output name=artifacts::$ARTIFACTS"
+          echo "artifacts=$ARTIFACTS" >> $GITHUB_OUTPUT
           echo "Build artifacts found: $ARTIFACTS"  # Added logging for artifacts found
 
       - name: Upload artefacts

@@ -44,6 +44,9 @@ juce_add_plugin(${PROJECT_NAME}
     STANDALONE_BUFFER_SIZE 512
 )
 
+# Ensure the VST3 output is named FMRack.vst3
+set_target_properties(${PROJECT_NAME}_VST3 PROPERTIES OUTPUT_NAME "FMRack")
+
 set(SourceFiles
     Source/PluginEditor.cpp
     Source/PluginProcessor.cpp
