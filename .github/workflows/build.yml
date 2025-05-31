@@ -9,7 +9,6 @@ jobs:
   build:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: checkout  # Ensure this job runs after the checkout job
     strategy:
       matrix:
         include:
