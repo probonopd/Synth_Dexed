@@ -24,7 +24,8 @@ include(${CPM_DOWNLOAD_LOCATION})
 CPMAddPackage(
     NAME juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG origin/master
+    # GIT TAG origin/master
+    GIT_TAG 8.0.7
 )
 
 juce_add_plugin(${PROJECT_NAME}
