@@ -34,7 +34,7 @@ jobs:
         working-directory: AudioPlugin
         run: cmake --build build --config Release
 
-      - name: Find build artefacts
+      - name: Find build artifacts
         id: find_artifacts
         working-directory: AudioPlugin
         shell: bash
