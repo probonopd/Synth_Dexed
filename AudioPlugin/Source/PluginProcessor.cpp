@@ -287,3 +287,32 @@ bool AudioPluginAudioProcessor::loadPerformanceFile(const juce::String& path)
     logToGui("Performance loaded and rack configured from: " + path);
     return true;
 }
+
+void AudioPluginAudioProcessor::setNumModules(int num) {
+    if (performance) {
+        for (int i = 0; i < 16; ++i)
+            performance->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
+        if (rack) rack->setPerformance(*performance);
+    }
+}
+void AudioPluginAudioProcessor::setUnisonVoices(int num) {
+    if (performance) {
+        for (int i = 0; i < 16; ++i)
+            performance->parts[i].unisonVoices = num;
+        if (rack) rack->setPerformance(*performance);
+    }
+}
+void AudioPluginAudioProcessor::setUnisonDetune(float detune) {
+    if (performance) {
+        for (int i = 0; i < 16; ++i)
+            performance->parts[i].unisonDetune = detune;
+        if (rack) rack->setPerformance(*performance);
+    }
+}
+void AudioPluginAudioProcessor::setUnisonPan(float pan) {
+    if (performance) {
+        for (int i = 0; i < 16; ++i)
+            performance->parts[i].unisonSpread = pan;
+        if (rack) rack->setPerformance(*performance);
+    }
+}

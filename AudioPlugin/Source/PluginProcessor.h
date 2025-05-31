@@ -75,6 +75,10 @@ public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
     void logToGui(const juce::String& message);
     bool loadPerformanceFile(const juce::String& path); // Add this
+    void setNumModules(int num);
+    void setUnisonVoices(int num);
+    void setUnisonDetune(float detune);
+    void setUnisonPan(float pan);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

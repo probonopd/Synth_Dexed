@@ -21,13 +21,19 @@ private:
     // access the processor object that created it.
     AudioPluginAudioProcessor& processorRef;
 
-    juce::Slider unisonVoicesSlider; // Added
-    juce::Label unisonVoicesLabel; // Added
-    juce::Slider unisonDetuneSlider; // Added
-    juce::Label unisonDetuneLabel; // Added
+    juce::Slider numModulesSlider;
+    juce::Label numModulesLabel;
+    juce::Slider unisonVoicesSlider;
+    juce::Label unisonVoicesLabel;
+    juce::Slider unisonDetuneSlider;
+    juce::Label unisonDetuneLabel;
+    juce::Slider unisonPanSlider;
+    juce::Label unisonPanLabel;
 
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonVoicesAttachment; // Added
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonDetuneAttachment; // Added
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> numModulesAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonVoicesAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonDetuneAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonPanAttachment;
 
     juce::TextEditor logTextBox; // For displaying log messages
 
@@ -35,6 +41,11 @@ private:
     void loadPerformanceButtonClicked();
 
     std::unique_ptr<juce::FileChooser> fileChooser; // Added to keep the FileChooser alive while the dialog is open
+
+    void numModulesChanged();
+    void unisonVoicesChanged();
+    void unisonDetuneChanged();
+    void unisonPanChanged();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };

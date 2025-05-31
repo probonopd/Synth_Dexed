@@ -10,17 +10,55 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     juce::ignoreUnused (processorRef);
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize (400, 300);
+    setSize (400, 400);
 
     // Set up log text box
     logTextBox.setMultiLine(true);
     logTextBox.setReadOnly(true);
     logTextBox.setScrollbarsShown(true);
     logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
-    logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::lime);
+    logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+    logTextBox.setFont(juce::Font(12.0f));
     addAndMakeVisible(logTextBox);
 
-    // Set up load performance button
+    // Set up knobs and labels
+    numModulesLabel.setText("Modules", juce::dontSendNotification);
+    addAndMakeVisible(numModulesLabel);
+    numModulesSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    numModulesSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    numModulesSlider.setRange(1, 8, 1);
+    numModulesSlider.setValue(1);
+    numModulesSlider.onValueChange = [this] { numModulesChanged(); };
+    addAndMakeVisible(numModulesSlider);
+
+    unisonVoicesLabel.setText("Unison Voices", juce::dontSendNotification);
+    addAndMakeVisible(unisonVoicesLabel);
+    unisonVoicesSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    unisonVoicesSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    unisonVoicesSlider.setRange(1, 4, 1);
+    unisonVoicesSlider.setValue(1);
+    unisonVoicesSlider.onValueChange = [this] { unisonVoicesChanged(); };
+    addAndMakeVisible(unisonVoicesSlider);
+
+    unisonDetuneLabel.setText("Unison Detune", juce::dontSendNotification);
+    addAndMakeVisible(unisonDetuneLabel);
+    unisonDetuneSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    unisonDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    unisonDetuneSlider.setRange(0.0, 50.0, 0.1);
+    unisonDetuneSlider.setValue(7.0);
+    unisonDetuneSlider.onValueChange = [this] { unisonDetuneChanged(); };
+    addAndMakeVisible(unisonDetuneSlider);
+
+    unisonPanLabel.setText("Unison Pan", juce::dontSendNotification);
+    addAndMakeVisible(unisonPanLabel);
+    unisonPanSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    unisonPanSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    unisonPanSlider.setRange(0.0, 1.0, 0.01);
+    unisonPanSlider.setValue(0.5);
+    unisonPanSlider.onValueChange = [this] { unisonPanChanged(); };
+    addAndMakeVisible(unisonPanSlider);
+
+    // Add the performance button back to the UI
     addAndMakeVisible(loadPerformanceButton);
     loadPerformanceButton.onClick = [this]() { loadPerformanceButtonClicked(); };
 }
@@ -38,16 +76,40 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 
 void AudioPluginAudioProcessorEditor::resized()
 {
-    // This is generally where you'll want to lay out the positions of any
-    // subcomponents in your editor..
+    int x = 10, y = 10, w = 120, h = 24, gap = 6;
+    numModulesLabel.setBounds(x, y, w, h);
+    numModulesSlider.setBounds(x + w + 4, y, 80, h);
+    y += h + gap;
+    unisonVoicesLabel.setBounds(x, y, w, h);
+    unisonVoicesSlider.setBounds(x + w + 4, y, 80, h);
+    y += h + gap;
+    unisonDetuneLabel.setBounds(x, y, w, h);
+    unisonDetuneSlider.setBounds(x + w + 4, y, 80, h);
+    y += h + gap;
+    unisonPanLabel.setBounds(x, y, w, h);
+    unisonPanSlider.setBounds(x + w + 4, y, 80, h);
+    y += h + gap;
+    loadPerformanceButton.setBounds(x, y, 180, h);
     logTextBox.setBounds(10, 150, getWidth() - 20, getHeight() - 160);
-    loadPerformanceButton.setBounds(10, 10, 180, 30);
 }
 
 void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& message)
 {
     logTextBox.moveCaretToEnd();
     logTextBox.insertTextAtCaret(message + "\n");
+}
+
+void AudioPluginAudioProcessorEditor::numModulesChanged() {
+    processorRef.setNumModules((int)numModulesSlider.getValue());
+}
+void AudioPluginAudioProcessorEditor::unisonVoicesChanged() {
+    processorRef.setUnisonVoices((int)unisonVoicesSlider.getValue());
+}
+void AudioPluginAudioProcessorEditor::unisonDetuneChanged() {
+    processorRef.setUnisonDetune((float)unisonDetuneSlider.getValue());
+}
+void AudioPluginAudioProcessorEditor::unisonPanChanged() {
+    processorRef.setUnisonPan((float)unisonPanSlider.getValue());
 }
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
@@ -68,6 +130,7 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                     appendLogMessage("Failed to load performance file.");
                 }
             }
-            fileChooser.reset(); // Release after use
+            fileChooser.reset();
         });
 }
+
