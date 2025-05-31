@@ -66,5 +66,12 @@ private:
 
     bool wasMidiEmptyLastBlock = true; // Added to track MIDI state for logging
 
+    // Pointer to the editor for GUI logging
+    class AudioPluginAudioProcessorEditor* editorPtr = nullptr;
+
+public:
+    void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
+    void logToGui(const juce::String& message);
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

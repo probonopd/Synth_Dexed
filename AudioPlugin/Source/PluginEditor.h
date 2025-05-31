@@ -14,6 +14,8 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
 
+    void appendLogMessage(const juce::String& message); // Public method to append log
+
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
@@ -26,6 +28,8 @@ private:
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonVoicesAttachment; // Added
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> unisonDetuneAttachment; // Added
+
+    juce::TextEditor logTextBox; // For displaying log messages
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };

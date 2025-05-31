@@ -1,7 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
-bool debugEnabled = false; // Define the global variable 'debugEnabled'
+bool debugEnabled = true; // Enable debug logging for plugin
 
 //==============================================================================
 // Helper function to create plugin parameters
@@ -219,27 +219,36 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
     for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, numSamples);
 
-    // Route MIDI to module
+    // Route MIDI to module and log to GUI
     if (module) {
         for (const auto metadata : midiMessages) {
             const auto msg = metadata.getMessage();
+            juce::String midiDesc;
             if (msg.isNoteOn()) {
                 module->processMidiMessage(0x90 | ((msg.getChannel()-1)&0x0F), (uint8_t)msg.getNoteNumber(), (uint8_t)msg.getVelocity());
+                midiDesc = juce::String::formatted("MIDI: NoteOn ch=%d note=%d vel=%d", msg.getChannel(), msg.getNoteNumber(), msg.getVelocity());
             } else if (msg.isNoteOff()) {
                 module->processMidiMessage(0x80 | ((msg.getChannel()-1)&0x0F), (uint8_t)msg.getNoteNumber(), 0);
+                midiDesc = juce::String::formatted("MIDI: NoteOff ch=%d note=%d", msg.getChannel(), msg.getNoteNumber());
             } else if (msg.isController()) {
                 module->processMidiMessage(0xB0 | ((msg.getChannel()-1)&0x0F), (uint8_t)msg.getControllerNumber(), (uint8_t)msg.getControllerValue());
+                midiDesc = juce::String::formatted("MIDI: CC ch=%d cc=%d val=%d", msg.getChannel(), msg.getControllerNumber(), msg.getControllerValue());
             } else if (msg.isPitchWheel()) {
                 int value = msg.getPitchWheelValue();
                 module->processMidiMessage(0xE0 | ((msg.getChannel()-1)&0x0F), (uint8_t)(value & 0x7F), (uint8_t)((value >> 7) & 0x7F));
+                midiDesc = juce::String::formatted("MIDI: PitchBend ch=%d val=%d", msg.getChannel(), value);
             }
+            if (!midiDesc.isEmpty()) logToGui(midiDesc);
         }
     }
 
-    // Render audio from module
+    // Render audio from module and log nonzero output
     if (module) {
         std::vector<float> left(numSamples, 0.0f), right(numSamples, 0.0f), revL(numSamples, 0.0f), revR(numSamples, 0.0f);
         module->processAudio(left.data(), right.data(), revL.data(), revR.data(), numSamples);
+        float sum = 0.0f;
+        for (int i = 0; i < std::min(numSamples, 8); ++i) sum += std::abs(left[i]) + std::abs(right[i]);
+        if (sum > 0.0f) logToGui(juce::String::formatted("Audio: nonzero output (sum first 8 samples = %.4f)", sum));
         for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
             FloatType* out = buffer.getWritePointer(ch);
             const float* src = (ch == 0) ? left.data() : right.data();
@@ -261,6 +270,18 @@ bool AudioPluginAudioProcessor::hasEditor() const
 juce::AudioProcessorEditor* AudioPluginAudioProcessor::createEditor()
 {
     return new AudioPluginAudioProcessorEditor (*this);
+}
+
+void AudioPluginAudioProcessor::setEditorPointer(AudioPluginAudioProcessorEditor* editor) {
+    editorPtr = editor;
+}
+
+void AudioPluginAudioProcessor::logToGui(const juce::String& message) {
+    if (editorPtr) {
+        juce::MessageManager::callAsync([this, msg = message]() {
+            if (editorPtr) editorPtr->appendLogMessage(msg);
+        });
+    }
 }
 
 //==============================================================================
