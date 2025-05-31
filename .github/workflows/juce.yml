@@ -1,0 +1,65 @@
+name: juce
+
+on:
+  push:
+  pull_request:
+  repository_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up CMake
+        uses: jwlawson/actions-setup-cmake@v1
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libasound2-dev libx11-dev
+
+      - name: Configure CMake
+        working-directory: AudioPlugin
+        run: cmake -B build
+
+      - name: Build
+        working-directory: AudioPlugin
+        run: cmake --build build --config Release
+
+      - name: Find build artefacts
+        id: find_artifacts
+        working-directory: AudioPlugin
+        shell: bash
+        run: |
+          ARTIFACTS=""
+          # VST3, DLL, SO, DYLIB, EXE
+          ARTIFACTS=$(find build -type f \( -name "*.vst3" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" -o -name "*.exe" \))
+          # Windows Standalone EXE (commonly in FMRack_artefacts/Release/Standalone)
+          if [ -f "build/FMRack_artefacts/Release/Standalone/FMRack.exe" ]; then
+            ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack.exe"
+          fi
+          # Linux Standalone (no extension, executable)
+          if [ -f "build/FMRack_artefacts/Release/Standalone/FMRack" ]; then
+            ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack"
+          fi
+          # macOS .app bundle
+          if [ -d "build/FMRack_artefacts/Release/Standalone/FMRack.app" ]; then
+            ARTIFACTS="$ARTIFACTS build/FMRack_artefacts/Release/Standalone/FMRack.app"
+          fi
+          echo "ARTIFACTS=$ARTIFACTS" >> $GITHUB_ENV
+          echo "::set-output name=artifacts::$ARTIFACTS"
+          echo "Build artifacts found: $ARTIFACTS"  # Added logging for artifacts found
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          path: ${{ steps.find_artifacts.outputs.artifacts }}
+          if-no-files-found: warn
