@@ -43,8 +43,13 @@ jobs:
           find build -type f \( -name "FMRack.vst3" -o -name "FMRack.dll" -o -name "FMRack.so" -o -name "FMRack.dylib" -o -name "FMRack.exe" \) -exec cp -r {} out/items \;
           ( cd out/items && zip -r ../FMRack-${{ matrix.os }}.zip . )
 
-      - name: Upload artefacts
-        uses: actions/upload-artifact@v4
-        with:
-          path: AudioPlugin/out/*
-          if-no-files-found: warn
+      - name: Upload binaries to release using uploadtool
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPLOADTOOL_BODY: "Automated build from commit ${{ github.sha }}\\nBuilt on ${{ github.event.head_commit.timestamp }}\\nBranch: ${{ github.ref_name }}"
+        run: |
+          set -e
+          cd release
+          ls -lh * # Show what we're about to upload
+          wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
+          bash upload.sh out/FMRack-*.zip
