@@ -796,6 +796,19 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile, 
     }
 }
 
+#ifdef _WIN32
+#include <windows.h>
+#include <atomic>
+BOOL WINAPI ConsoleCtrlHandler(DWORD ctrlType) {
+    if (ctrlType == CTRL_C_EVENT || ctrlType == CTRL_BREAK_EVENT || ctrlType == CTRL_CLOSE_EVENT) {
+        std::cout << "[SetConsoleCtrlHandler] Received Ctrl-C/Break/Close event. Forcing immediate exit..." << std::endl;
+        ExitProcess(0); // Immediately terminate the process
+        // No return, process is killed
+    }
+    return FALSE;
+}
+#endif
+
 int main(int argc, char* argv[]) {
     std::cout << "FMRack Multi-Timbral FM Synthesizer\n";
     std::cout << "===================================\n";
@@ -1092,16 +1105,9 @@ int main(int argc, char* argv[]) {
 
         std::cout << "[MAIN THREAD] Main loop exited." << std::endl;
 
-        #ifdef __linux__
-            if (g_midi_shutdown_pipe[1] != -1) {
-                char dummy = 'x';
-                ssize_t written = write(g_midi_shutdown_pipe[1], &dummy, 1);
-                if (written <= 0 && debugEnabled)
-                    perror("[MAIN THREAD] Failed to write to MIDI shutdown pipe");
-                else if (debugEnabled)
-                    std::cout << "[MAIN THREAD] Wrote to MIDI shutdown pipe to unblock poll." << std::endl;
-            }
-        #endif
+#ifdef _WIN32
+        ExitProcess(0); // Immediately terminate the process, no cleanup, no thread join
+#endif
 
         // Cleanup
         // g_running is already false at this point
@@ -1115,37 +1121,25 @@ int main(int argc, char* argv[]) {
 #if defined(_WIN32) || defined(__linux__)
         if (debugEnabled) std::cout << "[MAIN THREAD] Attempting to join audio thread..." << std::endl;
         if (audio_thread.joinable()) {
-            audio_thread.join();
-            if (debugEnabled) std::cout << "[MAIN THREAD] Audio thread successfully joined." << std::endl;
-        } else {
-            if (debugEnabled) std::cout << "[MAIN THREAD] Audio thread was not joinable." << std::endl;
+            g_running = false; // Ensure the audio thread sees the shutdown flag
+            audio_thread.join(); // Wait for the audio thread to exit cleanly
         }
-
 #ifdef __linux__
         if (debugEnabled) std::cout << "[MAIN THREAD] Attempting to join MIDI thread..." << std::endl;
         if (midi_thread.joinable()) {
-            midi_thread.join();
-            if (debugEnabled) std::cout << "[MAIN THREAD] MIDI thread successfully joined." << std::endl;
-        } else {
-            if (debugEnabled) std::cout << "[MAIN THREAD] MIDI thread was not joinable." << std::endl;
+            midi_thread.detach(); // Detach instead of join for abrupt exit
         }
 #endif // __linux__
 #endif // defined(_WIN32) || defined(__linux__)
 
-#ifdef __linux__
-    if (g_midi_shutdown_pipe[0] != -1) {
-        close(g_midi_shutdown_pipe[0]);
-        g_midi_shutdown_pipe[0] = -1;
-    }
-    if (g_midi_shutdown_pipe[1] != -1) {
-        close(g_midi_shutdown_pipe[1]);
-        g_midi_shutdown_pipe[1] = -1;
-    }
-    if (debugEnabled) std::cout << "[MAIN THREAD] MIDI shutdown pipe closed." << std::endl;
+#ifdef _WIN32
+        // Reset the audio device to unblock any waiting waveOutWrite calls
+        if (g_hWaveOut) {
+            waveOutReset(g_hWaveOut);
+        }
 #endif
 
-    if (debugEnabled) std::cout << "[MAIN THREAD] All threads joined. FMRack shutdown sequence finished in main()." << std::endl;
-
+        // No need for TerminateProcess, process should exit cleanly now
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         g_running = false;
