@@ -1014,10 +1014,30 @@ int main(int argc, char* argv[]) {
     // Print which audio device is being used
     if (audioDev >= 0) {
         std::cout << "[AUDIO] Using device " << audioDev << ": ";
-        char *name = snd_device_name_get_hint(audioDev, "NAME");
-        if (name) {
-            std::cout << name << "\n";
-            free(name);
+        void **hints;
+        if (snd_device_name_hint(-1, "pcm", &hints) == 0) {
+            void **n = hints;
+            int idx = 0;
+            const char *selected_name = nullptr;
+            while (*n != nullptr) {
+                if (idx == audioDev) {
+                    char *name = snd_device_name_get_hint(*n, "NAME");
+                    if (name) {
+                        selected_name = name;
+                        std::cout << name << "\n";
+                        free(name);
+                    } else {
+                        std::cout << "(unknown)\n";
+                    }
+                    break;
+                }
+                ++n;
+                ++idx;
+            }
+            if (idx <= audioDev) {
+                std::cout << "(unknown)\n";
+            }
+            snd_device_name_free_hint(hints);
         } else {
             std::cout << "(unknown)\n";
         }
