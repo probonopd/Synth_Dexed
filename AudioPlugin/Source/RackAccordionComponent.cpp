@@ -100,6 +100,14 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
     unisonPanSlider.setValue(0.5);
     addAndMakeVisible(unisonPanSlider);
 
+    midiChannelLabel.setText("MIDI Channel", juce::dontSendNotification);
+    addAndMakeVisible(midiChannelLabel);
+    midiChannelSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    midiChannelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    midiChannelSlider.setRange(1, 16, 1);
+    midiChannelSlider.setValue(idx + 1); // Default to 1-based index
+    addAndMakeVisible(midiChannelSlider);
+
     // Wire up controls to update Performance, not module directly
     unisonVoicesSlider.onValueChange = [this] {
         auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
@@ -132,6 +140,16 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
             part.unisonSpread = (float)unisonPanSlider.getValue();
             processor->getRack()->setPerformance(*perf);
             // parentAccordion->updatePanels(); // REMOVE to prevent endless loop
+        }
+    };
+    midiChannelSlider.onValueChange = [this] {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        auto* processor = editor ? editor->getProcessor() : nullptr;
+        auto* perf = processor ? processor->getPerformance() : nullptr;
+        if (perf) {
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            part.midiChannel = (uint8_t)midiChannelSlider.getValue();
+            processor->getRack()->setPerformance(*perf);
         }
     };
     // Load Voice button
@@ -207,6 +225,7 @@ void ModuleTabComponent::updateFromModule()
         unisonVoicesSlider.setValue(part.unisonVoices, juce::dontSendNotification);
         unisonDetuneSlider.setValue(part.unisonDetune, juce::dontSendNotification);
         unisonPanSlider.setValue(part.unisonSpread, juce::dontSendNotification);
+        midiChannelSlider.setValue(part.midiChannel, juce::dontSendNotification); // Sync MIDI channel
     }
 }
 
@@ -221,6 +240,9 @@ void ModuleTabComponent::resized()
     y += h + gap;
     unisonPanLabel.setBounds(x, y, w, h);
     unisonPanSlider.setBounds(x + w + 4, y, 80, h);
+    y += h + gap;
+    midiChannelLabel.setBounds(x, y, w, h);
+    midiChannelSlider.setBounds(x + w + 4, y, 80, h);
     y += h + gap;
     loadVoiceButton.setBounds(x, y, 120, h);
 }

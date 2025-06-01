@@ -42,6 +42,8 @@ public:
     juce::Slider unisonPanSlider;
     juce::Label unisonPanLabel;
     juce::TextButton loadVoiceButton;
+    juce::Slider midiChannelSlider;
+    juce::Label midiChannelLabel;
     
     bool isFileDialogOpen() const { return fileChooser != nullptr; }
 
