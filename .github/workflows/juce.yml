@@ -50,6 +50,7 @@ jobs:
           ( cd out/items && zip -r ../FMRack-${{ matrix.os }}.zip * )
 
       - name: Upload binaries to release using uploadtool
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPLOADTOOL_BODY: "Automated build from commit ${{ github.sha }}\\nBuilt on ${{ github.event.head_commit.timestamp }}\\nBranch: ${{ github.ref_name }}"
