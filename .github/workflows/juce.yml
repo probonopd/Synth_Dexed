@@ -34,9 +34,9 @@ jobs:
         working-directory: AudioPlugin
         run: cmake --build build --config Release
 
-      - name: Install zip (Windows)
+      - name: Install zip and wget (Windows)
         if: runner.os == 'Windows'
-        run: choco install zip
+        run: choco install zip wget
         shell: powershell
 
       - name: Find build artifacts
