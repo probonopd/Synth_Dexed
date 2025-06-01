@@ -67,6 +67,7 @@ set(SourceFiles
     ../src/FMRack/Module.cpp
     ../src/FMRack/Performance.cpp
     ../src/FMRack/Rack.cpp
+    ../src/FMRack/VoiceData.cpp
     ../src/FMRack/AudioEffectPlateReverb.cpp
     ../src/FMRack/FileRenderer.cpp
     ../src/FMRack/UdpServer.cpp
