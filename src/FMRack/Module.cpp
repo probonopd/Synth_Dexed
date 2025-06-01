@@ -18,6 +18,15 @@ Module::Module(float sampleRate)
     tempBuffer_.resize(1024); // Buffer for Dexed output conversion
 }
 
+Module::Module(float sampleRate, const Performance::PartConfig& config)
+    : sampleRate_(sampleRate), midiChannel_(0), enabled_(false), volume_(1.0f), pan_(0.5f),
+      detune_(0), noteShift_(0), noteLimitLow_(0), noteLimitHigh_(127), reverbSend_(0.0f),
+      monoMode_(false) {
+    tempBuffer_.resize(1024);
+    // Directly configure from performance, including voice loading
+    configureFromPerformance(config);
+}
+
 void Module::configureFromPerformance(const Performance::PartConfig& config) {
     partConfig_ = const_cast<Performance::PartConfig*>(&config);
     midiChannel_ = config.midiChannel;

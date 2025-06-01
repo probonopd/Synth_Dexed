@@ -19,6 +19,7 @@ set(FMRACK_SOURCES
     Module.cpp
     FileRenderer.cpp
     UdpServer.cpp
+    VoiceData.cpp
 )
 
 set(FMRACK_HEADERS

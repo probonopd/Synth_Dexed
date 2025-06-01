@@ -1,6 +1,7 @@
 #include "Rack.h"
 #include "AudioEffectPlateReverb.h"
 #include "Debug.h"
+#include "VoiceData.h"
 #include <iostream>
 #include <algorithm>
 #include <cstring>
@@ -9,28 +10,6 @@
 #include <mutex>
 
 namespace FMRack {
-
-// Helper function to extract voice name from DX7 voice data
-std::string extractVoiceName(const std::array<uint8_t, 156>& voiceData) {
-    // Voice name is at offset 145-154 (10 characters)
-    std::string voiceName;
-    for (int i = 145; i < 155; ++i) {
-        char c = static_cast<char>(voiceData[i]);
-        // DX7 uses ASCII characters 32-127
-        if (c >= 32) {
-            voiceName += c;
-        } else {
-            voiceName += ' ';
-        }
-    }
-    
-    // Trim trailing spaces
-    while (!voiceName.empty() && voiceName.back() == ' ') {
-        voiceName.pop_back();
-    }
-    
-    return voiceName.empty() ? "Unnamed Voice" : voiceName;
-}
 
 // Rack class implementation
 Rack::Rack(float sampleRate) : initialized(false), sampleRate_(sampleRate) {
@@ -108,7 +87,7 @@ void Rack::createModulesFromPerformance() {
             // config.midiChannel = i + 1;
 
             if (debugEnabled) {
-                std::string voiceName = extractVoiceName(config.voiceData);
+                std::string voiceName = VoiceData::extractDX7VoiceName(std::vector<uint8_t>(config.voiceData.begin(), config.voiceData.end()));
                 std::cout << "Creating module " << (i + 1) << " on MIDI channel "
                         << static_cast<int>(config.midiChannel) << " with voice: \"" << voiceName << "\"\n";
                 
@@ -151,16 +130,23 @@ void Rack::createModulesFromPerformance() {
                 // Show pitch bend range if applicable
                 std::cout << "    Pitch bend range: " << static_cast<int>(config.pitchBendRange) << " semitones\n";
             }
-            auto module = std::make_unique<Module>(sampleRate_);
-            module->configureFromPerformance(config);
+            // Use new constructor to load voice at creation
+            auto module = std::make_unique<Module>(sampleRate_, config);
             DEBUG_PRINT("[DEBUG] Module " << (i + 1)
                 << " MIDI channel: " << (int)module->getMIDIChannel()
                 << " Note range: " << (int)config.noteLimitLow << "-" << (int)config.noteLimitHigh
                 << " Pan: " << (int)config.pan);
             modules_.push_back(std::move(module));
-            std::string voiceName = extractVoiceName(config.voiceData);
+            std::string voiceName = VoiceData::extractDX7VoiceName(std::vector<uint8_t>(config.voiceData.begin(), config.voiceData.end()));
             std::cout << "Module " << (i + 1) << " created and configured with MIDI channel "
                       << static_cast<int>(config.midiChannel) << " and voice: \"" << voiceName << "\"\n";
+            
+            // Debug: print raw voice name bytes
+            std::cout << "  Raw voice name bytes: ";
+            for (int vi = 145; vi < 155; ++vi) {
+                std::cout << std::hex << std::uppercase << (int)config.voiceData[vi] << " ";
+            }
+            std::cout << std::dec << std::endl;
         }
     }
 
@@ -440,6 +426,47 @@ bool Rack::loadInitialPerformance(const std::string& performanceFile) {
         std::cerr << "Error: Could not load performance file: " << performanceFile << "\n";
         return false;
     }
+}
+
+// New: Directly set up modules from a list of voice data blobs
+void Rack::setupModulesFromVoices(const std::vector<std::vector<uint8_t>>& voices, int unisonVoices, float unisonDetune, float unisonSpread) {
+    std::lock_guard<std::mutex> lock(modulesMutex);
+    std::cout << "\n=== Creating modules from provided voices ===\n";
+    modules_.clear();
+    int numModules = static_cast<int>(voices.size());
+    for (int i = 0; i < numModules; ++i) {
+        if (voices[i].size() < 156) {
+            std::cerr << "[ERROR] Voice data for module " << (i+1) << " is too short (" << voices[i].size() << " bytes). Skipping.\n";
+            continue;
+        }
+        // Only create module if the voice name is not empty or all zeros
+        std::string voiceName = VoiceData::extractDX7VoiceName(std::vector<uint8_t>(voices[i].begin(), voices[i].end()));
+        bool allZero = std::all_of(voices[i].begin() + 145, voices[i].begin() + 155, [](uint8_t c) { return c == 0; });
+        if (voiceName.empty() || allZero) {
+            std::cerr << "[ERROR] Voice data for module " << (i+1) << " has empty or invalid name. Skipping.\n";
+            continue;
+        }
+        // Build a minimal PartConfig for this module
+        Performance::PartConfig config;
+        config.voiceData = {0};
+        std::copy_n(voices[i].begin(), 156, config.voiceData.begin());
+        config.midiChannel = 1; // Always use MIDI channel 1 for all modules loaded via --voice
+        config.unisonVoices = unisonVoices;
+        config.unisonDetune = unisonDetune;
+        config.unisonSpread = unisonSpread;
+        config.volume = 100;
+        std::cout << "Creating module " << (i + 1) << " on MIDI channel " << (i + 1) << " with voice: \"" << voiceName << "\"\n";
+        auto module = std::make_unique<Module>(sampleRate_, config);
+        modules_.push_back(std::move(module));
+        // Debug: print raw voice name bytes
+        std::cout << "  Raw voice name bytes: ";
+        for (int vi = 145; vi < 155; ++vi) {
+            std::cout << std::hex << std::uppercase << (int)config.voiceData[vi] << " ";
+        }
+        std::cout << std::dec << std::endl;
+    }
+    std::cout << "Total active modules: " << modules_.size() << "\n";
+    std::cout << "=== Module creation complete ===\n\n";
 }
 
 } // namespace FMRack

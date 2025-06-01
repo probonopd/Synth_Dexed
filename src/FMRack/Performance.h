@@ -68,6 +68,9 @@ public:
         uint8_t unisonVoices = 1;  // 1-4 voices for unison
         float unisonDetune = 0.1f; // Detune amount between voices
         float unisonSpread = 0.5f; // Pan spread between voices
+
+        // Add a name field to PartConfig for logging and UI
+        std::string voiceName;
     };
     
     // Global effects settings
@@ -98,6 +101,9 @@ public:
     // Handle MiniDexed SysEx (global or TG)
     // partIndex: -1 for global, 0..7 for TG
     bool handleSysex(const uint8_t* data, int len, std::vector<uint8_t>& response, int partIndex = -1);
+
+    // Set voice data and name for a part using VoiceData helper
+    void setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData);
 };
 
 } // namespace FMRack

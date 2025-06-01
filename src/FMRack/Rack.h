@@ -50,6 +50,9 @@ public:
     // SysEx routing
     void routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_channel);
 
+    // Directly set up modules from a list of voice data blobs (bypassing Performance)
+    void setupModulesFromVoices(const std::vector<std::vector<uint8_t>>& voices, int unisonVoices, float unisonDetune, float unisonSpread);
+
 private:
     bool initialized;
     float sampleRate_;

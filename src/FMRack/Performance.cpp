@@ -1,8 +1,9 @@
 #include "Performance.h"
+#include "VoiceData.h"
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <algorithm>
 #include <cstring>
 #include <vector>
 #include <cstdint>
@@ -199,7 +200,7 @@ bool Performance::loadFromFile(const std::string& filename) {
 }
 
 void Performance::setDefaults(int numParts, int unisonVoices) {
-    // Initialize with a basic FM voice (INIT VOICE)
+    // Initialize with a basic FM voice (voice.)
 
     std::array<uint8_t, 156> initVoice = {{
         99, 99, 99, 99, 99, 99, 99, 0, 39, 0, 0, 0, 0, 0, 0, 0,  0, 0, 1, 0, 7, // OP6
@@ -212,7 +213,7 @@ void Performance::setDefaults(int numParts, int unisonVoices) {
         0, 0, 1, // algorithm, feedback, osc sync
         35, 0, 0, 0, 1, 0, // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
         3, 24, // pitch_mod_sensitivity, transpose
-        73, 78, 73, 84, 32, 86, 79, 73, 67, 69, // 10 * char for name ("INIT VOICE")
+        73, 78, 73, 84, 32, 86, 79, 73, 67, 69, // 10 * char for name ("voice.")
         0 // pad to 156 bytes
     }};
 
@@ -265,6 +266,14 @@ void Performance::setDefaults(int numParts, int unisonVoices) {
 
     // Set default effects (assuming EffectsConfig default constructor sets neutral values)
     this->effects = EffectsConfig{};
+}
+
+void Performance::setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData) {
+    if (partIndex < 0 || partIndex >= static_cast<int>(parts.size())) return;
+    auto& part = parts[partIndex];
+    size_t sz = std::min<size_t>(part.voiceData.size(), voiceData.size());
+    std::copy_n(voiceData.begin(), sz, part.voiceData.begin());
+    part.voiceName = VoiceData::extractDX7VoiceName(voiceData);
 }
 
 const Performance::PartConfig& Performance::getPartConfig(int partIndex) const {

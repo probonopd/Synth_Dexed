@@ -5,6 +5,7 @@
 #include "UdpServer.h"
 #include "Debug.h"
 #include "FileRenderer.h"
+#include "VoiceData.h"
 #include <iostream>
 #include <vector>
 #include <thread>
@@ -76,6 +77,9 @@ bool debugEnabled = false;
 
 // Store the directory of the initial performance file if set
 static std::string g_performanceDir, g_performanceBase; static bool g_performanceSet = false;
+
+// Store --voice file paths
+static std::vector<std::string> g_voiceFiles;
 
 // =====================
 // Helper Functions
@@ -293,8 +297,7 @@ void midiThread() {
     }
     snd_seq_close(seq_handle);
 }
-// Forward declaration for connect_all_midi_inputs
-void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
+
 void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port) {
     snd_seq_client_info_t *cinfo; snd_seq_port_info_t *pinfo;
     snd_seq_client_info_alloca(&cinfo); snd_seq_port_info_alloca(&pinfo); snd_seq_client_info_set_client(cinfo, -1);
@@ -318,6 +321,33 @@ bool initializeAudioMidi() { return true; }
 // Command-Line Parsing
 // =====================
 void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile, std::string& renderMidiFile, std::string& renderWavFile) {
+    bool showHelp = false;
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--help" || arg == "-h") {
+            showHelp = true;
+            break;
+        }
+    }
+    if (showHelp) {
+        std::cout << "Usage: " << argv[0] << " [options]\nOptions:\n"
+                  << "  --performance <file>     Load performance file at startup\n"
+                  << "  --voice <file>           Load a DX7 voice into a module (repeatable, one per module)\n"
+                  << "  --sample-rate <rate>     Set sample rate (default: " << SAMPLE_RATE << ")\n"
+                  << "  --buffer-frames <frames> Set buffer size (default: " << BUFFER_FRAMES << ")\n"
+                  << "  --num-buffers <count>    Set number of buffers (default: " << numBuffers << ")\n"
+                  << "  --audio-device <id>      Audio device ID (default: " << audioDev << ")\n"
+                  << "  --midi-device <id>       MIDI device ID (default: " << midiDev << ")\n"
+                  << "  --num-modules <n>        Number of modules/parts (default: " << numModules << ")\n"
+                  << "  --unison-voices <n>      Unison voices per module (default: " << unisonVoices << ")\n"
+                  << "  --unison-detune <cents>  Unison detune in cents (default: " << unisonDetune << ")\n"
+                  << "  --unison-spread <0-1>    Unison stereo spread (default: " << unisonSpread << ")\n"
+                  << "  --sine                   Generate test sine wave\n"
+                  << "  --debug                  Enable debug output (print [DEBUG] messages)\n"
+                  << "  --multiprocessing <0|1>  Enable (1, default) or disable (0) multicore audio processing\n"
+                  << "  --help, -h               Show this help message\n";
+        exit(0);
+    }
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--render" && i + 2 < argc) { renderMidiFile = argv[i + 1]; renderWavFile = argv[i + 2]; i += 2; }
@@ -341,6 +371,10 @@ void parseCommandLineArgs(int argc, char* argv[], std::string& performanceFile, 
             g_rack->processMidiMessage(status, note, velocity);
             std::this_thread::sleep_for(std::chrono::seconds(1));
             g_rack->processMidiMessage(0x80, note, 0);
+        }
+        else if (arg == "--voice" && i + 1 < argc) {
+            g_voiceFiles.push_back(argv[i + 1]);
+            ++i;
         }
     }
 }
@@ -665,6 +699,30 @@ int main(int argc, char* argv[]) {
         // Initialize the rack with configured sample rate
         g_rack = std::make_unique<Rack>(SAMPLE_RATE);
 
+        // Handle --voice arguments
+        if (!g_voiceFiles.empty()) {
+            int numVoices = static_cast<int>(g_voiceFiles.size());
+            numModules = numVoices;
+            std::vector<std::vector<uint8_t>> loadedVoices;
+            for (int i = 0; i < numModules; ++i) {
+                VoiceData vdata;
+                if (vdata.loadFromFile(g_voiceFiles[i])) {
+                    if (!vdata.voices.empty()) {
+                        loadedVoices.push_back(vdata.voices[0]);
+                        std::string vname = VoiceData::extractDX7VoiceName(vdata.voices[0]);
+                        std::cout << "[VOICE] Loaded voice from " << g_voiceFiles[i] << " into module " << (i + 1)
+                                  << ": \"" << vname << "\"" << std::endl;
+                    } else {
+                        std::cerr << "[VOICE] No voices found in file: " << g_voiceFiles[i] << std::endl;
+                        loadedVoices.push_back(std::vector<uint8_t>(156, 0));
+                    }
+                } else {
+                    std::cerr << "[VOICE] Failed to load voice file: " << g_voiceFiles[i] << std::endl;
+                    loadedVoices.push_back(std::vector<uint8_t>(156, 0));
+                }
+            }
+            g_rack->setupModulesFromVoices(loadedVoices, unisonVoices, unisonDetune, unisonSpread);
+        } else
         // Load performance file if specified, otherwise use default
         if (!performanceFile.empty()) {
             if (!g_rack->loadInitialPerformance(performanceFile)) {

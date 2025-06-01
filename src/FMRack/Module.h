@@ -12,6 +12,7 @@ namespace FMRack {
 class Module {
 public:
     Module(float sampleRate);
+    Module(float sampleRate, const Performance::PartConfig& config); // New constructor to allow direct voice loading
     ~Module() = default;
     
     // Configuration
