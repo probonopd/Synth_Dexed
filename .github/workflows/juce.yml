@@ -40,7 +40,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p out/items
-          find build -type f \( -name "FMRack.vst3" -o -name "FMRack.dll" -o -name "FMRack.so" -o -name "FMRack.dylib" -o -name "FMRack.exe" \) -exec cp -r {} out/items \;
+          cp -r build/FMRack_artefacts/VST3/FMRack.vst3 FMRack_build/artefacts/Standalone/FMRack.app out/items/ || true
+          find build -type f \( -name "FMRack.vst3" -o -name "FMRack.dll" -o -name "FMRack.so" -o -name "FMRack" -o -name "FMRack.exe" \) -exec cp -r {} out/items \;
           ( cd out/items && zip -r ../FMRack-${{ matrix.os }}.zip * )
 
       - name: Upload binaries to release using uploadtool
