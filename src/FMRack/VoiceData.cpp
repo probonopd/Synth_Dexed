@@ -146,7 +146,7 @@ bool VoiceData::loadFromFile(const std::string& filename) {
     // Convert to Dexed format (155 bytes: 128 packed + 27 Dexed params)
     for (auto& v : voices) {
         if (v.size() == 128 || v.size() == 155) {
-            std::string name = extractDX7VoiceName(v);
+            std::string name = VoiceData::extractDX7VoiceName(v);
             v = convertDX7ToDexed(v, name);
             std::cout << "[VoiceData] Converted voice to Dexed format." << std::endl;
         }
@@ -154,7 +154,7 @@ bool VoiceData::loadFromFile(const std::string& filename) {
 
     std::cout << "[VoiceData] Loaded " << voices.size() << " voice(s) after conversion." << std::endl;
     for (size_t i = 0; i < voices.size(); ++i) {
-        std::string name = extractDX7VoiceName(voices[i]);
+        std::string name = VoiceData::extractDX7VoiceName(voices[i]);
         std::cout << "[VoiceData] Voice " << i+1 << " name: '" << name << "', size: " << voices[i].size() << std::endl;
     }
     return ok && !voices.empty();
@@ -244,11 +244,13 @@ bool VoiceData::loadFromMidi(const std::vector<uint8_t>& data) {
 // Extract voice name (Dexed: bytes 145–154, DX7: 118–127)
 std::string VoiceData::extractDX7VoiceName(const std::vector<uint8_t>& voice) {
     // Handle 156-byte (Dexed), 155-byte (DX7), and 128-byte (TX7) voices
-    if (voice.size() >= 156) {
+    // This function is now static.
+    // The implementation remains the same, but it's now a static member.
+    if (voice.size() >= 156) { // Dexed internal representation might be 156
         return std::string(voice.begin() + 145, voice.begin() + 155);
-    } else if (voice.size() == 155) {
+    } else if (voice.size() == 155) { // Original DX7 sysex data part or Dexed after initial load
         return std::string(voice.begin() + 145, voice.begin() + 155);
-    } else if (voice.size() == 128) {
+    } else if (voice.size() == 128) { // TX7 or packed format
         return std::string(voice.begin() + 118, voice.begin() + 128);
     }
     return "(unknown)";
