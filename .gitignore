@@ -320,3 +320,5 @@ Synth_Dexed_exe
 *.sln
 FMRack.exe
 FMRack.vst3
+*.reapeaks
+build*/bin/FMRack
