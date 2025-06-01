@@ -281,6 +281,12 @@ bool AudioPluginAudioProcessor::loadPerformanceFile(const juce::String& path)
         logToGui("Performance loadFromFile failed: " + path);
         return false;
     }
+    // Force all modules to 1 unison voice and default detune/spread after loading
+    for (int i = 0; i < 16; ++i) {
+        performance->parts[i].unisonVoices = 1;
+        performance->parts[i].unisonDetune = 7.0f;
+        performance->parts[i].unisonSpread = 0.5f;
+    }
     if (!rack)
         rack = std::make_unique<FMRack::Rack>(44100.0f); // Use actual sampleRate if available
     rack->setPerformance(*performance);

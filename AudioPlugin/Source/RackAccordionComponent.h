@@ -3,6 +3,7 @@
 #include "../../src/FMRack/Rack.h"
 
 // Forward declaration
+class AudioPluginAudioProcessorEditor;
 class ModuleTabComponent;
 
 class RackAccordionComponent : public juce::Component
@@ -17,16 +18,21 @@ public:
     juce::Slider numModulesSlider;
     juce::Label numModulesLabel;
     
+    AudioPluginAudioProcessorEditor* getEditor() const { return editor; }
+    void setEditor(AudioPluginAudioProcessorEditor* ed) { editor = ed; }
+    
 private:
     FMRack::Rack* rack;
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     std::vector<std::unique_ptr<ModuleTabComponent>> moduleTabs;
+    AudioPluginAudioProcessorEditor* editor = nullptr;
 };
 
 class ModuleTabComponent : public juce::Component {
 public:
     ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackAccordionComponent* parent);
     void resized() override;
+    void updateFromModule(); // NEW: update sliders from module state
     
     // Per-tab controls
     juce::Slider unisonVoicesSlider;
@@ -35,5 +41,13 @@ public:
     juce::Label unisonDetuneLabel;
     juce::Slider unisonPanSlider;
     juce::Label unisonPanLabel;
-    // Optionally: add more controls here for module parameters
+    juce::TextButton loadVoiceButton;
+    
+    bool isFileDialogOpen() const { return fileChooser != nullptr; }
+
+private:
+    FMRack::Module* module;
+    int moduleIndex;
+    RackAccordionComponent* parentAccordion;
+    std::unique_ptr<juce::FileChooser> fileChooser; // Persistent for async dialog
 };

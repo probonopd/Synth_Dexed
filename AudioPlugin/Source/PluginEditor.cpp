@@ -26,6 +26,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
     // Add the rack accordion GUI
     rackAccordion = std::make_unique<RackAccordionComponent>(processorRef.getRack());
+    rackAccordion->setEditor(this); // Set the editor pointer for child access
     addAndMakeVisible(rackAccordion.get());
 
     // Remove all per-tab control setup from here, only set up numModulesSlider/Label

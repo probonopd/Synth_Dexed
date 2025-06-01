@@ -17,6 +17,8 @@ public:
 
     void appendLogMessage(const juce::String& message); // Public method to append log
 
+    AudioPluginAudioProcessor* getProcessor() const { return &processorRef; } // Added method to access processor
+
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.

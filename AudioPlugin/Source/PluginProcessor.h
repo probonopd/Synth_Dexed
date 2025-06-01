@@ -80,6 +80,7 @@ public:
     void setUnisonDetune(float detune);
     void setUnisonPan(float pan);
     FMRack::Rack* getRack() const { return rack.get(); }
+    FMRack::Performance* getPerformance() const { return performance.get(); } // Added
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };
