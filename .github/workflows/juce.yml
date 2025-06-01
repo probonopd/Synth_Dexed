@@ -50,7 +50,7 @@ jobs:
           UPLOADTOOL_BODY: "Automated build from commit ${{ github.sha }}\\nBuilt on ${{ github.event.head_commit.timestamp }}\\nBranch: ${{ github.ref_name }}"
         run: |
           set -e
-          cd release
+          cd AudioPlugin/out
           ls -lh * # Show what we're about to upload
           wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
-          bash upload.sh out/FMRack-*.zip
+          bash upload.sh FMRack-*.zip
