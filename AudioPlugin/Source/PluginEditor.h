@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "RackAccordionComponent.h"
 #include <juce_gui_basics/juce_gui_basics.h> // Added for GUI elements
 
 //==============================================================================
@@ -46,6 +47,8 @@ private:
     void unisonVoicesChanged();
     void unisonDetuneChanged();
     void unisonPanChanged();
+
+    std::unique_ptr<RackAccordionComponent> rackAccordion; // Added for the rack GUI
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };

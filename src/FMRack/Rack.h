@@ -53,6 +53,9 @@ public:
     // Directly set up modules from a list of voice data blobs (bypassing Performance)
     void setupModulesFromVoices(const std::vector<std::vector<uint8_t>>& voices, int unisonVoices, float unisonDetune, float unisonSpread);
 
+    // Add public getter for modules
+    const std::vector<std::unique_ptr<Module>>& getModules() const { return modules_; }
+
 private:
     bool initialized;
     float sampleRate_;

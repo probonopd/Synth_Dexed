@@ -12,6 +12,12 @@ To install the VST3 plugin, copy it to the appropriate directory:
 
 ## Developer Notes
 
+Sometimes you read about hardware synthesizers being "a VST3 plugin in a box".
+Actually, the other way around is more accurate: A hardware synthesizer is an embedded device running the audio engine without any GUI, while a VST3 plugin is a software application that runs the same audio engine but with a GUI.
+The audio engine is the core of the synthesizer, responsible for generating sound, processing audio, and handling MIDI input. The GUI is an additional layer that provides a user interface for interacting with the synthesizer.
+
+The audio engine is implemented in the `FMRack` library, which is a C++ library that provides the core functionality for the synthesizer. The JUCE framework is used to create the GUI and handle user interactions.
+
 For a seamless development experience with JUCE, follow these guidelines:
 
 1. Even before starting with JUCE, have a standalone binary of the synthesizer ready.

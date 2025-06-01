@@ -322,3 +322,8 @@ FMRack.exe
 FMRack.vst3
 *.reapeaks
 build*/bin/FMRack
+_deps/
+FMRack_artefacts
+CPM_modules
+cmake
+cpm-package-lock.cmake

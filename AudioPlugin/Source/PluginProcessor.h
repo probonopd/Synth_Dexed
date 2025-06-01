@@ -79,6 +79,7 @@ public:
     void setUnisonVoices(int num);
     void setUnisonDetune(float detune);
     void setUnisonPan(float pan);
+    FMRack::Rack* getRack() const { return rack.get(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

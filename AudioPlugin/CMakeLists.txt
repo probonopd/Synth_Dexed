@@ -50,6 +50,7 @@ set_target_properties(${PROJECT_NAME}_VST3 PROPERTIES OUTPUT_NAME "FMRack")
 set(SourceFiles
     Source/PluginEditor.cpp
     Source/PluginProcessor.cpp
+    Source/RackAccordionComponent.cpp
     ../src/dexed.cpp
     ../src/dx7note.cpp
     ../src/EngineMkI.cpp
