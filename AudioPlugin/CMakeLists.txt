@@ -51,6 +51,7 @@ set(SourceFiles
     Source/PluginEditor.cpp
     Source/PluginProcessor.cpp
     Source/RackAccordionComponent.cpp
+    Source/FileBrowserDialog.cpp
     ../src/dexed.cpp
     ../src/dx7note.cpp
     ../src/EngineMkI.cpp

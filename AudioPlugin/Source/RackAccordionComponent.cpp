@@ -115,9 +115,11 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
         auto* perf = processor ? processor->getPerformance() : nullptr;
         if (perf) {
             auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            part.unisonVoices = (uint8_t)unisonVoicesSlider.getValue();
-            processor->getRack()->setPerformance(*perf);
-            // parentAccordion->updatePanels(); // REMOVE to prevent endless loop
+            uint8_t newValue = (uint8_t)unisonVoicesSlider.getValue();
+            if (part.unisonVoices != newValue) {
+                part.unisonVoices = newValue;
+                processor->getRack()->setPerformance(*perf);
+            }
         }
     };
     unisonDetuneSlider.onValueChange = [this] {
@@ -126,9 +128,11 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
         auto* perf = processor ? processor->getPerformance() : nullptr;
         if (perf) {
             auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            part.unisonDetune = (float)unisonDetuneSlider.getValue();
-            processor->getRack()->setPerformance(*perf);
-            // parentAccordion->updatePanels(); // REMOVE to prevent endless loop
+            float newValue = (float)unisonDetuneSlider.getValue();
+            if (part.unisonDetune != newValue) {
+                part.unisonDetune = newValue;
+                processor->getRack()->setPerformance(*perf);
+            }
         }
     };
     unisonPanSlider.onValueChange = [this] {
@@ -137,9 +141,11 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
         auto* perf = processor ? processor->getPerformance() : nullptr;
         if (perf) {
             auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            part.unisonSpread = (float)unisonPanSlider.getValue();
-            processor->getRack()->setPerformance(*perf);
-            // parentAccordion->updatePanels(); // REMOVE to prevent endless loop
+            float newValue = (float)unisonPanSlider.getValue();
+            if (part.unisonSpread != newValue) {
+                part.unisonSpread = newValue;
+                processor->getRack()->setPerformance(*perf);
+            }
         }
     };
     midiChannelSlider.onValueChange = [this] {
@@ -148,69 +154,30 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
         auto* perf = processor ? processor->getPerformance() : nullptr;
         if (perf) {
             auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            part.midiChannel = (uint8_t)midiChannelSlider.getValue();
-            processor->getRack()->setPerformance(*perf);
+            uint8_t newValue = (uint8_t)midiChannelSlider.getValue();
+            if (part.midiChannel != newValue) {
+                part.midiChannel = newValue;
+                processor->getRack()->setPerformance(*perf);
+            }
         }
     };
     // Load Voice button
     loadVoiceButton.setButtonText("Load Voice");
     loadVoiceButton.onClick = [this] {
-        std::cout << "[Load Voice] File dialog about to open." << std::endl;
-        fileChooser = std::make_unique<juce::FileChooser>(
-            "Select a DX7 voice file", juce::File(), "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*");
-        fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-            [this](const juce::FileChooser& fc) {
-                std::cout << "[Load Voice] Entered launchAsync lambda." << std::endl;
-                auto file = fc.getResult();
-                if (!file.existsAsFile()) {
-                    std::cout << "[Load Voice] No file selected or file does not exist." << std::endl;
-                    fileChooser.reset();
-                    return;
-                }
-                juce::FileInputStream stream(file);
-                if (!stream.openedOk()) {
-                    std::cout << "[Load Voice] Failed to open file: " << file.getFullPathName() << std::endl;
-                    fileChooser.reset();
-                    return;
-                }
-                std::vector<uint8_t> data;
-                data.resize((size_t)stream.getTotalLength());
-                auto bytesRead = stream.read(data.data(), (int)data.size());
-                if (bytesRead != (int)data.size()) {
-                    std::cout << "[Load Voice] Failed to read all bytes from file: " << file.getFullPathName() << std::endl;
-                    fileChooser.reset();
-                    return;
-                }
-                std::cout << "[Load Voice] Read " << data.size() << " bytes from file: " << file.getFullPathName() << std::endl;
-                // Convert to Dexed format if needed
-                if (data.size() == 128 || data.size() == 155) {
-                    std::cout << "[Load Voice] Converting 128/155-byte voice to Dexed format (156 bytes)..." << std::endl;
-                    data = VoiceData::convertDX7ToDexed(data);
-                } else if (data.size() == 163 && data[0] == 0xF0 && data[1] == 0x43) {
-                    std::cout << "[Load Voice] Detected 163-byte DX7 sysex, extracting voice data..." << std::endl;
-                    // DX7 single-voice sysex: F0 43 00 00 01 1B ... 155 bytes ... F7
-                    if (data.size() >= 163) {
-                        std::vector<uint8_t> voiceData(data.begin() + 6, data.begin() + 161);
-                        data = VoiceData::convertDX7ToDexed(voiceData);
-                    }
-                }
-                if (data.size() < 156) {
-                    std::cout << "[Load Voice] Error: Voice data is too short (" << data.size() << " bytes). Needs 156 bytes." << std::endl;
-                    fileChooser.reset();
-                    return;
-                }
-                auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-                auto* processor = editor ? editor->getProcessor() : nullptr;
-                auto* perf = processor ? processor->getPerformance() : nullptr;
-                if (perf) {
-                    perf->setPartVoiceData(moduleIndex, data);
-                    processor->getRack()->setPerformance(*perf);
-                    std::cout << "[Load Voice] Voice loaded successfully for module " << (moduleIndex+1) << "." << std::endl;
-                } else {
-                    std::cout << "[Load Voice] Error: Could not get performance object." << std::endl;
-                }
-                fileChooser.reset(); // Release after use
+        auto dialog = std::make_unique<FileBrowserDialog>("Select Voice File", "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*");
+        auto* dialogPtr = dialog.get();
+        
+        dialogPtr->showDialog(this,
+            [this](const juce::File& file) {
+                loadVoiceFile(file);
+            },
+            []() {
+                // Cancel callback - nothing needed
             });
+        
+        // Keep the dialog alive by storing it temporarily
+        // The dialog will clean itself up when closed
+        dialog.release();
     };
     addAndMakeVisible(loadVoiceButton);
 }
@@ -245,4 +212,54 @@ void ModuleTabComponent::resized()
     midiChannelSlider.setBounds(x + w + 4, y, 80, h);
     y += h + gap;
     loadVoiceButton.setBounds(x, y, 120, h);
+}
+
+void ModuleTabComponent::loadVoiceFile(const juce::File& file)
+{
+    std::cout << "[Load Voice] Loading file: " << file.getFullPathName() << std::endl;
+    
+    juce::FileInputStream stream(file);
+    if (!stream.openedOk()) {
+        std::cout << "[Load Voice] Failed to open file: " << file.getFullPathName() << std::endl;
+        return;
+    }
+    
+    std::vector<uint8_t> data;
+    data.resize((size_t)stream.getTotalLength());
+    auto bytesRead = stream.read(data.data(), (int)data.size());
+    if (bytesRead != (int)data.size()) {
+        std::cout << "[Load Voice] Failed to read all bytes from file: " << file.getFullPathName() << std::endl;
+        return;
+    }
+    
+    std::cout << "[Load Voice] Read " << data.size() << " bytes from file: " << file.getFullPathName() << std::endl;
+    
+    // Convert to Dexed format if needed
+    if (data.size() == 128 || data.size() == 155) {
+        std::cout << "[Load Voice] Converting 128/155-byte voice to Dexed format (156 bytes)..." << std::endl;
+        data = VoiceData::convertDX7ToDexed(data);
+    } else if (data.size() == 163 && data[0] == 0xF0 && data[1] == 0x43) {
+        std::cout << "[Load Voice] Detected 163-byte DX7 sysex, extracting voice data..." << std::endl;
+        // DX7 single-voice sysex: F0 43 00 00 01 1B ... 155 bytes ... F7
+        if (data.size() >= 163) {
+            std::vector<uint8_t> voiceData(data.begin() + 6, data.begin() + 161);
+            data = VoiceData::convertDX7ToDexed(voiceData);
+        }
+    }
+    
+    if (data.size() < 156) {
+        std::cout << "[Load Voice] Error: Voice data is too short (" << data.size() << " bytes). Needs 156 bytes." << std::endl;
+        return;
+    }
+    
+    auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+    auto* processor = editor ? editor->getProcessor() : nullptr;
+    auto* perf = processor ? processor->getPerformance() : nullptr;
+    if (perf) {
+        perf->setPartVoiceData(moduleIndex, data);
+        processor->getRack()->setPerformance(*perf);
+        std::cout << "[Load Voice] Voice loaded successfully for module " << (moduleIndex+1) << "." << std::endl;
+    } else {
+        std::cout << "[Load Voice] Error: Could not get performance object." << std::endl;
+    }
 }

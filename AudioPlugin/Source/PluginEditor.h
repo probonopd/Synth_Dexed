@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include "RackAccordionComponent.h"
+#include "FileBrowserDialog.h"
 #include <juce_gui_basics/juce_gui_basics.h> // Added for GUI elements
 
 //==============================================================================
@@ -42,9 +43,7 @@ private:
 
     juce::TextButton loadPerformanceButton { "Load Performance .ini" };
     void loadPerformanceButtonClicked();
-
-    std::unique_ptr<juce::FileChooser> fileChooser; // Added to keep the FileChooser alive while the dialog is open
-
+    
     void numModulesChanged();
     void unisonVoicesChanged();
     void unisonDetuneChanged();

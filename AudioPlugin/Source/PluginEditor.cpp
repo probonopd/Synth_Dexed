@@ -21,7 +21,14 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     logTextBox.setScrollbarsShown(true);
     logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
     logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
     logTextBox.setFont(juce::Font(12.0f));
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
     addAndMakeVisible(logTextBox);
 
     // Add the rack accordion GUI
@@ -86,14 +93,12 @@ void AudioPluginAudioProcessorEditor::numModulesChanged() {
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 {
-    fileChooser = std::make_unique<juce::FileChooser>(
-        "Select a MiniDexed .ini file", juce::File(), "*.ini");
-    fileChooser->launchAsync(
-        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& fc)
-        {
-            auto file = fc.getResult();
-            if (file.existsAsFile())
+    auto dialog = std::make_unique<FileBrowserDialog>("Select Performance File", "*.ini");
+    auto* dialogPtr = dialog.get();
+    
+    dialogPtr->showDialog(this,
+        [this](const juce::File& file) {
+            if (file.getFileExtension().equalsIgnoreCase(".ini"))
             {
                 appendLogMessage("Loading performance: " + file.getFullPathName());
                 if (processorRef.loadPerformanceFile(file.getFullPathName())) {
@@ -104,7 +109,13 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                 if (rackAccordion)
                     rackAccordion->updatePanels();
             }
-            fileChooser.reset();
+        },
+        []() {
+            // Cancel callback - nothing needed
         });
+    
+    // Keep the dialog alive by storing it temporarily
+    // The dialog will clean itself up when closed
+    dialog.release();
 }
 

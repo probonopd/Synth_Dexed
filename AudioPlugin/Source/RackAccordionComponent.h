@@ -1,6 +1,7 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "../../src/FMRack/Rack.h"
+#include "FileBrowserDialog.h"
 
 // Forward declaration
 class AudioPluginAudioProcessorEditor;
@@ -45,11 +46,12 @@ public:
     juce::Slider midiChannelSlider;
     juce::Label midiChannelLabel;
     
-    bool isFileDialogOpen() const { return fileChooser != nullptr; }
+    bool isFileDialogOpen() const { return false; } // No longer needed
 
 private:
     FMRack::Module* module;
     int moduleIndex;
     RackAccordionComponent* parentAccordion;
-    std::unique_ptr<juce::FileChooser> fileChooser; // Persistent for async dialog
+    
+    void loadVoiceFile(const juce::File& file);
 };
