@@ -1,5 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "VoiceEditorPanel.h"
+#include "VoiceEditorWindow.h"
 #include <iostream> // For logging
 
 //==============================================================================
@@ -13,7 +15,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     juce::ignoreUnused (processorRef);
     // Make sure that before the constructor has finished, you've set the
     // editor's size to whatever you need it to be.
-    setSize (400, 400);
+    setSize (600, 600);
 
     // Set up log text box
     logTextBox.setMultiLine(true);
@@ -21,13 +23,22 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     logTextBox.setScrollbarsShown(true);
     logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
     logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable: 4996)
+#endif
     logTextBox.setFont(juce::Font(12.0f));
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
     addAndMakeVisible(logTextBox);
+    std::cout << "[PluginEditor] After addAndMakeVisible(logTextBox)" << std::endl;
 
     // Add the rack accordion GUI
     rackAccordion = std::make_unique<RackAccordionComponent>(processorRef.getRack());
     rackAccordion->setEditor(this); // Set the editor pointer for child access
     addAndMakeVisible(rackAccordion.get());
+    std::cout << "[PluginEditor] After addAndMakeVisible(rackAccordion)" << std::endl;
 
     // Remove all per-tab control setup from here, only set up numModulesSlider/Label
     rackAccordion->numModulesSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -42,17 +53,41 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     // Add the performance button back to the UI (keep in editor for now)
     addAndMakeVisible(loadPerformanceButton);
     loadPerformanceButton.onClick = [this]() { loadPerformanceButtonClicked(); };
+    std::cout << "[PluginEditor] After addAndMakeVisible(loadPerformanceButton)" << std::endl;
+
+    // Remove VoiceEditorPanel instantiation from constructor
+    // It will be created lazily when the user clicks the button
 
     resized(); // Force layout after construction
+    std::cout << "[PluginEditor] End of constructor" << std::endl;
 }
 
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 {
+    // Unregister this editor with the processor first
+    processorRef.setEditorPointer(nullptr);
+    
+    // Properly close the voice editor window if it exists
+    if (voiceEditorWindow) {
+        voiceEditorWindow->setVisible(false);
+        voiceEditorWindow.reset();
+    }
+    
+    // Clear the voice editor panel
+    if (voiceEditorPanel) {
+        voiceEditorPanel.reset();
+    }
+    
+    // Clear the rack accordion component
+    if (rackAccordion) {
+        rackAccordion.reset();
+    }
 }
 
 //==============================================================================
 void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 {
+    std::cout << "[PluginEditor] paint() called" << std::endl;
     // (Our component is opaque, so we must completely fill the background with a solid colour)
     g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
 }
@@ -68,6 +103,11 @@ void AudioPluginAudioProcessorEditor::resized()
     if (rackAccordion)
         rackAccordion->setBounds(10, y, getWidth() - 20, accordionHeight);
     logTextBox.setBounds(10, getHeight() - 130, getWidth() - 20, 120);
+
+    // Set bounds for the voice editor panel
+    if (voiceEditorPanel)
+        voiceEditorPanel->setBounds(0, 0, getWidth(), getHeight());
+    std::cout << "[PluginEditor] resized() end" << std::endl;
 }
 
 void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& message)
@@ -86,14 +126,12 @@ void AudioPluginAudioProcessorEditor::numModulesChanged() {
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 {
-    fileChooser = std::make_unique<juce::FileChooser>(
-        "Select a MiniDexed .ini file", juce::File(), "*.ini");
-    fileChooser->launchAsync(
-        juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [this](const juce::FileChooser& fc)
-        {
-            auto file = fc.getResult();
-            if (file.existsAsFile())
+    auto dialog = std::make_unique<FileBrowserDialog>("Select Performance File", "*.ini");
+    auto* dialogPtr = dialog.get();
+    
+    dialogPtr->showDialog(this,
+        [this](const juce::File& file) {
+            if (file.getFileExtension().equalsIgnoreCase(".ini"))
             {
                 appendLogMessage("Loading performance: " + file.getFullPathName());
                 if (processorRef.loadPerformanceFile(file.getFullPathName())) {
@@ -104,7 +142,43 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                 if (rackAccordion)
                     rackAccordion->updatePanels();
             }
-            fileChooser.reset();
+        },
+        []() {
+            // Cancel callback - nothing needed
         });
+    
+    // Keep the dialog alive by storing it temporarily
+    // The dialog will clean itself up when closed
+    dialog.release();
+}
+
+void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
+    std::cout << "[PluginEditor] showVoiceEditorPanel() called" << std::endl;
+    
+    // Create the VoiceEditorPanel lazily when first requested
+    if (!voiceEditorPanel) {
+        std::cout << "[PluginEditor] Creating VoiceEditorPanel lazily" << std::endl;
+        voiceEditorPanel = std::make_unique<VoiceEditorPanel>();
+        std::cout << "[PluginEditor] VoiceEditorPanel created" << std::endl;
+    }
+    
+    // Create a new window for the VoiceEditorPanel
+    if (!voiceEditorWindow) {
+        std::cout << "[PluginEditor] Creating voice editor window" << std::endl;
+        voiceEditorWindow = std::make_unique<VoiceEditorWindow>(
+            "Voice Editor", 
+            juce::Colours::darkgrey, 
+            juce::DocumentWindow::allButtons,
+            this // Pass the editor instance to the window
+        );
+        voiceEditorWindow->setContentOwned(voiceEditorPanel.get(), true);
+        voiceEditorWindow->setUsingNativeTitleBar(true);
+        voiceEditorWindow->centreWithSize(800, 600);
+        voiceEditorWindow->setResizable(true, false);
+    }
+    
+    std::cout << "[PluginEditor] Making voice editor window visible" << std::endl;
+    voiceEditorWindow->setVisible(true);
+    voiceEditorWindow->toFront(true);
 }
 

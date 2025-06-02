@@ -51,6 +51,11 @@ set(SourceFiles
     Source/PluginEditor.cpp
     Source/PluginProcessor.cpp
     Source/RackAccordionComponent.cpp
+    Source/FileBrowserDialog.cpp
+    Source/VoiceEditorPanel.cpp
+    Source/VoiceEditorWindow.cpp
+    Source/EnvelopeDisplay.cpp
+    Source/KeyboardScalingDisplay.cpp
     ../src/dexed.cpp
     ../src/dx7note.cpp
     ../src/EngineMkI.cpp
@@ -98,7 +103,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
+    BinaryData
 )
+
+# Add all SVGs in Images/ as resources for JUCE BinaryData
+file(GLOB ALGORITHM_SVGS "${CMAKE_CURRENT_SOURCE_DIR}/Images/algorithm-*.svg")
+
+juce_add_binary_data(BinaryData SOURCES ${ALGORITHM_SVGS})
 
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "==============================="

@@ -2,7 +2,11 @@
 
 #include "PluginProcessor.h"
 #include "RackAccordionComponent.h"
+#include "FileBrowserDialog.h"
+#include "VoiceEditorPanel.h" // Added to include the VoiceEditorPanel
+#include "VoiceEditorWindow.h" // Include the custom VoiceEditorWindow class
 #include <juce_gui_basics/juce_gui_basics.h> // Added for GUI elements
+#include <memory> // Added for std::unique_ptr
 
 //==============================================================================
 class AudioPluginAudioProcessorEditor final : public juce::AudioProcessorEditor
@@ -18,6 +22,7 @@ public:
     void appendLogMessage(const juce::String& message); // Public method to append log
 
     AudioPluginAudioProcessor* getProcessor() const { return &processorRef; } // Added method to access processor
+    void showVoiceEditorPanel(); // Added method to show the VoiceEditorPanel
 
 private:
     // This reference is provided as a quick way for your editor to
@@ -42,15 +47,16 @@ private:
 
     juce::TextButton loadPerformanceButton { "Load Performance .ini" };
     void loadPerformanceButtonClicked();
-
-    std::unique_ptr<juce::FileChooser> fileChooser; // Added to keep the FileChooser alive while the dialog is open
-
+    
     void numModulesChanged();
     void unisonVoicesChanged();
     void unisonDetuneChanged();
     void unisonPanChanged();
 
     std::unique_ptr<RackAccordionComponent> rackAccordion; // Added for the rack GUI
+
+    std::unique_ptr<VoiceEditorPanel> voiceEditorPanel; // Added to manage the new panel
+    std::unique_ptr<VoiceEditorWindow> voiceEditorWindow; // Added for the voice editor window
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };
