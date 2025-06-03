@@ -31,6 +31,8 @@ FileBrowserDialog::FileBrowserDialog(const juce::String&,
         nullptr,
         nullptr);
 
+    fileBrowser->setSize(600, 400);
+
     fileBrowser->addListener(this);
     addAndMakeVisible(fileBrowser.get());
 
