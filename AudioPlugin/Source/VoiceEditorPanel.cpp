@@ -11,7 +11,6 @@ using namespace juce;
 VoiceEditorPanel::VoiceEditorPanel()
 {
     std::cout << "[VoiceEditorPanel] Constructor start" << std::endl;
-    
     try {
         setBounds(0, 0, 1100, 700);
         setColour(juce::ResizableWindow::backgroundColourId, juce::Colour(0xff2a2a2a));
@@ -69,14 +68,19 @@ VoiceEditorPanel::VoiceEditorPanel()
         }
 
         algorithmSelector.onChange = [this]() {
-            int idx = algorithmSelector.getSelectedId() - 1;
-            currentAlgorithm = idx;
-            loadAlgorithmSvg(idx);
-            // Update operator colors immediately
-            for (int i = 0; i < operators.size(); ++i) {
-                operators[i]->repaint();
+            try {
+                int idx = algorithmSelector.getSelectedId() - 1;
+                currentAlgorithm = idx;
+                loadAlgorithmSvg(idx);
+                for (int i = 0; i < operators.size(); ++i) {
+                    operators[i]->repaint();
+                }
+                repaint();
+            } catch (const std::exception& e) {
+                std::cout << "[VoiceEditorPanel] Exception in algorithmSelector.onChange: " << e.what() << std::endl;
+            } catch (...) {
+                std::cout << "[VoiceEditorPanel] Unknown exception in algorithmSelector.onChange" << std::endl;
             }
-            repaint();
         };
         // Load initial SVG
         loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);

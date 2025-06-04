@@ -8,6 +8,7 @@
 #include "../../src/FMRack/Module.h"
 #include "../../src/FMRack/Performance.h"
 #include "../../src/FMRack/Rack.h" // Add this include
+#include "FMRackController.h" // Include the FMRackController header
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor
@@ -59,28 +60,23 @@ public:
 private:
     //==============================================================================
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout(); // Added
-    
-    std::unique_ptr<FMRack::Module> module; // Use FMRack::Module
-    std::unique_ptr<FMRack::Rack> rack; // Use FMRack::Rack for multi-part support
-    std::unique_ptr<FMRack::Performance> performance; // Store the loaded performance
 
+    std::unique_ptr<FMRackController> controller; // Use controller for backend access
     std::unique_ptr<juce::FileLogger> fileLogger; // Added for file logging
-
     bool wasMidiEmptyLastBlock = true; // Added to track MIDI state for logging
-
-    // Pointer to the editor for GUI logging
     class AudioPluginAudioProcessorEditor* editorPtr = nullptr;
 
 public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
     void logToGui(const juce::String& message);
-    bool loadPerformanceFile(const juce::String& path); // Add this
+    bool loadPerformanceFile(const juce::String& path);
     void setNumModules(int num);
     void setUnisonVoices(int num);
     void setUnisonDetune(float detune);
     void setUnisonPan(float pan);
-    FMRack::Rack* getRack() const { return rack.get(); }
-    FMRack::Performance* getPerformance() const { return performance.get(); } // Added
+    FMRack::Rack* getRack() const;
+    FMRack::Performance* getPerformance() const;
+    FMRackController* getController() const { return controller.get(); }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

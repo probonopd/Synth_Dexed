@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "FMRackController.h"
 
 bool debugEnabled = false; // Enable debug logging for plugin
 
@@ -30,22 +31,37 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
           ),
       treeState (*this, nullptr, juce::Identifier ("PluginParameters"), createParameterLayout())
 {
-    // Initialize FileLogger - logs to a file in the User's Documents directory
-    auto documentsDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
-    auto logFile = documentsDir.getChildFile ("AudioPluginDemoLog.txt"); 
-    fileLogger = std::make_unique<juce::FileLogger>(logFile, "Log started: " + juce::Time::getCurrentTime().toString (true, true), 1024 * 1024);
-    juce::Logger::setCurrentLogger (fileLogger.get());
-    DBG("Constructor: FileLogger initialized. Logging to: " + logFile.getFullPathName());
+    try {
+        // Initialize FileLogger - logs to a file in the User's Documents directory
+        auto documentsDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+        auto logFile = documentsDir.getChildFile ("AudioPluginDemoLog.txt"); 
+        fileLogger = std::make_unique<juce::FileLogger>(logFile, "Log started: " + juce::Time::getCurrentTime().toString (true, true), 1024 * 1024);
+        juce::Logger::setCurrentLogger (fileLogger.get());
+        DBG("Constructor: FileLogger initialized. Logging to: " + logFile.getFullPathName());
 
-    performance = std::make_unique<FMRack::Performance>();
-    rack = std::make_unique<FMRack::Rack>(44100.0f); // Use actual sampleRate in prepareToPlay
+        controller = std::make_unique<FMRackController>(44100.0f); // Use actual sampleRate in prepareToPlay
+    } catch (const std::exception& e) {
+        std::cout << "[PluginProcessor] Exception in constructor: " << e.what() << std::endl;
+        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in constructor: ") + e.what());
+    } catch (...) {
+        std::cout << "[PluginProcessor] Unknown exception in constructor" << std::endl;
+        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in constructor");
+    }
 }
 
 AudioPluginAudioProcessor::~AudioPluginAudioProcessor()
 {
-    DBG("Destructor: Cleaning up.");
-    juce::Logger::setCurrentLogger (nullptr); // Important to release the logger
-    fileLogger.reset(); // Release the file logger
+    try {
+        DBG("Destructor: Cleaning up.");
+        juce::Logger::setCurrentLogger (nullptr); // Important to release the logger
+        fileLogger.reset(); // Release the file logger
+    } catch (const std::exception& e) {
+        std::cout << "[PluginProcessor] Exception in destructor: " << e.what() << std::endl;
+        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in destructor: ") + e.what());
+    } catch (...) {
+        std::cout << "[PluginProcessor] Unknown exception in destructor" << std::endl;
+        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in destructor");
+    }
 }
 
 //==============================================================================
@@ -117,17 +133,28 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    juce::Logger::writeToLog("AudioPluginAudioProcessor::prepareToPlay called. Sample rate: " + juce::String(sampleRate));
-    juce::ignoreUnused (samplesPerBlock);
-    rack = std::make_unique<FMRack::Rack>(static_cast<float>(sampleRate));
-    if (performance)
-        rack->setPerformance(*performance);
+    try {
+        // Removed: if (controller) controller->setSampleRate((float)sampleRate);
+    } catch (const std::exception& e) {
+        std::cout << "[PluginProcessor] Exception in prepareToPlay: " << e.what() << std::endl;
+        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in prepareToPlay: ") + e.what());
+    } catch (...) {
+        std::cout << "[PluginProcessor] Unknown exception in prepareToPlay" << std::endl;
+        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in prepareToPlay");
+    }
 }
 
 void AudioPluginAudioProcessor::releaseResources()
 {
-    juce::Logger::writeToLog("AudioPluginAudioProcessor::releaseResources called.");
-    rack.reset();
+    try {
+        controller.reset();
+    } catch (const std::exception& e) {
+        std::cout << "[PluginProcessor] Exception in releaseResources: " << e.what() << std::endl;
+        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in releaseResources: ") + e.what());
+    } catch (...) {
+        std::cout << "[PluginProcessor] Unknown exception in releaseResources" << std::endl;
+        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in releaseResources");
+    }
 }
 
 bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -157,8 +184,18 @@ bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layou
 void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    juce::ScopedNoDenormals noDenormals;
-    process(buffer, midiMessages);
+    try {
+        juce::ScopedNoDenormals noDenormals;
+        process(buffer, midiMessages);
+    } catch (const std::exception& e) {
+        std::cout << "[PluginProcessor] Exception in processBlock: " << e.what() << std::endl;
+        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in processBlock: ") + e.what());
+        buffer.clear();
+    } catch (...) {
+        std::cout << "[PluginProcessor] Unknown exception in processBlock" << std::endl;
+        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in processBlock");
+        buffer.clear();
+    }
 }
 
 // Add the double-precision overload
@@ -194,35 +231,57 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<double>& buffer,
 // Add the templated process implementation
 template <typename FloatType>
 void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, juce::MidiBuffer& midiMessages) {
-    juce::Logger::writeToLog("Process block. Samples: " + juce::String(buffer.getNumSamples()) + ", MIDI events: " + juce::String(midiMessages.getNumEvents()));
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
-    auto numSamples = buffer.getNumSamples();
-    for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
-        buffer.clear (i, 0, numSamples);
+    try {
+        juce::Logger::writeToLog("Process block. Samples: " + juce::String(buffer.getNumSamples()) + ", MIDI events: " + juce::String(midiMessages.getNumEvents()));
+        auto totalNumOutputChannels = getTotalNumOutputChannels();
+        auto numSamples = buffer.getNumSamples();
+        for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
+            buffer.clear (i, 0, numSamples);
 
-    // Route MIDI to rack and log to GUI
-    if (rack) {
-        for (const auto metadata : midiMessages) {
-            const auto msg = metadata.getMessage();
-            if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() || msg.isPitchWheel()) {
-                rack->processMidiMessage(msg.getRawData()[0],
-                                        msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
-                                        msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
+        // Route MIDI to controller
+        if (controller) {
+            for (const auto metadata : midiMessages) {
+                const auto msg = metadata.getMessage();
+                if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() || msg.isPitchWheel()) {
+                    controller->processMidiMessage(msg.getRawData()[0],
+                                                  msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
+                                                  msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
+                }
             }
         }
-    }
-    // Render audio from rack
-    if (rack) {
-        std::vector<float> left(numSamples, 0.0f), right(numSamples, 0.0f);
-        rack->processAudio(left.data(), right.data(), numSamples);
-        for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
-            FloatType* out = buffer.getWritePointer(ch);
-            const float* src = (ch == 0) ? left.data() : right.data();
-            for (int i = 0; i < numSamples; ++i) {
-                out[i] = src[i];
+        // Render audio from controller
+        if (controller) {
+            std::vector<float> left(numSamples, 0.0f), right(numSamples, 0.0f);
+            try {
+                controller->processAudio(left.data(), right.data(), numSamples);
+            } catch (const std::exception& e) {
+                std::cout << "[PluginProcessor] Exception in controller->processAudio: " << e.what() << std::endl;
+                juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in controller->processAudio: ") + e.what());
+                std::fill(left.begin(), left.end(), 0.0f);
+                std::fill(right.begin(), right.end(), 0.0f);
+            } catch (...) {
+                std::cout << "[PluginProcessor] Unknown exception in controller->processAudio" << std::endl;
+                juce::Logger::writeToLog("[PluginProcessor] Unknown exception in controller->processAudio");
+                std::fill(left.begin(), left.end(), 0.0f);
+                std::fill(right.begin(), right.end(), 0.0f);
             }
+            for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
+                FloatType* out = buffer.getWritePointer(ch);
+                const float* src = (ch == 0) ? left.data() : right.data();
+                for (int i = 0; i < numSamples; ++i) {
+                    out[i] = src[i];
+                }
+            }
+        } else {
+            buffer.clear();
         }
-    } else {
+    } catch (const std::exception& e) {
+        std::cout << "[PluginProcessor] Exception in process<>: " << e.what() << std::endl;
+        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in process<>: ") + e.what());
+        buffer.clear();
+    } catch (...) {
+        std::cout << "[PluginProcessor] Unknown exception in process<>" << std::endl;
+        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in process<>");
         buffer.clear();
     }
 }
@@ -275,50 +334,43 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 
 bool AudioPluginAudioProcessor::loadPerformanceFile(const juce::String& path)
 {
-    if (!performance)
-        performance = std::make_unique<FMRack::Performance>();
-    if (!performance->loadFromFile(path.toStdString())) {
-        logToGui("Performance loadFromFile failed: " + path);
-        return false;
-    }
-    // Force all modules to 1 unison voice and default detune/spread after loading
-    for (int i = 0; i < 16; ++i) {
-        performance->parts[i].unisonVoices = 1;
-        performance->parts[i].unisonDetune = 7.0f;
-        performance->parts[i].unisonSpread = 0.5f;
-    }
-    if (!rack)
-        rack = std::make_unique<FMRack::Rack>(44100.0f); // Use actual sampleRate if available
-    rack->setPerformance(*performance);
-    logToGui("Performance loaded and rack configured from: " + path);
-    return true;
+    if (controller)
+        return controller->loadPerformanceFile(path);
+    return false;
 }
 
 void AudioPluginAudioProcessor::setNumModules(int num) {
-    if (performance) {
+    if (controller && controller->getPerformance()) {
         for (int i = 0; i < 16; ++i)
-            performance->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
-        if (rack) rack->setPerformance(*performance);
+            controller->getPerformance()->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
+        controller->setPerformance(*controller->getPerformance());
     }
 }
 void AudioPluginAudioProcessor::setUnisonVoices(int num) {
-    if (performance) {
+    if (controller && controller->getPerformance()) {
         for (int i = 0; i < 16; ++i)
-            performance->parts[i].unisonVoices = num;
-        if (rack) rack->setPerformance(*performance);
+            controller->getPerformance()->parts[i].unisonVoices = num;
+        controller->setPerformance(*controller->getPerformance());
     }
 }
 void AudioPluginAudioProcessor::setUnisonDetune(float detune) {
-    if (performance) {
+    if (controller && controller->getPerformance()) {
         for (int i = 0; i < 16; ++i)
-            performance->parts[i].unisonDetune = detune;
-        if (rack) rack->setPerformance(*performance);
+            controller->getPerformance()->parts[i].unisonDetune = detune;
+        controller->setPerformance(*controller->getPerformance());
     }
 }
 void AudioPluginAudioProcessor::setUnisonPan(float pan) {
-    if (performance) {
+    if (controller && controller->getPerformance()) {
         for (int i = 0; i < 16; ++i)
-            performance->parts[i].unisonSpread = pan;
-        if (rack) rack->setPerformance(*performance);
+            controller->getPerformance()->parts[i].unisonSpread = pan;
+        controller->setPerformance(*controller->getPerformance());
     }
+}
+FMRack::Rack* AudioPluginAudioProcessor::getRack() const {
+    return controller ? controller->getRack() : nullptr;
+}
+
+FMRack::Performance* AudioPluginAudioProcessor::getPerformance() const {
+    return controller ? controller->getPerformance() : nullptr;
 }

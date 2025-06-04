@@ -56,6 +56,7 @@ set(SourceFiles
     Source/VoiceEditorWindow.cpp
     Source/EnvelopeDisplay.cpp
     Source/KeyboardScalingDisplay.cpp
+    Source/FMRackController.cpp
 
     ../src/dexed.cpp
     ../src/dx7note.cpp

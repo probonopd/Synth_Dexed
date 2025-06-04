@@ -7,6 +7,7 @@ set(SOURCES
     VoiceEditorPanel.cpp
     EnvelopeDisplay.cpp
     KeyboardScalingDisplay.cpp
+    FMRackController.cpp
 )
 
 # ...existing code...

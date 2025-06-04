@@ -58,45 +58,74 @@ void FileBrowserDialog::showDialog(juce::Component* parent,
                                  std::function<void(const juce::File&)> onFileSelected,
                                  std::function<void()> onCancelled)
 {
-    fileSelectedCallback = onFileSelected;
-    cancelledCallback = onCancelled;
-    
-    setSize(600, 400);
-    
-    dialogWindow = std::make_unique<CustomDialogWindow>("Select File", juce::Colours::darkgrey, true, this);
-    dialogWindow->setContentOwned(this, false);
-    dialogWindow->setUsingNativeTitleBar(true);
-    dialogWindow->centreAroundComponent(parent, getWidth(), getHeight());
-    dialogWindow->setVisible(true);
-    dialogWindow->setResizable(true, false);
-    
-    // Add key listener to handle Escape key
-    addKeyListener(this);
-    setWantsKeyboardFocus(true);
-    grabKeyboardFocus();
+    try {
+        fileSelectedCallback = onFileSelected;
+        cancelledCallback = onCancelled;
+        // Always set a reasonable default size before showing
+        setSize(600, 400);
+        dialogWindow = std::make_unique<CustomDialogWindow>("Select File", juce::Colours::darkgrey, true, this);
+        dialogWindow->setContentOwned(this, false);
+        dialogWindow->setUsingNativeTitleBar(true);
+        dialogWindow->setResizable(true, false);
+        dialogWindow->setSize(600, 400); // Explicitly set dialog window size
+        dialogWindow->setResizeLimits(400, 300, 1920, 1080); // Prevent too small
+        dialogWindow->centreAroundComponent(parent, getWidth(), getHeight());
+        dialogWindow->setVisible(true);
+        addKeyListener(this);
+        setWantsKeyboardFocus(true);
+        grabKeyboardFocus();
+    } catch (const std::exception& e) {
+        std::cout << "[FileBrowserDialog] Exception in showDialog: " << e.what() << std::endl;
+    } catch (...) {
+        std::cout << "[FileBrowserDialog] Unknown exception in showDialog" << std::endl;
+    }
 }
 
 void FileBrowserDialog::fileDoubleClicked(const juce::File& file)
 {
-    if (file.existsAsFile())
-    {
-        if (dialogType != DialogType::Other)
-            setLastDirectory(dialogType, file.getParentDirectory());
-        if (fileSelectedCallback)
-            fileSelectedCallback(file);
-        closeDialog();
+    try {
+        if (file.existsAsFile())
+        {
+            if (dialogType != DialogType::Other)
+                setLastDirectory(dialogType, file.getParentDirectory());
+            if (fileSelectedCallback) {
+                try {
+                    fileSelectedCallback(file);
+                } catch (const std::exception& e) {
+                    std::cout << "[FileBrowserDialog] Exception in fileSelectedCallback (fileDoubleClicked): " << e.what() << std::endl;
+                } catch (...) {
+                    std::cout << "[FileBrowserDialog] Unknown exception in fileSelectedCallback (fileDoubleClicked)" << std::endl;
+                }
+            }
+            closeDialog();
+        }
+    } catch (const std::exception& e) {
+        std::cout << "[FileBrowserDialog] Exception in fileDoubleClicked: " << e.what() << std::endl;
+    } catch (...) {
+        std::cout << "[FileBrowserDialog] Unknown exception in fileDoubleClicked" << std::endl;
     }
 }
 
 void FileBrowserDialog::fileClicked(const juce::File& file, const juce::MouseEvent&)
 {
-    // Only load if it's a file and matches the expected extension (for performance dialog)
-    if (dialogType == DialogType::Performance && file.existsAsFile() && file.getFileExtension().equalsIgnoreCase(".ini"))
-    {
-        if (fileSelectedCallback)
-            fileSelectedCallback(file);
+    try {
+        if ((dialogType == DialogType::Voice || dialogType == DialogType::Performance) && file.existsAsFile())
+        {
+            if (fileSelectedCallback && dialogWindow && dialogWindow->isVisible()) {
+                try {
+                    fileSelectedCallback(file);
+                } catch (const std::exception& e) {
+                    std::cout << "[FileBrowserDialog] Exception in fileSelectedCallback (fileClicked): " << e.what() << std::endl;
+                } catch (...) {
+                    std::cout << "[FileBrowserDialog] Unknown exception in fileSelectedCallback (fileClicked)" << std::endl;
+                }
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cout << "[FileBrowserDialog] Exception in fileClicked: " << e.what() << std::endl;
+    } catch (...) {
+        std::cout << "[FileBrowserDialog] Unknown exception in fileClicked" << std::endl;
     }
-    // For other dialog types, do nothing (or extend as needed)
 }
 
 bool FileBrowserDialog::keyPressed(const juce::KeyPress& key, juce::Component*)
