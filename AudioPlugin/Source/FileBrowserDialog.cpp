@@ -88,6 +88,17 @@ void FileBrowserDialog::fileDoubleClicked(const juce::File& file)
     }
 }
 
+void FileBrowserDialog::fileClicked(const juce::File& file, const juce::MouseEvent&)
+{
+    // Only load if it's a file and matches the expected extension (for performance dialog)
+    if (dialogType == DialogType::Performance && file.existsAsFile() && file.getFileExtension().equalsIgnoreCase(".ini"))
+    {
+        if (fileSelectedCallback)
+            fileSelectedCallback(file);
+    }
+    // For other dialog types, do nothing (or extend as needed)
+}
+
 bool FileBrowserDialog::keyPressed(const juce::KeyPress& key, juce::Component*)
 {
     if (key == juce::KeyPress::escapeKey)

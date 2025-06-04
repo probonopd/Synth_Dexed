@@ -29,6 +29,10 @@ The job is ONLY complete AFTER a successful build and test run, ensuring that th
 
 For the Voice Editor: Hint: You can use C:\Users\User\Development\MiniDexed_Service_Utility\src as a reference, especially C:\Users\User\Development\MiniDexed_Service_Utility\src\voice_editor_panel.py. Port that code to AudioPlugin/Source/VoiceEditorPanel.cpp and AudioPlugin/Source/VoiceEditorPanel.h.
 
+## JUCE
+
+Use the API documentation at https://docs.juce.com/master/index.html
+
 ## Peristence
 
 In JUCE, there are several standard ways to save or persist user settings and application state:

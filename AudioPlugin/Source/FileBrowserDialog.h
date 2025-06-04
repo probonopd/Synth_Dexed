@@ -33,8 +33,8 @@ public:
     
     // Implement required pure virtual methods from juce::FileBrowserListener
     void selectionChanged() override {}
-    void fileClicked(const juce::File&, const juce::MouseEvent&) override {}
     void browserRootChanged(const juce::File&) override {}
+    void fileClicked(const juce::File&, const juce::MouseEvent&) override;
     
     friend class CustomDialogWindow;
     
