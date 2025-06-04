@@ -166,9 +166,12 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
     // Load Voice button
     loadVoiceButton.setButtonText("Load Voice");
     loadVoiceButton.onClick = [this] {
-        auto dialog = std::make_unique<FileBrowserDialog>("Select Voice File", "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*");
+        auto dialog = std::make_unique<FileBrowserDialog>(
+            "Select Voice File",
+            "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*",
+            juce::File(),
+            FileBrowserDialog::DialogType::Voice);
         auto* dialogPtr = dialog.get();
-        
         dialogPtr->showDialog(this,
             [this](const juce::File& file) {
                 loadVoiceFile(file);
@@ -176,9 +179,6 @@ ModuleTabComponent::ModuleTabComponent(FMRack::Module* modulePtr, int idx, RackA
             []() {
                 // Cancel callback - nothing needed
             });
-        
-        // Keep the dialog alive by storing it temporarily
-        // The dialog will clean itself up when closed
         dialog.release();
     };
     addAndMakeVisible(loadVoiceButton);

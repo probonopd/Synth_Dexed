@@ -1,5 +1,8 @@
 We never edit code in `src/`, except for `src/FMRack`, which contains the source code for the command line tool.
 
+When changing a .cpp file, don't forget to also changes the corresponding .h file if needed, and to adjust the CMakeLists.txt file if you add a new source file.
+When adding a new class, we always create both a .cpp and a .h file. The .h file should contain the class declaration, and the .cpp file should contain the class implementation.
+
 When changing anything in the `src/FMRack` directory, we rebuild the command line tool with:
 
 ```bash
@@ -25,3 +28,27 @@ We always use threading to ensure that the user interface remains responsive. We
 The job is ONLY complete AFTER a successful build and test run, ensuring that the code is functional and does not introduce any new issues.
 
 For the Voice Editor: Hint: You can use C:\Users\User\Development\MiniDexed_Service_Utility\src as a reference, especially C:\Users\User\Development\MiniDexed_Service_Utility\src\voice_editor_panel.py. Port that code to AudioPlugin/Source/VoiceEditorPanel.cpp and AudioPlugin/Source/VoiceEditorPanel.h.
+
+## Peristence
+
+In JUCE, there are several standard ways to save or persist user settings and application state:
+
+1. **PropertiesFile (ApplicationProperties):**
+   - JUCE provides the `juce::PropertiesFile` class, often accessed via `juce::ApplicationProperties`, for storing user settings, preferences, and last-used values.
+   - This system stores key-value pairs in a file (XML or INI format) in a user-specific location (e.g., AppData on Windows).
+   - Typical use: remembering window positions, last opened files, user preferences, etc.
+   - Example: `appProperties.getUserSettings()->setValue("lastVoiceDir", dir.getFullPathName());`
+
+2. **ValueTree State (getStateInformation/setStateInformation):**
+   - For plugins, JUCE uses a `juce::ValueTree` to serialize/deserialize plugin state.
+   - The state is saved/restored by the host (DAW) using `getStateInformation` and `setStateInformation`.
+   - This is for plugin parameters, not general app settings.
+
+3. **Manual File I/O:**
+   - You can use JUCE’s file classes (`juce::File`, `juce::FileOutputStream`, etc.) to read/write custom files (e.g., .ini, .json, .xml).
+   - This is used for things like saving patches, exporting/importing data, or custom config files.
+
+**Summary:**  
+- Use `PropertiesFile` for user preferences and last-used paths.
+- Use plugin state (ValueTree) for plugin parameters.
+- Use manual file I/O for custom data formats, such as MiniDexed Performance files in .ini format.

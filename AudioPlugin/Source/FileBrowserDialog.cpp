@@ -20,22 +20,27 @@ private:
     FileBrowserDialog* dialogOwner;
 };
 
-FileBrowserDialog::FileBrowserDialog(const juce::String&,
+FileBrowserDialog::FileBrowserDialog(const juce::String& title,
                                    const juce::String& filePattern,
-                                   const juce::File& initialDirectory)
-    : filePattern(filePattern)
+                                   const juce::File& initialDirectory,
+                                   DialogType dialogType)
+    : filePattern(filePattern), dialogType(dialogType)
 {
+    juce::File startDir = initialDirectory;
+    if (dialogType != DialogType::Other)
+    {
+        juce::File last = getLastDirectory(dialogType);
+        if (last.exists() && last.isDirectory())
+            startDir = last;
+    }
     fileBrowser = std::make_unique<juce::FileBrowserComponent>(
         juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        initialDirectory,
+        startDir,
         nullptr,
         nullptr);
-
     fileBrowser->setSize(600, 400);
-
     fileBrowser->addListener(this);
     addAndMakeVisible(fileBrowser.get());
-
     cancelButton = std::make_unique<juce::TextButton>("Cancel");
     cancelButton->addListener(this);
     addAndMakeVisible(cancelButton.get());
@@ -75,6 +80,8 @@ void FileBrowserDialog::fileDoubleClicked(const juce::File& file)
 {
     if (file.existsAsFile())
     {
+        if (dialogType != DialogType::Other)
+            setLastDirectory(dialogType, file.getParentDirectory());
         if (fileSelectedCallback)
             fileSelectedCallback(file);
         closeDialog();
@@ -120,4 +127,39 @@ void FileBrowserDialog::buttonClicked(juce::Button* button)
 {
     if (button == cancelButton.get())
         cancelButtonClicked();
+}
+
+// Static instance for plugin-wide settings
+static juce::ApplicationProperties& getAppProperties()
+{
+    static juce::ApplicationProperties props;
+    static bool initialized = false;
+    if (!initialized)
+    {
+        juce::PropertiesFile::Options options;
+        options.applicationName = "FMRack";
+        options.filenameSuffix = "settings";
+        options.osxLibrarySubFolder = "Application Support";
+        options.folderName = "FMRack";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        props.setStorageParameters(options);
+        initialized = true;
+    }
+    return props;
+}
+
+juce::File FileBrowserDialog::getLastDirectory(DialogType type)
+{
+    auto* props = getAppProperties().getUserSettings();
+    juce::String key = (type == DialogType::Voice) ? "lastVoiceDir" : (type == DialogType::Performance) ? "lastPerformanceDir" : "lastOtherDir";
+    juce::String path = props->getValue(key, juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getFullPathName());
+    return juce::File(path);
+}
+
+void FileBrowserDialog::setLastDirectory(DialogType type, const juce::File& dir)
+{
+    auto* props = getAppProperties().getUserSettings();
+    juce::String key = (type == DialogType::Voice) ? "lastVoiceDir" : (type == DialogType::Performance) ? "lastPerformanceDir" : "lastOtherDir";
+    props->setValue(key, dir.getFullPathName());
+    props->saveIfNeeded();
 }

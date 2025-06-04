@@ -126,9 +126,12 @@ void AudioPluginAudioProcessorEditor::numModulesChanged() {
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 {
-    auto dialog = std::make_unique<FileBrowserDialog>("Select Performance File", "*.ini");
+    auto dialog = std::make_unique<FileBrowserDialog>(
+        "Select Performance File",
+        "*.ini",
+        juce::File(),
+        FileBrowserDialog::DialogType::Performance);
     auto* dialogPtr = dialog.get();
-    
     dialogPtr->showDialog(this,
         [this](const juce::File& file) {
             if (file.getFileExtension().equalsIgnoreCase(".ini"))
@@ -146,9 +149,6 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
         []() {
             // Cancel callback - nothing needed
         });
-    
-    // Keep the dialog alive by storing it temporarily
-    // The dialog will clean itself up when closed
     dialog.release();
 }
 
