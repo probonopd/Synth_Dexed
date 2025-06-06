@@ -138,13 +138,49 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
             if (file.getFileExtension().equalsIgnoreCase(".ini"))
             {
                 appendLogMessage("Loading performance: " + file.getFullPathName());
-                if (processorRef.loadPerformanceFile(file.getFullPathName())) {
+                bool loaded = false;
+                try {
+                    loaded = processorRef.loadPerformanceFile(file.getFullPathName());
+                } catch (const std::exception& e) {
+                    appendLogMessage("Exception loading performance: " + juce::String(e.what()));
+                    std::cout << "[PluginEditor] Exception in loadPerformanceFile: " << e.what() << std::endl;
+                } catch (...) {
+                    appendLogMessage("Unknown exception loading performance file.");
+                    std::cout << "[PluginEditor] Unknown exception in loadPerformanceFile" << std::endl;
+                }
+                if (loaded) {
                     appendLogMessage("Performance loaded successfully.");
                 } else {
                     appendLogMessage("Failed to load performance file.");
                 }
-                if (rackAccordion)
-                    rackAccordion->updatePanels();
+                // Defensive: updatePanels only if rackAccordion is valid and no file dialogs are open
+                if (rackAccordion) {
+                    bool canUpdate = true;
+                    try {
+                        // Check for open file dialogs in module tabs (use public getter)
+                        for (const auto& tab : rackAccordion->getModuleTabs()) {
+                            if (tab && tab->isFileDialogOpen()) {
+                                appendLogMessage("[WARNING] Skipping updatePanels: a Load Voice file dialog is open.");
+                                canUpdate = false;
+                                break;
+                            }
+                        }
+                    } catch (...) {
+                        appendLogMessage("[PluginEditor] Exception checking file dialogs in moduleTabs.");
+                        canUpdate = false;
+                    }
+                    if (canUpdate) {
+                        try {
+                            rackAccordion->updatePanels();
+                        } catch (const std::exception& e) {
+                            appendLogMessage("Exception in rackAccordion->updatePanels: " + juce::String(e.what()));
+                            std::cout << "[PluginEditor] Exception in updatePanels: " << e.what() << std::endl;
+                        } catch (...) {
+                            appendLogMessage("Unknown exception in rackAccordion->updatePanels.");
+                            std::cout << "[PluginEditor] Unknown exception in updatePanels" << std::endl;
+                        }
+                    }
+                }
             }
         },
         []() {

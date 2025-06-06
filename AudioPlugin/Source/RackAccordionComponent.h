@@ -30,6 +30,9 @@ public:
     AudioPluginAudioProcessorEditor* getEditor() const { return editor; }
     void setEditor(AudioPluginAudioProcessorEditor* ed) { editor = ed; }
     
+    // Expose moduleTabs for safe read-only access (for crash prevention logic)
+    const std::vector<std::unique_ptr<ModuleTabComponent>>& getModuleTabs() const { return moduleTabs; }
+
 private:
     void syncNumModulesSliderWithRack();
     AudioPluginAudioProcessor* processor;
