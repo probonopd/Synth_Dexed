@@ -9,7 +9,8 @@
 
 using namespace juce;
 
-// OperatorSliderLookAndFeel operatorSliderLookAndFeel; // Global instance
+// Global instance for operator slider look
+static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
 
 VoiceEditorPanel::VoiceEditorPanel()
 {
@@ -67,6 +68,10 @@ VoiceEditorPanel::VoiceEditorPanel()
             op->label.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
             op->label.setColour(juce::Label::textColourId, juce::Colours::white);
             op->label.setJustificationType(juce::Justification::centred);
+            // Apply custom look and feel to all operator sliders
+            for (int s = 0; s < op->NumSliders; ++s) {
+                op->sliders[s].setLookAndFeel(&operatorSliderLookAndFeel);
+            }
             addAndMakeVisible(*op);
             operators.push_back(std::move(op));
         }

@@ -8,6 +8,7 @@ set(SOURCES
     EnvelopeDisplay.cpp
     KeyboardScalingDisplay.cpp
     FMRackController.cpp
+    OperatorSliderLookAndFeel.cpp
 )
 
 # ...existing code...
