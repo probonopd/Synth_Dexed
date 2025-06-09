@@ -266,9 +266,30 @@ void VoiceEditorPanel::loadHelpJson() {
             auto* obj = p.getDynamicObject();
             if (obj) {
                 auto key = obj->getProperty("key").toString().toStdString();
-                auto desc = obj->getProperty("long_description").toString();
+                juce::String name = obj->getProperty("name").toString();
+                juce::String range = obj->getProperty("range").toString();
+                juce::String desc = obj->getProperty("long_description").toString();
                 if (desc.isEmpty()) desc = obj->getProperty("description").toString();
-                helpTextByKey[key] = desc.toStdString();
+                juce::String shortDesc = obj->getProperty("description").toString();
+                juce::String reference = obj->getProperty("reference").toString();
+
+                juce::String hoverText;
+                // First line: name (range)
+                hoverText << name;
+                if (!range.isEmpty())
+                    hoverText << " (" << range << ")";
+                hoverText << "\n";
+                // Second line: short description or range
+                if (!shortDesc.isEmpty() && shortDesc != desc)
+                    hoverText << shortDesc << "\n";
+                // Blank line
+                hoverText << "\n";
+                // Long description
+                hoverText << desc << "\n";
+                // Reference, if present
+                if (!reference.isEmpty())
+                    hoverText << "\nReference: " << reference << "\n";
+                helpTextByKey[key] = hoverText.toStdString();
             }
         }
     }
@@ -342,7 +363,7 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
         int opIdx = opNum - 1; // OP1 = 0, OP6 = 5
         carrier = parent->isCarrier(opIdx);
     }
-    g.setColour(carrier ? Colour(0xff1e3d2f) : Colour(0xff222024));
+    g.setColour(carrier ? Colour(44, 67, 63) : Colour(33, 33, 33)); // greenish for carrier, dark for non-carrier
     g.fillRoundedRectangle(area, 6.0f);
 }
 
