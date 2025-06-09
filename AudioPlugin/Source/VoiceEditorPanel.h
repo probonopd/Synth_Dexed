@@ -72,7 +72,6 @@ private:
     juce::Label helpPanel;
 
     void loadAlgorithmSvg(int algorithmIdx);
-    void updateOperatorColors();
     void updateStatusBar(const juce::String& text);
     void setupOperatorSlider(juce::Slider& slider, const juce::String& name, int min, int max, int defaultValue);
 

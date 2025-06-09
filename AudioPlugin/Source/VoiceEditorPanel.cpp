@@ -196,7 +196,7 @@ void VoiceEditorPanel::resized() {
 
             // Operator controls: positioned after SVG area but still within full-width row
             auto opBounds = juce::Rectangle<int>(
-                svgPanelWidth,  // Start after SVG area
+                0,
                 opArea.getY() + i * opH,
                 opArea.getWidth(),  // Take remaining width
                 opH - 2
@@ -238,12 +238,6 @@ void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
     }
     std::cout << "[VoiceEditorPanel] loadAlgorithmSvg finished, calling repaint()" << std::endl;
     repaint();
-}
-
-void VoiceEditorPanel::updateOperatorColors() {
-    // Skip operator operations since operators vector is not initialized in minimal version
-    // This will be implemented later when full operator support is added
-    std::cout << "[VoiceEditorPanel] updateOperatorColors() called (minimal implementation)" << std::endl;
 }
 
 void VoiceEditorPanel::updateStatusBar(const String& text) {
@@ -299,13 +293,15 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
 // OperatorSliders implementation
 VoiceEditorPanel::OperatorSliders::OperatorSliders() {
     addAndMakeVisible(label);
-    addAndMakeVisible(envWidget);
-    addAndMakeVisible(ksWidget);
+
     // Add all sliders and labels using arrays
     for (int i = 0; i < NumSliders; ++i) {
         addAndMakeVisible(sliders[i]);
         addAndMakeVisible(sliderLabels[i]);
     }
+
+    addAndMakeVisible(envWidget);
+    addAndMakeVisible(ksWidget);
 }
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
@@ -331,7 +327,7 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     int sliderW = 32, sliderH = area.getHeight() - 20;
     int gap = 0;
     int y = area.getY();
-    int x = area.getX();
+    int x = area.getX() + 60;
     // Layout: OPE, TL | PM, PC, PF, PD | AMS, TS, RS
     // Draw vertical spacers after TL and PD
     for (int i = 0; i < NumSliders; ++i) {
