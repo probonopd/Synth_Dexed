@@ -9,7 +9,7 @@
 
 using namespace juce;
 
-OperatorSliderLookAndFeel operatorSliderLookAndFeel; // Global instance
+// OperatorSliderLookAndFeel operatorSliderLookAndFeel; // Global instance
 
 VoiceEditorPanel::VoiceEditorPanel()
 {
@@ -107,43 +107,34 @@ VoiceEditorPanel::~VoiceEditorPanel() {
 
 void VoiceEditorPanel::paint(Graphics& g) {
     g.fillAll(Colour(0xff332b28));
-    
+    // Do not paint the SVG here anymore; it will be painted in paintOverChildren
+}
+
+void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
     // Draw SVG with precise alignment based on operator 6 and operator 1 row centers
     if (algorithmSvg && operatorRowCenters.size() >= 6) {
-        std::cout << "[VoiceEditorPanel] Drawing algorithm SVG with precise alignment" << std::endl;
-        
-        // Calculate distance between operator 6 and operator 1 row centers in UI
-        float op6Center = operatorRowCenters[0]; // Operator 6 (first in list)
-        float op1Center = operatorRowCenters[5]; // Operator 1 (last in list)
+        std::cout << "[VoiceEditorPanel] Drawing algorithm SVG with precise alignment (paintOverChildren)" << std::endl;
+        float op6Center = operatorRowCenters[0];
+        float op1Center = operatorRowCenters[5];
         float uiDistance = op1Center - op6Center;
-        
         std::cout << "[VoiceEditorPanel] Op6 center: " << op6Center << ", Op1 center: " << op1Center << std::endl;
         std::cout << "[VoiceEditorPanel] UI distance between op6 and op1: " << uiDistance << std::endl;
-
         auto svgBounds = algorithmSvg->getDrawableBounds();
-        float svgNumberDistance = svgBounds.getHeight() * 0.71f; // Estimate: numbers span 71% of SVG height
+        float svgNumberDistance = svgBounds.getHeight() * 0.71f;
         float scaleFactor = uiDistance / svgNumberDistance;
-
-        // Always align SVG's leftmost bound to the absolute left edge (x=0)
-        float offsetX = 10.0f; // Fixed offset to align left edge of SVG with left edge of window
+        float offsetX = 10.0f;
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scaleFactor;
-
-        // Transform: scale, then translate to (0, y) in window
         auto transform = AffineTransform::scale(scaleFactor, scaleFactor)
             .followedBy(AffineTransform::translation(offsetX, offsetY));
-
         std::cout << "[VoiceEditorPanel] SVG number distance estimate: " << svgNumberDistance << std::endl;
         std::cout << "[VoiceEditorPanel] Scale factor: " << scaleFactor << std::endl;
         std::cout << "[VoiceEditorPanel] Final offset: " << offsetX << ", " << offsetY << std::endl;
-
         algorithmSvg->draw(g, 1.0f, transform);
     } else if (algorithmSvg) {
-        // Fallback: draw SVG in SVG area without alignment
-        std::cout << "[VoiceEditorPanel] Drawing SVG without alignment (fallback)" << std::endl;
+        std::cout << "[VoiceEditorPanel] Drawing SVG without alignment (fallback, paintOverChildren)" << std::endl;
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float scale = std::min(svgDrawArea.getWidth() / svgBounds.getWidth(), 
                               svgDrawArea.getHeight() / svgBounds.getHeight());
-        // Always align SVG's leftmost bound to the absolute left edge (x=0)
         float offsetX = -svgBounds.getX() * scale;
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scale;
         juce::AffineTransform transform = juce::AffineTransform::scale(scale)
@@ -272,7 +263,7 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& /*name*
 }
 
 std::vector<int> VoiceEditorPanel::getCarrierIndicesForAlgorithm(int algoIdx) const {
-    // Ported from Python DX7_CARRIER_MAP, 0=OP1, 5=OP6
+    // Define which operators are carriers; 0=OP1, 5=OP6
     static const std::vector<std::vector<int>> carrierMap = {
         {0, 2}, {0, 2}, {0, 3}, {0, 3}, {0, 2, 4}, {0, 2, 4}, {0, 2}, {0, 2},
         {0, 2}, {0, 3}, {0, 3}, {0, 2}, {0, 2}, {0, 2}, {0, 2}, {0},
@@ -303,9 +294,6 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
     }
     g.setColour(carrier ? Colour(0xff1e3d2f) : Colour(0xff222024));
     g.fillRoundedRectangle(area, 6.0f);
-    // Draw turquoise border
-    g.setColour(Colour(0xff00e6ff));
-    g.drawRoundedRectangle(area, 6.0f, 2.0f);
 }
 
 // OperatorSliders implementation
@@ -313,20 +301,11 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders() {
     addAndMakeVisible(label);
     addAndMakeVisible(envWidget);
     addAndMakeVisible(ksWidget);
-    // Use helper to add sliders and labels
-    auto addSliderAndLabel = [this](juce::Slider& slider, juce::Label& label) {
-        addAndMakeVisible(slider);
-        addAndMakeVisible(label);
-    };
-    addSliderAndLabel(tl, tlLabel);
-    addSliderAndLabel(egR1, egR1Label);
-    addSliderAndLabel(egR2, egR2Label);
-    addSliderAndLabel(egR3, egR3Label);
-    addSliderAndLabel(egR4, egR4Label);
-    addSliderAndLabel(ampModSense, ampModSenseLabel);
-    addSliderAndLabel(keyVelSense, keyVelSenseLabel);
-    addSliderAndLabel(rateScaling, rateScalingLabel);
-    setAllOperatorSliderLookAndFeel();
+    // Add all sliders and labels using arrays
+    for (int i = 0; i < NumSliders; ++i) {
+        addAndMakeVisible(sliders[i]);
+        addAndMakeVisible(sliderLabels[i]);
+    }
 }
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
@@ -339,14 +318,9 @@ void VoiceEditorPanel::OperatorSliders::addAndLayoutSliderWithLabel(juce::Slider
     label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(label);
     slider.setSliderStyle(juce::Slider::LinearVertical);
+    // slider.setLookAndFeel(&operatorSliderLookAndFeel);
     slider.setBounds(x, y, w, h); x += w + gap;
     label.setBounds(x - w, y + h, w, 20);
-}
-
-void VoiceEditorPanel::OperatorSliders::setAllOperatorSliderLookAndFeel() {
-    static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
-    for (auto* s : std::initializer_list<juce::Slider*>{&tl, &egR1, &egR2, &egR3, &egR4, &ampModSense, &keyVelSense, &rateScaling})
-        s->setLookAndFeel(&operatorSliderLookAndFeel);
 }
 
 void VoiceEditorPanel::OperatorSliders::resized() {
@@ -355,19 +329,12 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     ksWidget.setBounds(area.removeFromRight(40).reduced(2));
     envWidget.setBounds(area.removeFromRight(40).reduced(2));
     int sliderW = 32, sliderH = area.getHeight() - 20;
-    int gap = 8;
+    int gap = 0;
     int y = area.getY();
     int x = area.getX();
-    addAndLayoutSliderWithLabel(tl, tlLabel, "TL", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(egR1, egR1Label, "PM", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(egR2, egR2Label, "PC", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(egR3, egR3Label, "PF", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(egR4, egR4Label, "PD", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(ampModSense, ampModSenseLabel, "AMS", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(keyVelSense, keyVelSenseLabel, "TS", x, y, sliderW, sliderH, gap);
-    addAndLayoutSliderWithLabel(rateScaling, rateScalingLabel, "RS", x, y, sliderW, sliderH, gap);
-}
-
-void VoiceEditorPanel::paintOverChildren(juce::Graphics&) {
-    // No overlay painting needed for now
+    // Layout: OPE, TL | PM, PC, PF, PD | AMS, TS, RS
+    // Draw vertical spacers after TL and PD
+    for (int i = 0; i < NumSliders; ++i) {
+        addAndLayoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], x, y, sliderW, sliderH, gap);
+    }
 }

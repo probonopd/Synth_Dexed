@@ -2,7 +2,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "EnvelopeDisplay.h"
 #include "KeyboardScalingDisplay.h"
-#include "OperatorSliderLookAndFeel.h"
+// #include "OperatorSliderLookAndFeel.h"
 
 // VoiceEditorPanel: A panel for editing a single DX7 voice, styled after the classic DX7 UI.
 // Envelope and keyboard scaling widgets are placeholders for now.
@@ -17,9 +17,32 @@ public:
 private:
     // Operator slider group
     struct OperatorSliders : public juce::Component {
-        juce::Slider tl, ratio, coarse, fine, egR1, egR2, egR3, egR4, egL1, egL2, egL3, egL4, levSclBrkPt, sclLeftDepth, sclRightDepth, sclLeftCurve, sclRightCurve, rateScaling, ampModSense, keyVelSense, oscMode, freqCoarse, freqFine, detune, ampModEnable;
+        // Define slider list macro for enum and string names
+#define OPERATOR_SLIDER_LIST \
+    X(OPE) \
+    X(TL) \
+    X(PM) \
+    X(PC) \
+    X(PF) \
+    X(PD) \
+    X(AMS) \
+    X(TS) \
+    X(RS)
+
+        enum SliderId {
+#define X(name) name,
+            OPERATOR_SLIDER_LIST
+#undef X
+            NumSliders
+        };
+        static constexpr const char* sliderNames[NumSliders] = {
+#define X(name) #name,
+            OPERATOR_SLIDER_LIST
+#undef X
+        };
+        std::array<juce::Slider, NumSliders> sliders;
+        std::array<juce::Label, NumSliders> sliderLabels;
         juce::Label label;
-        juce::Label tlLabel, ratioLabel, coarseLabel, fineLabel, egR1Label, egR2Label, egR3Label, egR4Label, egL1Label, egL2Label, egL3Label, egL4Label, levSclBrkPtLabel, sclLeftDepthLabel, sclRightDepthLabel, sclLeftCurveLabel, sclRightCurveLabel, rateScalingLabel, ampModSenseLabel, keyVelSenseLabel, oscModeLabel, freqCoarseLabel, freqFineLabel, detuneLabel, ampModEnableLabel;
         EnvelopeDisplay envWidget;
         KeyboardScalingDisplay ksWidget;
 
@@ -28,7 +51,6 @@ private:
         void paint(juce::Graphics&) override;
         void resized() override;
         void addAndLayoutSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap);
-        void setAllOperatorSliderLookAndFeel();
     };
     std::vector<std::unique_ptr<OperatorSliders>> operators;
 
