@@ -1,4 +1,5 @@
 #include "KeyboardScalingDisplay.h"
+#include "VoiceEditorPanel.h"
 
 KeyboardScalingDisplay::KeyboardScalingDisplay() = default;
 
@@ -30,4 +31,22 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white);
     g.setFont(8.0f);
     g.drawText("KS", area, juce::Justification::centred);
+}
+
+void KeyboardScalingDisplay::mouseEnter(const juce::MouseEvent& e) {
+    if (auto* parent = getParentComponent()) {
+        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
+            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
+                vep->showHelpForKey("RD"); // Or more specific
+        }
+    }
+}
+
+void KeyboardScalingDisplay::mouseExit(const juce::MouseEvent& e) {
+    if (auto* parent = getParentComponent()) {
+        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
+            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
+                vep->restoreDefaultHelp();
+        }
+    }
 }

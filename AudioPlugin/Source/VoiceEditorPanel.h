@@ -2,6 +2,9 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "EnvelopeDisplay.h"
 #include "KeyboardScalingDisplay.h"
+#include <juce_data_structures/juce_data_structures.h>
+#include <map>
+
 // #include "OperatorSliderLookAndFeel.h"
 
 // VoiceEditorPanel: A panel for editing a single DX7 voice, styled after the classic DX7 UI.
@@ -13,8 +16,9 @@ public:
     void paint(juce::Graphics&) override;
     void paintOverChildren(juce::Graphics&) override;
     void resized() override;
+    void showHelpForKey(const juce::String& key);
+    void restoreDefaultHelp();
 
-private:
     // Operator slider group
     struct OperatorSliders : public juce::Component {
         // Define slider list macro for enum and string names
@@ -46,11 +50,16 @@ private:
         EnvelopeDisplay envWidget;
         KeyboardScalingDisplay ksWidget;
 
-        OperatorSliders();
+        OperatorSliders(); // Declaration only, implementation in cpp file
         ~OperatorSliders() override;
         void paint(juce::Graphics&) override;
         void resized() override;
         void addAndLayoutSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap);
+        void mouseEnter(const juce::MouseEvent&) override;
+        void mouseExit(const juce::MouseEvent&) override;
+        void mouseMove(const juce::MouseEvent&) override;
+        void sliderMouseEnter(int sliderIdx);
+        void sliderMouseExit(int sliderIdx);
     };
     std::vector<std::unique_ptr<OperatorSliders>> operators;
 
@@ -71,9 +80,15 @@ private:
     juce::Label statusBar;
     juce::Label helpPanel;
 
+    // Help data loaded from JSON
+    juce::var helpJson;
+    std::map<std::string, std::string> helpTextByKey;
+    juce::String defaultHelpText;
+
     void loadAlgorithmSvg(int algorithmIdx);
     void updateStatusBar(const juce::String& text);
     void setupOperatorSlider(juce::Slider& slider, const juce::String& name, int min, int max, int defaultValue);
+    void loadHelpJson();
 
     // Returns true if the given operator is a carrier for the current algorithm
     bool isCarrier(int opIdx) const;
@@ -81,6 +96,8 @@ private:
     uint8_t getCarrierMaskForAlgorithm(int algoIdx) const;
     // Returns the carrier indices for the current algorithm (vector of operator indices, 0=OP1, 5=OP6)
     std::vector<int> getCarrierIndicesForAlgorithm(int algoIdx) const;
+
+    friend struct OperatorSliders;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoiceEditorPanel)
 };

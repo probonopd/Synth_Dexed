@@ -50,7 +50,8 @@ VoiceEditorPanel::VoiceEditorPanel()
         addAndMakeVisible(statusBar);
 
         // Help panel
-        helpPanel.setText("Keyboard Scaling Right Depth (RD)\nRange: 0 – 99\n\nAmount of level scaling applied to notes to the right of the break point (higher notes).\n\nA higher value increases the volume of higher notes more, making them sound brighter and more present. A lower value decreases this effect, which can make higher notes sound more subdued. This balances the response of the instrument across its range.\n\nReference: Massey, The Complete DX7, chapter 12: Keyboard Level Scaling.", juce::dontSendNotification);
+        defaultHelpText = "DX7 Voice Editor\nHover over a control for help.";
+        helpPanel.setText(defaultHelpText, juce::dontSendNotification);
         helpPanel.setFont(juce::Font(12.0f));
         helpPanel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff222222));
         helpPanel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -90,6 +91,7 @@ VoiceEditorPanel::VoiceEditorPanel()
         };
         // Load initial SVG
         loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);
+        loadHelpJson();
     }
     catch (const std::exception& e) {
         std::cout << "[VoiceEditorPanel] Exception in constructor: " << e.what() << std::endl;
@@ -240,6 +242,55 @@ void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
     repaint();
 }
 
+void VoiceEditorPanel::loadHelpJson() {
+    using namespace juce;
+    // Use JUCE BinaryData for VCED.json
+    auto* data = BinaryData::VCED_json;
+    int dataSize = BinaryData::VCED_jsonSize;
+    std::cout << "[VoiceEditorPanel] Loading help JSON from BinaryData (embedded resource)" << std::endl;
+    juce::String jsonStr = juce::String::fromUTF8((const char*)data, dataSize);
+    var json = JSON::parse(jsonStr);
+    if (!json.isObject()) {
+        std::cout << "[VoiceEditorPanel] VCED.json parse failed" << std::endl;
+        return;
+    }
+    helpJson = json;
+    helpTextByKey.clear();
+    if (auto* params = json["parameters"].getArray()) {
+        for (auto& p : *params) {
+            auto* obj = p.getDynamicObject();
+            if (obj) {
+                auto key = obj->getProperty("key").toString().toStdString();
+                auto desc = obj->getProperty("long_description").toString();
+                if (desc.isEmpty()) desc = obj->getProperty("description").toString();
+                helpTextByKey[key] = desc.toStdString();
+            }
+        }
+    }
+    // Log all loaded keys
+    for (const auto& pair : helpTextByKey)
+        std::cout << "[VoiceEditorPanel] Loaded help key: '" << pair.first << "'" << std::endl;
+}
+
+void VoiceEditorPanel::showHelpForKey(const juce::String& key) {
+    std::cout << "[VoiceEditorPanel] showHelpForKey: key=" << key << std::endl;
+    auto it = helpTextByKey.find(key.toStdString());
+    if (it != helpTextByKey.end()) {
+        std::cout << "[VoiceEditorPanel] Found help for key: " << key << std::endl;
+        helpPanel.setText(it->second, juce::sendNotification);
+        helpPanel.repaint();
+    } else {
+        std::cout << "[VoiceEditorPanel] No help found for key: " << key << std::endl;
+        helpPanel.setText(defaultHelpText, juce::sendNotification);
+        helpPanel.repaint();
+    }
+}
+
+void VoiceEditorPanel::restoreDefaultHelp() {
+    helpPanel.setText(defaultHelpText, juce::sendNotification);
+    helpPanel.repaint();
+}
+
 void VoiceEditorPanel::updateStatusBar(const String& text) {
     statusBar.setText(text, dontSendNotification);
 }
@@ -292,16 +343,11 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
 
 // OperatorSliders implementation
 VoiceEditorPanel::OperatorSliders::OperatorSliders() {
-    addAndMakeVisible(label);
-
-    // Add all sliders and labels using arrays
     for (int i = 0; i < NumSliders; ++i) {
-        addAndMakeVisible(sliders[i]);
-        addAndMakeVisible(sliderLabels[i]);
+        sliders[i].addMouseListener(this, true); // Ensure mouse events are forwarded
     }
-
-    addAndMakeVisible(envWidget);
-    addAndMakeVisible(ksWidget);
+    envWidget.addMouseListener(this, true);
+    ksWidget.addMouseListener(this, true);
 }
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
@@ -334,3 +380,68 @@ void VoiceEditorPanel::OperatorSliders::resized() {
         addAndLayoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], x, y, sliderW, sliderH, gap);
     }
 }
+
+void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
+    std::cout << "[OperatorSliders] mouseEnter: eventComponent=" << e.eventComponent << std::endl;
+    for (int i = 0; i < NumSliders; ++i) {
+        if (e.eventComponent == &sliders[i]) {
+            std::cout << "[OperatorSliders] mouseEnter on slider " << sliderNames[i] << std::endl;
+            sliderMouseEnter(i);
+            return;
+        }
+    }
+    if (e.eventComponent == &envWidget) {
+        std::cout << "[OperatorSliders] mouseEnter on envWidget" << std::endl;
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+            parent->showHelpForKey("R1");
+        return;
+    }
+    if (e.eventComponent == &ksWidget) {
+        std::cout << "[OperatorSliders] mouseEnter on ksWidget" << std::endl;
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+            parent->showHelpForKey("RD");
+        return;
+    }
+}
+
+void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
+    std::cout << "[OperatorSliders] mouseExit: eventComponent=" << e.eventComponent << std::endl;
+    for (int i = 0; i < NumSliders; ++i) {
+        if (e.eventComponent == &sliders[i]) {
+            std::cout << "[OperatorSliders] mouseExit on slider " << sliderNames[i] << std::endl;
+            sliderMouseExit(i);
+            return;
+        }
+    }
+    if (e.eventComponent == &envWidget || e.eventComponent == &ksWidget) {
+        std::cout << "[OperatorSliders] mouseExit on envWidget or ksWidget" << std::endl;
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+            parent->restoreDefaultHelp();
+        return;
+    }
+}
+
+void VoiceEditorPanel::OperatorSliders::mouseMove(const juce::MouseEvent& e) {
+    std::cout << "[OperatorSliders] mouseMove: eventComponent=" << e.eventComponent << std::endl;
+    for (int i = 0; i < NumSliders; ++i) {
+        if (sliders[i].isMouseOver(true)) {
+            std::cout << "[OperatorSliders] mouseMove over slider " << sliderNames[i] << std::endl;
+            sliderMouseEnter(i);
+            return;
+        }
+    }
+}
+
+void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx) {
+    std::cout << "[OperatorSliders] sliderMouseEnter: " << sliderNames[sliderIdx] << std::endl;
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+        parent->showHelpForKey(sliderNames[sliderIdx]);
+}
+
+void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
+    std::cout << "[OperatorSliders] sliderMouseExit: " << sliderNames[sliderIdx] << std::endl;
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+        parent->restoreDefaultHelp();
+}
+
+// EnvelopeDisplay mouse hover

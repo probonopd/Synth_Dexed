@@ -6,6 +6,8 @@ public:
     KeyboardScalingDisplay();
     void paint(juce::Graphics& g) override;
     void setScalingParams(float breakPoint, float leftDepth, float rightDepth, float leftCurve, float rightCurve);
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
 private:
     float breakPoint = 0.5f;
     float leftDepth = 0.0f;

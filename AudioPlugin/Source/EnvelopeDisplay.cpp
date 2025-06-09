@@ -1,4 +1,5 @@
 #include "EnvelopeDisplay.h"
+#include "VoiceEditorPanel.h"
 
 EnvelopeDisplay::EnvelopeDisplay() = default;
 
@@ -37,4 +38,22 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white);
     g.setFont(8.0f);
     g.drawText("ENV", area, juce::Justification::centred);
+}
+
+void EnvelopeDisplay::mouseEnter(const juce::MouseEvent& e) {
+    if (auto* parent = getParentComponent()) {
+        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
+            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
+                vep->showHelpForKey("R1"); // Or more specific
+        }
+    }
+}
+
+void EnvelopeDisplay::mouseExit(const juce::MouseEvent& e) {
+    if (auto* parent = getParentComponent()) {
+        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
+            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
+                vep->restoreDefaultHelp();
+        }
+    }
 }
