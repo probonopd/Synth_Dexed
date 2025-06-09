@@ -70,12 +70,15 @@ VoiceEditorPanel::VoiceEditorPanel()
         algorithmSelector.onChange = [this]() {
             try {
                 int idx = algorithmSelector.getSelectedId() - 1;
+                std::cout << "[VoiceEditorPanel] algorithmSelector.onChange triggered, idx=" << idx << std::endl;
                 currentAlgorithm = idx;
                 loadAlgorithmSvg(idx);
+                std::cout << "[VoiceEditorPanel] Calling resized() and repaint() after SVG load" << std::endl;
+                resized(); // Ensure operatorRowCenters is up to date
+                repaint();
                 for (int i = 0; i < operators.size(); ++i) {
                     operators[i]->repaint();
                 }
-                repaint();
             } catch (const std::exception& e) {
                 std::cout << "[VoiceEditorPanel] Exception in algorithmSelector.onChange: " << e.what() << std::endl;
             } catch (...) {
@@ -101,9 +104,48 @@ VoiceEditorPanel::~VoiceEditorPanel() {
 
 void VoiceEditorPanel::paint(Graphics& g) {
     g.fillAll(Colour(0xff332b28));
-    // Draw SVG overlay if loaded
-    if (algorithmSvg) {
-        algorithmSvg->draw(g, 1.0f);
+    
+    // Draw SVG with precise alignment based on operator 6 and operator 1 row centers
+    if (algorithmSvg && operatorRowCenters.size() >= 6) {
+        std::cout << "[VoiceEditorPanel] Drawing algorithm SVG with precise alignment" << std::endl;
+        
+        // Calculate distance between operator 6 and operator 1 row centers in UI
+        float op6Center = operatorRowCenters[0]; // Operator 6 (first in list)
+        float op1Center = operatorRowCenters[5]; // Operator 1 (last in list)
+        float uiDistance = op1Center - op6Center;
+        
+        std::cout << "[VoiceEditorPanel] Op6 center: " << op6Center << ", Op1 center: " << op1Center << std::endl;
+        std::cout << "[VoiceEditorPanel] UI distance between op6 and op1: " << uiDistance << std::endl;
+
+        auto svgBounds = algorithmSvg->getDrawableBounds();
+        float svgNumberDistance = svgBounds.getHeight() * 0.71f; // Estimate: numbers span 71% of SVG height
+        float scaleFactor = uiDistance / svgNumberDistance;
+
+        // Always align SVG's leftmost bound to the absolute left edge (x=0)
+        float offsetX = 10.0f; // Fixed offset to align left edge of SVG with left edge of window
+        float offsetY = svgDrawArea.getY() - svgBounds.getY() * scaleFactor;
+
+        // Transform: scale, then translate to (0, y) in window
+        auto transform = AffineTransform::scale(scaleFactor, scaleFactor)
+            .followedBy(AffineTransform::translation(offsetX, offsetY));
+
+        std::cout << "[VoiceEditorPanel] SVG number distance estimate: " << svgNumberDistance << std::endl;
+        std::cout << "[VoiceEditorPanel] Scale factor: " << scaleFactor << std::endl;
+        std::cout << "[VoiceEditorPanel] Final offset: " << offsetX << ", " << offsetY << std::endl;
+
+        algorithmSvg->draw(g, 1.0f, transform);
+    } else if (algorithmSvg) {
+        // Fallback: draw SVG in SVG area without alignment
+        std::cout << "[VoiceEditorPanel] Drawing SVG without alignment (fallback)" << std::endl;
+        auto svgBounds = algorithmSvg->getDrawableBounds();
+        float scale = std::min(svgDrawArea.getWidth() / svgBounds.getWidth(), 
+                              svgDrawArea.getHeight() / svgBounds.getHeight());
+        // Always align SVG's leftmost bound to the absolute left edge (x=0)
+        float offsetX = -svgBounds.getX() * scale;
+        float offsetY = svgDrawArea.getY() - svgBounds.getY() * scale;
+        juce::AffineTransform transform = juce::AffineTransform::scale(scale)
+                                                                .translated(offsetX, offsetY);
+        algorithmSvg->draw(g, 1.0f, transform);
     }
 }
 
@@ -123,32 +165,33 @@ void VoiceEditorPanel::resized() {
     channelLabel.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap, topControls.getY(), colW, 24);
     channelSelector.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap + colW, topControls.getY(), 60, 24);
 
-    // Layout: SVG (left), operator sliders (center), help panel (right)
     int helpPanelWidth = 280;
-    int svgPanelWidth = 200;
+    int svgPanelWidth = 100;
     int margin = 10;
-    int opPanelWidth = area.getWidth() - svgPanelWidth - helpPanelWidth - 3 * margin;
-    int opPanelX = area.getX() + svgPanelWidth + margin;
 
-    // SVG area: fill most of the left side vertically
-    auto svgArea = juce::Rectangle<int>(area.getX() + margin, area.getY() + margin, svgPanelWidth - margin, area.getHeight() - 2 * margin);
-    svgDrawArea = svgArea.toFloat(); // Save for paint()
+    // SVG draw area: always at the left edge of the window, full height minus margins
+    svgDrawArea = juce::Rectangle<float>(0, area.getY() + margin, svgPanelWidth, area.getHeight() - 2 * margin);
 
     // Help panel on the right
     helpPanel.setBounds(area.getRight() - helpPanelWidth, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
 
-    // Operator sliders: fill center area, stacked vertically
-    auto opArea = juce::Rectangle<int>(opPanelX, area.getY() + margin, opPanelWidth, area.getHeight() - 2 * margin);
+    // Operator rows: span from after SVG area to help panel
+    auto opArea = juce::Rectangle<int>(svgPanelWidth, area.getY() + margin, area.getWidth() - helpPanelWidth - svgPanelWidth - margin, area.getHeight() - 2 * margin);
+
+    // Store operator row centers for SVG alignment
+    operatorRowCenters.clear();
     if (!operators.empty()) {
-        // Add a left column for operator numbers (SVG-style), vertically aligned with each operator row
         int opCount = 6;
         int opH = (opArea.getHeight() - 10) / opCount;
         int opNumColW = 36;
         for (int i = 0; i < opCount; ++i) {
             int opIdx = i;
-            int opNum = 6 - i;
+            float rowCenterY = opArea.getY() + i * opH + opH * 0.5f;
+            operatorRowCenters.push_back(rowCenterY);
+
+            // Operator number label: positioned in the SVG area (left part of full-width row)
             juce::Rectangle<int> opNumBounds(
-                opArea.getX(),
+                0, // always at the left edge
                 opArea.getY() + i * opH,
                 opNumColW,
                 opH - 2
@@ -156,11 +199,12 @@ void VoiceEditorPanel::resized() {
             if (operators[opIdx]) {
                 operators[opIdx]->label.setBounds(opNumBounds.reduced(0, 0));
             }
-            // Operator row (rest of row, right of number)
+
+            // Operator controls: positioned after SVG area but still within full-width row
             auto opBounds = juce::Rectangle<int>(
-                opArea.getX() + opNumColW,
+                svgPanelWidth,  // Start after SVG area
                 opArea.getY() + i * opH,
-                opArea.getWidth() - opNumColW,
+                opArea.getWidth(),  // Take remaining width
                 opH - 2
             );
             if (operators[opIdx]) {
@@ -171,6 +215,7 @@ void VoiceEditorPanel::resized() {
 }
 
 void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
+    std::cout << "[VoiceEditorPanel] loadAlgorithmSvg called with algorithmIdx=" << algorithmIdx << std::endl;
     // Use JUCE BinaryData for SVGs
     juce::String symbol = "algorithm" + juce::String(algorithmIdx + 1).paddedLeft('0', 2) + "_svg";
     juce::String symbolSize = symbol + "Size";
@@ -197,6 +242,8 @@ void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
         algorithmSvg.reset();
         std::cout << "[VoiceEditorPanel] SVG not found in BinaryData: " << symbol << std::endl;
     }
+    std::cout << "[VoiceEditorPanel] loadAlgorithmSvg finished, calling repaint()" << std::endl;
+    repaint();
 }
 
 void VoiceEditorPanel::updateOperatorColors() {
@@ -256,4 +303,8 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
     // Draw turquoise border
     g.setColour(Colour(0xff00e6ff));
     g.drawRoundedRectangle(area, 6.0f, 2.0f);
+}
+
+void VoiceEditorPanel::paintOverChildren(juce::Graphics&) {
+    // No overlay painting needed for now
 }

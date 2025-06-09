@@ -8,9 +8,8 @@
 class VoiceEditorPanel : public juce::Component {
 public:
     VoiceEditorPanel();
-    ~VoiceEditorPanel() override;
-
-    void paint(juce::Graphics&) override;
+    ~VoiceEditorPanel() override;    void paint(juce::Graphics&) override;
+    void paintOverChildren(juce::Graphics&) override;
     void resized() override;
 
 private:
@@ -112,12 +111,11 @@ private:
     juce::ComboBox channelSelector;
     juce::Label patchNameLabel;
     juce::Label algorithmLabel;
-    juce::Label channelLabel;
-
-    // Algorithm SVG overlay
+    juce::Label channelLabel;    // Algorithm SVG overlay
     std::unique_ptr<juce::Drawable> algorithmSvg;
     int currentAlgorithm = 0;
     juce::Rectangle<float> svgDrawArea; // Area to draw SVG, for scaling
+    std::vector<float> operatorRowCenters; // Y positions of operator row centers for SVG alignment
 
     // Status/help panel
     juce::Label statusBar;
