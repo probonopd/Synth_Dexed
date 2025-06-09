@@ -29,6 +29,7 @@ void OperatorSliderLookAndFeel::drawLinearSlider(
         g.fillRect(valueBounds);
     }
 */
+
     // Draw thin, vertical line thumb (not a circle)
     if (style == juce::Slider::LinearVertical) {
         float thumbY = sliderPos;

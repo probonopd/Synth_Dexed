@@ -60,6 +60,9 @@ VoiceEditorPanel::VoiceEditorPanel()
         helpPanel.setBorderSize(juce::BorderSize<int>(10));
         addAndMakeVisible(helpPanel);
 
+        // Load help JSON before creating operators and sliders
+        loadHelpJson();
+
         // Create 6 operators
         operators.clear();
         for (int i = 0; i < 6; ++i) {
@@ -68,9 +71,11 @@ VoiceEditorPanel::VoiceEditorPanel()
             op->label.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
             op->label.setColour(juce::Label::textColourId, juce::Colours::white);
             op->label.setJustificationType(juce::Justification::centred);
-            // Apply custom look and feel to all operator sliders
+            // Apply custom look and feel and setup to all operator sliders
             for (int s = 0; s < op->NumSliders; ++s) {
                 op->sliders[s].setLookAndFeel(&operatorSliderLookAndFeel);
+                // Setup slider range, default, and value mapping from JSON
+                setupOperatorSlider(op->sliders[s], op->sliderNames[s], 0, 99, 0);
             }
             addAndMakeVisible(*op);
             operators.push_back(std::move(op));
@@ -96,7 +101,6 @@ VoiceEditorPanel::VoiceEditorPanel()
         };
         // Load initial SVG
         loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);
-        loadHelpJson();
     }
     catch (const std::exception& e) {
         std::cout << "[VoiceEditorPanel] Exception in constructor: " << e.what() << std::endl;
@@ -120,12 +124,9 @@ void VoiceEditorPanel::paint(Graphics& g) {
 void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
     // Draw SVG with precise alignment based on operator 6 and operator 1 row centers
     if (algorithmSvg && operatorRowCenters.size() >= 6) {
-        std::cout << "[VoiceEditorPanel] Drawing algorithm SVG with precise alignment (paintOverChildren)" << std::endl;
         float op6Center = operatorRowCenters[0];
         float op1Center = operatorRowCenters[5];
         float uiDistance = op1Center - op6Center;
-        std::cout << "[VoiceEditorPanel] Op6 center: " << op6Center << ", Op1 center: " << op1Center << std::endl;
-        std::cout << "[VoiceEditorPanel] UI distance between op6 and op1: " << uiDistance << std::endl;
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float svgNumberDistance = svgBounds.getHeight() * 0.71f;
         float scaleFactor = uiDistance / svgNumberDistance;
@@ -133,12 +134,8 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scaleFactor;
         auto transform = AffineTransform::scale(scaleFactor, scaleFactor)
             .followedBy(AffineTransform::translation(offsetX, offsetY));
-        std::cout << "[VoiceEditorPanel] SVG number distance estimate: " << svgNumberDistance << std::endl;
-        std::cout << "[VoiceEditorPanel] Scale factor: " << scaleFactor << std::endl;
-        std::cout << "[VoiceEditorPanel] Final offset: " << offsetX << ", " << offsetY << std::endl;
         algorithmSvg->draw(g, 1.0f, transform);
     } else if (algorithmSvg) {
-        std::cout << "[VoiceEditorPanel] Drawing SVG without alignment (fallback, paintOverChildren)" << std::endl;
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float scale = std::min(svgDrawArea.getWidth() / svgBounds.getWidth(), 
                               svgDrawArea.getHeight() / svgBounds.getHeight());
@@ -272,13 +269,23 @@ void VoiceEditorPanel::loadHelpJson() {
                 if (desc.isEmpty()) desc = obj->getProperty("description").toString();
                 juce::String shortDesc = obj->getProperty("description").toString();
                 juce::String reference = obj->getProperty("reference").toString();
-
+                juce::String minStr, maxStr;
+                if (obj->hasProperty("min")) minStr = obj->getProperty("min").toString();
+                if (obj->hasProperty("max")) maxStr = obj->getProperty("max").toString();
+                juce::String allowableRange;
+                if (!minStr.isEmpty() && !maxStr.isEmpty())
+                    allowableRange = "Allowable range: " + minStr + " – " + maxStr;
+                else if (!range.isEmpty())
+                    allowableRange = "Allowable range: " + range;
                 juce::String hoverText;
                 // First line: name (range)
                 hoverText << name;
                 if (!range.isEmpty())
                     hoverText << " (" << range << ")";
                 hoverText << "\n";
+                // Print allowable range
+                if (!allowableRange.isEmpty())
+                    hoverText << allowableRange << "\n";
                 // Second line: short description or range
                 if (!shortDesc.isEmpty() && shortDesc != desc)
                     hoverText << shortDesc << "\n";
@@ -293,16 +300,11 @@ void VoiceEditorPanel::loadHelpJson() {
             }
         }
     }
-    // Log all loaded keys
-    for (const auto& pair : helpTextByKey)
-        std::cout << "[VoiceEditorPanel] Loaded help key: '" << pair.first << "'" << std::endl;
 }
 
 void VoiceEditorPanel::showHelpForKey(const juce::String& key) {
-    std::cout << "[VoiceEditorPanel] showHelpForKey: key=" << key << std::endl;
     auto it = helpTextByKey.find(key.toStdString());
     if (it != helpTextByKey.end()) {
-        std::cout << "[VoiceEditorPanel] Found help for key: " << key << std::endl;
         helpPanel.setText(it->second, juce::sendNotification);
         helpPanel.repaint();
     } else {
@@ -321,16 +323,91 @@ void VoiceEditorPanel::updateStatusBar(const String& text) {
     statusBar.setText(text, dontSendNotification);
 }
 
-void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& /*name*/, int min, int max, int defaultValue) {
-    // Example: slider.setRange((float)min, (float)max, 1.0f);
-    slider.setRange(static_cast<double>(min), static_cast<double>(max), 1.0);
-    slider.setValue(static_cast<double>(defaultValue));
+void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, int /*min*/, int /*max*/, int /*defaultValue*/) {
+    std::cout << "[VoiceEditorPanel] setupOperatorSlider called for '" << name << "'" << std::endl;
+    double minValue = 0.0, maxValue = 99.0, defaultValue = 0.0;
+    double step = 1.0;
+    bool isDiscrete = false;
+    std::vector<double> allowedValues;
+    std::vector<juce::String> allowedLabels;
+    if (helpJson.isObject()) {
+        if (auto* params = helpJson["parameters"].getArray()) {
+            for (auto& p : *params) {
+                auto* obj = p.getDynamicObject();
+                if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(name)) {
+                    if (obj->hasProperty("min"))
+                        minValue = obj->getProperty("min").toString().getDoubleValue();
+                    else
+                        std::cout << "[VoiceEditorPanel] Warning: Slider '" << name << "' has no 'min' property." << std::endl;
+                    if (obj->hasProperty("max"))
+                        maxValue = obj->getProperty("max").toString().getDoubleValue();
+                    else
+                        std::cout << "[VoiceEditorPanel] Warning: Slider '" << name << "' has no 'max' property." << std::endl;
+                    if (obj->hasProperty("default"))
+                        defaultValue = obj->getProperty("default").toString().getDoubleValue();
+                    else
+                        defaultValue = minValue;
+                    if (obj->hasProperty("values")) {
+                        isDiscrete = true;
+                        step = 1.0;
+                        auto valuesVar = obj->getProperty("values");
+                        if (valuesVar.isObject()) {
+                            auto* valuesObj = valuesVar.getDynamicObject();
+                            auto& props = valuesObj->getProperties();
+                            for (int i = 0; i < props.size(); ++i) {
+                                auto keyStr = props.getName(i).toString();
+                                allowedValues.push_back(keyStr.getDoubleValue());
+                                allowedLabels.push_back(props.getValueAt(i).toString());
+                            }
+                        } else if (valuesVar.isArray()) {
+                            auto* arr = valuesVar.getArray();
+                            for (auto& v : *arr) {
+                                allowedValues.push_back((int)v);
+                            }
+                        }
+                        std::sort(allowedValues.begin(), allowedValues.end());
+                        if (!allowedValues.empty()) {
+                            minValue = 0;
+                            maxValue = (double)(allowedValues.size() - 1);
+                            auto it = std::find(allowedValues.begin(), allowedValues.end(), (int)defaultValue);
+                            if (it != allowedValues.end())
+                                defaultValue = std::distance(allowedValues.begin(), it);
+                            else
+                                defaultValue = 0;
+                            // Log allowable values for this slider
+                            std::cout << "[VoiceEditorPanel] Slider '" << name << "' allowable values: ";
+                            for (size_t i = 0; i < allowedValues.size(); ++i) {
+                                std::cout << allowedValues[i];
+                                if (i != allowedValues.size() - 1) std::cout << ", ";
+                            }
+                            std::cout << std::endl;
+                        }
+                    }
+                    // Log allowable range for all sliders with min/max
+                    if (obj->hasProperty("min") && obj->hasProperty("max")) {
+                        std::cout << "[VoiceEditorPanel] Slider '" << name << "' allowable range: "
+                                  << obj->getProperty("min").toString() << " to " << obj->getProperty("max").toString() << std::endl;
+                    }
+                    // Enforce min/max for all sliders
+                    minValue = obj->hasProperty("min") ? obj->getProperty("min").toString().getDoubleValue() : minValue;
+                    maxValue = obj->hasProperty("max") ? obj->getProperty("max").toString().getDoubleValue() : maxValue;
+                    break;
+                }
+            }
+        }
+    }
+    // Not discrete: normal slider
+    slider.setRange(minValue, maxValue, step);
+    slider.setValue(defaultValue);
     slider.setSliderStyle(Slider::LinearVertical);
     slider.setTextBoxStyle(Slider::TextBoxBelow, false, 40, 20);
     slider.setColour(Slider::trackColourId, Colour(0xff555555));
     slider.setColour(Slider::thumbColourId, Colour(0xffaaaaaa));
     slider.setColour(Slider::textBoxTextColourId, Colours::white);
     slider.setColour(Slider::textBoxBackgroundColourId, Colour(0xff333333));
+    if (isDiscrete) {
+        slider.setNumDecimalPlacesToDisplay(0);
+    }
 }
 
 std::vector<int> VoiceEditorPanel::getCarrierIndicesForAlgorithm(int algoIdx) const {
@@ -386,9 +463,8 @@ void VoiceEditorPanel::OperatorSliders::addAndLayoutSliderWithLabel(juce::Slider
     label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(label);
     slider.setSliderStyle(juce::Slider::LinearVertical);
-    // slider.setLookAndFeel(&operatorSliderLookAndFeel);
     slider.setBounds(x, y, w, h); x += w + gap;
-    label.setBounds(x - w, y + h, w, 20);
+    label.setBounds(x - w, y + h, w, 10);
 }
 
 void VoiceEditorPanel::OperatorSliders::resized() {
@@ -396,7 +472,7 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     label.setBounds(area.removeFromLeft(32).reduced(2));
     ksWidget.setBounds(area.removeFromRight(40).reduced(2));
     envWidget.setBounds(area.removeFromRight(40).reduced(2));
-    int sliderW = 32, sliderH = area.getHeight() - 20;
+    int sliderW = 32, sliderH = area.getHeight() - 10;
     int gap = 0;
     int y = area.getY();
     int x = area.getX() + 60;
@@ -408,22 +484,18 @@ void VoiceEditorPanel::OperatorSliders::resized() {
 }
 
 void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
-    std::cout << "[OperatorSliders] mouseEnter: eventComponent=" << e.eventComponent << std::endl;
     for (int i = 0; i < NumSliders; ++i) {
         if (e.eventComponent == &sliders[i]) {
-            std::cout << "[OperatorSliders] mouseEnter on slider " << sliderNames[i] << std::endl;
             sliderMouseEnter(i);
             return;
         }
     }
     if (e.eventComponent == &envWidget) {
-        std::cout << "[OperatorSliders] mouseEnter on envWidget" << std::endl;
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
             parent->showHelpForKey("R1");
         return;
     }
     if (e.eventComponent == &ksWidget) {
-        std::cout << "[OperatorSliders] mouseEnter on ksWidget" << std::endl;
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
             parent->showHelpForKey("RD");
         return;
@@ -431,16 +503,13 @@ void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
 }
 
 void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
-    std::cout << "[OperatorSliders] mouseExit: eventComponent=" << e.eventComponent << std::endl;
     for (int i = 0; i < NumSliders; ++i) {
         if (e.eventComponent == &sliders[i]) {
-            std::cout << "[OperatorSliders] mouseExit on slider " << sliderNames[i] << std::endl;
             sliderMouseExit(i);
             return;
         }
     }
     if (e.eventComponent == &envWidget || e.eventComponent == &ksWidget) {
-        std::cout << "[OperatorSliders] mouseExit on envWidget or ksWidget" << std::endl;
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
             parent->restoreDefaultHelp();
         return;
@@ -448,10 +517,8 @@ void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
 }
 
 void VoiceEditorPanel::OperatorSliders::mouseMove(const juce::MouseEvent& e) {
-    std::cout << "[OperatorSliders] mouseMove: eventComponent=" << e.eventComponent << std::endl;
     for (int i = 0; i < NumSliders; ++i) {
         if (sliders[i].isMouseOver(true)) {
-            std::cout << "[OperatorSliders] mouseMove over slider " << sliderNames[i] << std::endl;
             sliderMouseEnter(i);
             return;
         }
@@ -459,13 +526,11 @@ void VoiceEditorPanel::OperatorSliders::mouseMove(const juce::MouseEvent& e) {
 }
 
 void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx) {
-    std::cout << "[OperatorSliders] sliderMouseEnter: " << sliderNames[sliderIdx] << std::endl;
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
         parent->showHelpForKey(sliderNames[sliderIdx]);
 }
 
 void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
-    std::cout << "[OperatorSliders] sliderMouseExit: " << sliderNames[sliderIdx] << std::endl;
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
         parent->restoreDefaultHelp();
 }
