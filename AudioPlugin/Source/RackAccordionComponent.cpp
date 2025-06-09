@@ -1,3 +1,4 @@
+#include "OperatorSliderLookAndFeel.h"
 #include "PluginEditor.h"
 #include "RackAccordionComponent.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -5,6 +6,8 @@
 #include <juce_events/juce_events.h>
 #include <fstream>
 #include "../../src/FMRack/VoiceData.h" // NEW: Include VoiceData for conversion function
+
+static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
 
 // ================= RackAccordionComponent =================
 RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* processorPtr)
@@ -302,6 +305,12 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             editor->showVoiceEditorPanel();
         }
     };
+
+    // Apply custom look and feel to sliders
+    unisonVoicesSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    unisonDetuneSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    unisonPanSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    midiChannelSlider.setLookAndFeel(&operatorSliderLookAndFeel);
 }
 
 void ModuleTabComponent::updateFromModule()

@@ -3,10 +3,13 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "VoiceEditorPanel.h"
 #include "BinaryData.h"
+#include "OperatorSliderLookAndFeel.h"
 #include <filesystem>
 #include <juce_data_structures/juce_data_structures.h>
 
 using namespace juce;
+
+OperatorSliderLookAndFeel operatorSliderLookAndFeel; // Global instance
 
 VoiceEditorPanel::VoiceEditorPanel()
 {
@@ -303,6 +306,66 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
     // Draw turquoise border
     g.setColour(Colour(0xff00e6ff));
     g.drawRoundedRectangle(area, 6.0f, 2.0f);
+}
+
+// OperatorSliders implementation
+VoiceEditorPanel::OperatorSliders::OperatorSliders() {
+    addAndMakeVisible(label);
+    addAndMakeVisible(envWidget);
+    addAndMakeVisible(ksWidget);
+    // Use helper to add sliders and labels
+    auto addSliderAndLabel = [this](juce::Slider& slider, juce::Label& label) {
+        addAndMakeVisible(slider);
+        addAndMakeVisible(label);
+    };
+    addSliderAndLabel(tl, tlLabel);
+    addSliderAndLabel(egR1, egR1Label);
+    addSliderAndLabel(egR2, egR2Label);
+    addSliderAndLabel(egR3, egR3Label);
+    addSliderAndLabel(egR4, egR4Label);
+    addSliderAndLabel(ampModSense, ampModSenseLabel);
+    addSliderAndLabel(keyVelSense, keyVelSenseLabel);
+    addSliderAndLabel(rateScaling, rateScalingLabel);
+    setAllOperatorSliderLookAndFeel();
+}
+
+VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
+
+void VoiceEditorPanel::OperatorSliders::addAndLayoutSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap) {
+    addAndMakeVisible(slider);
+    label.setText(text, juce::dontSendNotification);
+    label.setFont(juce::Font(juce::FontOptions(10.0f)));
+    label.setColour(juce::Label::textColourId, juce::Colours::white);
+    label.setJustificationType(juce::Justification::centred);
+    addAndMakeVisible(label);
+    slider.setSliderStyle(juce::Slider::LinearVertical);
+    slider.setBounds(x, y, w, h); x += w + gap;
+    label.setBounds(x - w, y + h, w, 20);
+}
+
+void VoiceEditorPanel::OperatorSliders::setAllOperatorSliderLookAndFeel() {
+    static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
+    for (auto* s : std::initializer_list<juce::Slider*>{&tl, &egR1, &egR2, &egR3, &egR4, &ampModSense, &keyVelSense, &rateScaling})
+        s->setLookAndFeel(&operatorSliderLookAndFeel);
+}
+
+void VoiceEditorPanel::OperatorSliders::resized() {
+    auto area = getLocalBounds();
+    label.setBounds(area.removeFromLeft(32).reduced(2));
+    ksWidget.setBounds(area.removeFromRight(40).reduced(2));
+    envWidget.setBounds(area.removeFromRight(40).reduced(2));
+    int sliderW = 32, sliderH = area.getHeight() - 20;
+    int gap = 8;
+    int y = area.getY();
+    int x = area.getX();
+    addAndLayoutSliderWithLabel(tl, tlLabel, "TL", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(egR1, egR1Label, "PM", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(egR2, egR2Label, "PC", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(egR3, egR3Label, "PF", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(egR4, egR4Label, "PD", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(ampModSense, ampModSenseLabel, "AMS", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(keyVelSense, keyVelSenseLabel, "TS", x, y, sliderW, sliderH, gap);
+    addAndLayoutSliderWithLabel(rateScaling, rateScalingLabel, "RS", x, y, sliderW, sliderH, gap);
 }
 
 void VoiceEditorPanel::paintOverChildren(juce::Graphics&) {
