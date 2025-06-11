@@ -5,4 +5,5 @@
 class OperatorSliderLookAndFeel : public juce::LookAndFeel_V4 {
 public:
     void drawLinearSlider(juce::Graphics&, int, int, int, int, float, float, float, const juce::Slider::SliderStyle, juce::Slider&) override;
+    juce::Font getLabelFont(juce::Label& label) override;
 };

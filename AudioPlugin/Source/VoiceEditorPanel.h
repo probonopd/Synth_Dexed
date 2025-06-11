@@ -4,6 +4,7 @@
 #include "KeyboardScalingDisplay.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <map>
+#include "FMRackController.h"
 
 // #include "OperatorSliderLookAndFeel.h"
 
@@ -19,6 +20,16 @@ public:
     void showHelpForKey(const juce::String& key);
     void restoreDefaultHelp();
 
+    // Set the controller pointer for backend access
+    void setController(FMRackController* controller_);
+    // Set a Dexed parameter (address, value)
+    void setDexedParam(uint8_t address, uint8_t value);
+    // Get a Dexed parameter (address)
+    uint8_t getDexedParam(uint8_t address) const;
+
+    // Get Dexed parameter min/max range by sliderKey
+    std::pair<uint8_t, uint8_t> getDexedRange(const char* sliderKey) const;
+   
     // Operator slider group
     struct OperatorSliders : public juce::Component {
         // Define slider list macro for enum and string names
@@ -97,7 +108,14 @@ public:
     // Returns the carrier indices for the current algorithm (vector of operator indices, 0=OP1, 5=OP6)
     std::vector<int> getCarrierIndicesForAlgorithm(int algoIdx) const;
 
+    // Synchronize slider value with Dexed engine, using sliderKey for range
+    void syncOperatorSliderWithDexed(juce::Slider& slider, uint8_t paramAddress, const char* sliderKey);
+    // Synchronize all operator sliders with Dexed engine (call after loading a new performance)
+    void syncAllOperatorSlidersWithDexed();
+
     friend struct OperatorSliders;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoiceEditorPanel)
+private:
+    FMRackController* controller = nullptr;
 };

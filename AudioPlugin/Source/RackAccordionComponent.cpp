@@ -389,6 +389,20 @@ void ModuleTabComponent::loadVoiceFile(const juce::File& file)
         perf->setPartVoiceData(moduleIndex, data);
         controller->setPerformance(*perf);
         juce::Logger::writeToLog("[Load Voice] Voice loaded successfully for module " + juce::String(moduleIndex+1) + ".");
+        // --- PATCH: After loading a voice, update the UI safely ---
+        if (auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr) {
+            if (auto* panel = editor->getVoiceEditorPanel()) {
+                // Defensive: update controller pointer and sync sliders
+                panel->setController(controller);
+                try {
+                    panel->syncAllOperatorSlidersWithDexed();
+                } catch (const std::exception& e) {
+                    juce::Logger::writeToLog("[Load Voice] Exception syncing operator sliders: " + juce::String(e.what()));
+                } catch (...) {
+                    juce::Logger::writeToLog("[Load Voice] Unknown exception syncing operator sliders");
+                }
+            }
+        }
     } else {
         juce::Logger::writeToLog("[Load Voice] Error: Could not get performance object.");
     }

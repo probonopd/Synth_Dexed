@@ -203,4 +203,18 @@ void FMRackController::setNumModules(int num)
     if (onModulesChanged) onModulesChanged();
 }
 
+void FMRackController::setDexedParam(uint8_t address, uint8_t value)
+{
+    std::cout << "[FMRackController] Setting Dexed parameter address " << static_cast<int>(address)
+              << " to value " << static_cast<int>(value) << std::endl;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return;
+    const auto& modules = rack->getModules();
+    if (modules.empty()) return;
+    auto* dexed = modules[0]->getDexedEngine();
+    if (!dexed) return;
+    dexed->setVoiceDataElement(address, value);
+    dexed->doRefreshVoice();
+}
+
 std::mutex& FMRackController::getMutex() { return mutex; }

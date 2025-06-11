@@ -6,6 +6,7 @@
 #include "OperatorSliderLookAndFeel.h"
 #include <filesystem>
 #include <juce_data_structures/juce_data_structures.h>
+#include "FMRackController.h"
 
 using namespace juce;
 
@@ -60,9 +61,6 @@ VoiceEditorPanel::VoiceEditorPanel()
         helpPanel.setBorderSize(juce::BorderSize<int>(10));
         addAndMakeVisible(helpPanel);
 
-        // Load help JSON before creating operators and sliders
-        loadHelpJson();
-
         // Create 6 operators
         operators.clear();
         for (int i = 0; i < 6; ++i) {
@@ -71,11 +69,9 @@ VoiceEditorPanel::VoiceEditorPanel()
             op->label.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
             op->label.setColour(juce::Label::textColourId, juce::Colours::white);
             op->label.setJustificationType(juce::Justification::centred);
-            // Apply custom look and feel and setup to all operator sliders
+            // Apply custom look and feel to all operator sliders
             for (int s = 0; s < op->NumSliders; ++s) {
                 op->sliders[s].setLookAndFeel(&operatorSliderLookAndFeel);
-                // Setup slider range, default, and value mapping from JSON
-                setupOperatorSlider(op->sliders[s], op->sliderNames[s], 0, 99, 0);
             }
             addAndMakeVisible(*op);
             operators.push_back(std::move(op));
@@ -101,6 +97,7 @@ VoiceEditorPanel::VoiceEditorPanel()
         };
         // Load initial SVG
         loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);
+        loadHelpJson();
     }
     catch (const std::exception& e) {
         std::cout << "[VoiceEditorPanel] Exception in constructor: " << e.what() << std::endl;
@@ -269,23 +266,13 @@ void VoiceEditorPanel::loadHelpJson() {
                 if (desc.isEmpty()) desc = obj->getProperty("description").toString();
                 juce::String shortDesc = obj->getProperty("description").toString();
                 juce::String reference = obj->getProperty("reference").toString();
-                juce::String minStr, maxStr;
-                if (obj->hasProperty("min")) minStr = obj->getProperty("min").toString();
-                if (obj->hasProperty("max")) maxStr = obj->getProperty("max").toString();
-                juce::String allowableRange;
-                if (!minStr.isEmpty() && !maxStr.isEmpty())
-                    allowableRange = "Allowable range: " + minStr + " – " + maxStr;
-                else if (!range.isEmpty())
-                    allowableRange = "Allowable range: " + range;
+
                 juce::String hoverText;
                 // First line: name (range)
                 hoverText << name;
                 if (!range.isEmpty())
                     hoverText << " (" << range << ")";
                 hoverText << "\n";
-                // Print allowable range
-                if (!allowableRange.isEmpty())
-                    hoverText << allowableRange << "\n";
                 // Second line: short description or range
                 if (!shortDesc.isEmpty() && shortDesc != desc)
                     hoverText << shortDesc << "\n";
@@ -300,6 +287,9 @@ void VoiceEditorPanel::loadHelpJson() {
             }
         }
     }
+    // Log all loaded keys
+    for (const auto& pair : helpTextByKey)
+        std::cout << "[VoiceEditorPanel] Loaded help key: '" << pair.first << "'" << std::endl;
 }
 
 void VoiceEditorPanel::showHelpForKey(const juce::String& key) {
@@ -396,11 +386,14 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
             }
         }
     }
+    /*
     // Not discrete: normal slider
     slider.setRange(minValue, maxValue, step);
     slider.setValue(defaultValue);
     slider.setSliderStyle(Slider::LinearVertical);
-    slider.setTextBoxStyle(Slider::TextBoxBelow, false, 40, 20);
+    slider.setTextBoxStyle(Slider::TextBoxAbove, false, 40, 10); // Value box above the slider
+    // No decimal places in the text box
+    slider.setNumDecimalPlacesToDisplay(0);
     slider.setColour(Slider::trackColourId, Colour(0xff555555));
     slider.setColour(Slider::thumbColourId, Colour(0xffaaaaaa));
     slider.setColour(Slider::textBoxTextColourId, Colours::white);
@@ -408,6 +401,38 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
     if (isDiscrete) {
         slider.setNumDecimalPlacesToDisplay(0);
     }
+    */
+}
+
+// Synchronize slider value with Dexed engine
+void VoiceEditorPanel::syncOperatorSliderWithDexed(Slider& slider, uint8_t paramAddress, const char* sliderKey) {
+    if (controller && sliderKey) {
+        uint8_t value = getDexedParam(paramAddress);
+        auto range = getDexedRange(sliderKey);
+        slider.setValue(static_cast<double>(value), juce::dontSendNotification);
+        slider.setRange(range.first, range.second, 1.0);
+    }
+}
+
+void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
+    static const uint8_t dexedParamOffsets[OperatorSliders::NumSliders] = {
+        0, 16, 14, 18, 19, 20, 15, 17, 13
+    };
+    std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: syncing all operator sliders from Dexed engine" << std::endl;
+    uint8_t opeBitmask = getDexedParam(155);
+    int numOps = static_cast<int>(operators.size());
+    for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
+        auto& op = operators[uiRowIdx];
+        int dexedOpIdx = numOps - 1 - uiRowIdx; // UI row 0 (top) = OP6 (dexed 5), row 5 (bottom) = OP1 (dexed 0)
+        op->sliders[0].setValue((opeBitmask & (1 << dexedOpIdx)) ? 1 : 0, juce::dontSendNotification);
+        for (int s = 1; s < OperatorSliders::NumSliders; ++s) {
+            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + dexedParamOffsets[s]);
+            uint8_t value = getDexedParam(paramAddress);
+            std::cout << "  OP" << (dexedOpIdx+1) << " " << OperatorSliders::sliderNames[s] << " paramAddr=" << (int)paramAddress << " value=" << (int)value << std::endl;
+            syncOperatorSliderWithDexed(op->sliders[s], paramAddress, OperatorSliders::sliderNames[s]);
+        }
+    }
+    repaint();
 }
 
 std::vector<int> VoiceEditorPanel::getCarrierIndicesForAlgorithm(int algoIdx) const {
@@ -463,8 +488,13 @@ void VoiceEditorPanel::OperatorSliders::addAndLayoutSliderWithLabel(juce::Slider
     label.setJustificationType(juce::Justification::centred);
     addAndMakeVisible(label);
     slider.setSliderStyle(juce::Slider::LinearVertical);
+    // slider.setLookAndFeel(&operatorSliderLookAndFeel);
     slider.setBounds(x, y, w, h); x += w + gap;
-    label.setBounds(x - w, y + h, w, 10);
+    label.setBounds(x - w, y + h, w, 10); // Text label (slider name) below the slider
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, w, 10); // Value box below the slider
+    // No decimal places in the text box
+    slider.setNumDecimalPlacesToDisplay(0);
+    slider.setColour(Slider::textBoxTextColourId, juce::Colours::white);
 }
 
 void VoiceEditorPanel::OperatorSliders::resized() {
@@ -472,14 +502,51 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     label.setBounds(area.removeFromLeft(32).reduced(2));
     ksWidget.setBounds(area.removeFromRight(40).reduced(2));
     envWidget.setBounds(area.removeFromRight(40).reduced(2));
-    int sliderW = 32, sliderH = area.getHeight() - 10;
+    int sliderW = 32, sliderH = area.getHeight() - 20;
     int gap = 0;
     int y = area.getY();
     int x = area.getX() + 60;
-    // Layout: OPE, TL | PM, PC, PF, PD | AMS, TS, RS
-    // Draw vertical spacers after TL and PD
+
+    static const uint8_t dexedParamOffsets[NumSliders] = {
+        0, 16, 14, 18, 19, 20, 15, 17, 13
+    };
+
+    // Find our UI row index (0 = top, 5 = bottom)
+    int uiRowIdx = -1;
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+        for (int idx = 0; idx < parent->operators.size(); ++idx) {
+            if (parent->operators[idx].get() == this) {
+                uiRowIdx = idx;
+                break;
+            }
+        }
+    }
+    int dexedOpIdx = (uiRowIdx >= 0) ? (5 - uiRowIdx) : 0;
+
     for (int i = 0; i < NumSliders; ++i) {
         addAndLayoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], x, y, sliderW, sliderH, gap);
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + dexedParamOffsets[i]);
+            parent->syncOperatorSliderWithDexed(sliders[i], paramAddress, sliderNames[i]);
+            if (i == 0) {
+                sliders[i].setRange(0, 1, 1.0);
+                sliders[i].onValueChange = [parent]() {
+                    uint8_t bitmask = 0;
+                    for (int op = 0; op < parent->operators.size(); ++op) {
+                        int dexedOp = 5 - op;
+                        auto& opSliders = parent->operators[op];
+                        int val = static_cast<int>(opSliders->sliders[0].getValue());
+                        if (val != 0) bitmask |= (1 << dexedOp);
+                    }
+                    parent->setDexedParam(155, bitmask);
+                };
+            } else {
+                sliders[i].onValueChange = [parent, paramAddress, i, this]() {
+                    int value = static_cast<int>(sliders[i].getValue());
+                    parent->setDexedParam(paramAddress, static_cast<uint8_t>(value));
+                };
+            }
+        }
     }
 }
 
@@ -536,3 +603,45 @@ void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
 }
 
 // EnvelopeDisplay mouse hover
+uint8_t VoiceEditorPanel::getDexedParam(uint8_t address) const {
+    if (!controller) { std::cout << "[VoiceEditorPanel] getDexedParam: controller is null" << std::endl; return 0; }
+    auto rack = controller->getRack();
+    if (!rack) { std::cout << "[VoiceEditorPanel] getDexedParam: rack is null" << std::endl; return 0; }
+    const auto& modules = rack->getModules();
+    if (modules.empty()) { std::cout << "[VoiceEditorPanel] getDexedParam: modules empty" << std::endl; return 0; }
+    auto* dexed = modules[0]->getDexedEngine();
+    if (!dexed) { std::cout << "[VoiceEditorPanel] getDexedParam: dexed is null" << std::endl; return 0; }
+    uint8_t v = dexed->getVoiceDataElement(address);
+    std::cout << "[VoiceEditorPanel] getDexedParam: address=" << (int)address << " value=" << (int)v << std::endl;
+    return v;
+}
+
+
+std::pair<uint8_t, uint8_t> VoiceEditorPanel::getDexedRange(const char* sliderKey) const {
+    const char* key = sliderKey;
+    if (key && helpJson.isObject()) {
+        if (auto* params = helpJson["parameters"].getArray()) {
+            for (auto& p : *params) {
+                auto* obj = p.getDynamicObject();
+                if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(key)) {
+                    uint8_t minVal = obj->hasProperty("min") ? (uint8_t)obj->getProperty("min").toString().getIntValue() : 0;
+                    uint8_t maxVal = obj->hasProperty("max") ? (uint8_t)obj->getProperty("max").toString().getIntValue() : 99;
+                    return {minVal, maxVal};
+                }
+            }
+        }
+    }
+    // Fallback
+    return {0, 99};
+}
+
+void VoiceEditorPanel::setController(FMRackController* controller_) {
+    controller = controller_;
+    std::cout << "[VoiceEditorPanel] setController called. controller=" << controller << std::endl;
+}
+
+void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
+    if (controller) {
+        controller->setDexedParam(address, value);
+    }
+}
