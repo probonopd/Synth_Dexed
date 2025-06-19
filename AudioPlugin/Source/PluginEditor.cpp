@@ -180,6 +180,11 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                         }
                     }
                 }
+                if (voiceEditorPanel) {
+                    // Always update controller after loading a performance
+                    voiceEditorPanel->setController(processorRef.getController());
+                    voiceEditorPanel->syncAllOperatorSlidersWithDexed();
+                }
             }
         },
         []() {
@@ -196,6 +201,11 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
         std::cout << "[PluginEditor] Creating VoiceEditorPanel lazily" << std::endl;
         voiceEditorPanel = std::make_unique<VoiceEditorPanel>();
         std::cout << "[PluginEditor] VoiceEditorPanel created" << std::endl;
+        // Set the controller pointer after creation
+        voiceEditorPanel->setController(processorRef.getController());
+    } else {
+        // Always update controller in case it changed
+        voiceEditorPanel->setController(processorRef.getController());
     }
     
     // Create a new window for the VoiceEditorPanel

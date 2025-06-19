@@ -35,6 +35,13 @@ public:
     // Add SysEx handler
     void processSysex(const uint8_t* data, int len);
     
+    // Add public getter for Dexed engine(s)
+    Dexed* getDexedEngine(int idx = 0) {
+        if (idx >= 0 && idx < static_cast<int>(fmEngines_.size()))
+            return fmEngines_[idx].get();
+        return nullptr;
+    }
+    
 private:
     float sampleRate_;
     uint8_t midiChannel_;

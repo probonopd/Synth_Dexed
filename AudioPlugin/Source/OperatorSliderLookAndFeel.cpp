@@ -40,3 +40,8 @@ void OperatorSliderLookAndFeel::drawLinearSlider(
         g.fillRect(thumbX - thumbWidth * 0.5f, thumbY - thumbLen * 0.5f, thumbWidth, thumbLen);
     }
 }
+
+juce::Font OperatorSliderLookAndFeel::getLabelFont(juce::Label& label)
+{
+    return juce::Font(12.0f);
+}

@@ -34,6 +34,9 @@ public:
     void setReverbLevel(float level);
     void setReverbSize(float size);
 
+    // Set a Dexed parameter (address, value)
+    void setDexedParam(uint8_t address, uint8_t value);
+
     // Thread safety
     std::mutex& getMutex();
     FMRack::Rack* getRack() const { return rack.get(); }

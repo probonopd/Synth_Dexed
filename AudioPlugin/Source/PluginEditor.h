@@ -23,6 +23,7 @@ public:
 
     AudioPluginAudioProcessor* getProcessor() const { return &processorRef; } // Added method to access processor
     void showVoiceEditorPanel(); // Added method to show the VoiceEditorPanel
+    VoiceEditorPanel* getVoiceEditorPanel() const { return voiceEditorPanel.get(); } // Added getter for voiceEditorPanel
 
 private:
     // This reference is provided as a quick way for your editor to
