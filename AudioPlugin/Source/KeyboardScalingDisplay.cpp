@@ -14,18 +14,21 @@ void KeyboardScalingDisplay::setScalingParams(float bp, float ld, float rd, floa
 
 void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     auto area = getLocalBounds().reduced(4).toFloat();
-    g.setColour(juce::Colour(0xff444444));
-    g.fillRoundedRectangle(area, 4.0f);
+    float textHeight = 14.0f;
+    // Reserve space for text above and below
+    juce::Rectangle<float> graphArea = area;
+    graphArea.removeFromTop(textHeight);
+    graphArea.removeFromBottom(textHeight);
     // All lines white
     g.setColour(juce::Colours::white);
-    float w = area.getWidth();
-    float h = area.getHeight();
-    float x0 = area.getX();
-    float x1 = area.getRight();
-    float yBase = area.getBottom();
+    float w = graphArea.getWidth();
+    float h = graphArea.getHeight();
+    float x0 = graphArea.getX();
+    float x1 = graphArea.getRight();
+    float yBase = graphArea.getBottom();
     float xBP = x0 + w * breakPoint;
-    float yBP = area.getY() + h * (1.0f - leftDepth); // value at breakpoint (left)
-    float yBP2 = area.getY() + h * (1.0f - rightDepth); // value at breakpoint (right)
+    float yBP = graphArea.getY() + h * (1.0f - leftDepth); // value at breakpoint (left)
+    float yBP2 = graphArea.getY() + h * (1.0f - rightDepth); // value at breakpoint (right)
     int steps = 32;
     juce::Path ksPath;
     // Left segment: from x0 to xBP
@@ -64,10 +67,10 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white);
     // Top: Breakpoint, LeftDepth, RightDepth
     juce::String topText = juce::String::formatted("BP: %.2f  LD: %.2f  RD: %.2f", breakPoint, leftDepth, rightDepth);
-    g.drawText(topText, area.withHeight(14), juce::Justification::centredTop, false);
+    g.drawText(topText, area.withHeight(textHeight), juce::Justification::centredTop, false);
     // Bottom: LeftCurve, RightCurve
     juce::String bottomText = juce::String::formatted("LC: %.2f  RC: %.2f", leftCurve, rightCurve);
-    g.drawText(bottomText, area.withY(area.getBottom() - 14).withHeight(14), juce::Justification::centredBottom, false);
+    g.drawText(bottomText, area.withY(area.getBottom() - textHeight).withHeight(textHeight), juce::Justification::centredBottom, false);
 }
 
 void KeyboardScalingDisplay::mouseEnter(const juce::MouseEvent& e) {
