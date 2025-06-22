@@ -167,11 +167,16 @@ void VoiceEditorPanel::resized() {
     // SVG draw area: always at the left edge of the window, full height minus margins
     svgDrawArea = juce::Rectangle<float>(0, area.getY() + margin, svgPanelWidth, area.getHeight() - 2 * margin);
 
-    // Help panel on the right
-    helpPanel.setBounds(area.getRight() - helpPanelWidth, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
+    // Help panel on the right (restore to fixed width and margin)
+    helpPanel.setBounds(area.getRight() - helpPanelWidth + margin, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
 
-    // Operator rows: span from after SVG area to help panel
-    auto opArea = juce::Rectangle<int>(svgPanelWidth, area.getY() + margin, area.getWidth() - helpPanelWidth - svgPanelWidth - margin, area.getHeight() - 2 * margin);
+    // Operator rows: span from after SVG area to help panel (leave space for help panel, but not extra margin)
+    auto opArea = juce::Rectangle<int>(
+        svgPanelWidth,
+        area.getY() + margin,
+        area.getWidth() - helpPanelWidth - svgPanelWidth,
+        area.getHeight() - 2 * margin
+    );
 
     // Store operator row centers for SVG alignment
     operatorRowCenters.clear();
@@ -404,7 +409,9 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         0, 16, 14, 18, 19, 20, 15, 17, 13
     };
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: syncing all operator sliders from Dexed engine" << std::endl;
-    uint8_t opeBitmask = getDexedParam(155);    int numOps = static_cast<int>(operators.size());    for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
+    uint8_t opeBitmask = getDexedParam(155);
+    int numOps = static_cast<int>(operators.size());
+    for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
         auto& op = operators[uiRowIdx];
         int dexedOpIdx = uiRowIdx; // UI row 0 (top) = OP1 (dexed 0), row 5 (bottom) = OP6 (dexed 5)
         std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: OP" << (dexedOpIdx+1) << " (UI row " << uiRowIdx << ")" << std::endl;
@@ -417,8 +424,41 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         for (int s = 1; s < OperatorSliders::NumSliders; ++s) {
             uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + dexedParamOffsets[s]);
             uint8_t value = getDexedParam(paramAddress);
-            std::cout << "  OP" << (dexedOpIdx+1) << " " << OperatorSliders::sliderNames[s] << " paramAddr=" << (int)paramAddress << " value=" << (int)value << std::endl;            syncOperatorSliderWithDexed(op->sliders[s], paramAddress, OperatorSliders::sliderNames[s]);
+            std::cout << "  OP" << (dexedOpIdx+1) << " " << OperatorSliders::sliderNames[s] << " paramAddr=" << (int)paramAddress << " value=" << (int)value << std::endl;
+            syncOperatorSliderWithDexed(op->sliders[s], paramAddress, OperatorSliders::sliderNames[s]);
         }
+        // --- Envelope widget update ---
+        // DX7 operator envelope: R1-R4, L1-L4, consecutive in voice data
+        std::vector<float> envRates, envLevels;
+        for (int eg = 0; eg < 4; ++eg) {
+            uint8_t r = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + eg)); // R1-R4: offsets 0-3
+            uint8_t l = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 4 + eg)); // L1-L4: offsets 4-7
+            envRates.push_back(static_cast<float>(r) / 99.0f); // normalize for display
+            envLevels.push_back(static_cast<float>(l) / 99.0f); // normalize for display
+        }
+        op->envWidget.setEnvelope(envRates, envLevels);
+        // --- Keyboard scaling widget update ---
+        uint8_t bp = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 8)); // Breakpoint
+        uint8_t ld = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 9)); // Left depth
+        uint8_t rd = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 10)); // Right depth
+        uint8_t lc = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 11)); // Left curve
+        uint8_t rc = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 12)); // Right curve
+        // Normalize
+        float normBP = static_cast<float>(bp) / 99.0f;
+        float normLD = static_cast<float>(ld) / 99.0f;
+        float normRD = static_cast<float>(rd) / 99.0f;
+        auto curveMap = [](uint8_t v) -> float {
+            switch (v) {
+                case 0: return 0.0f;   // linear
+                case 1: return 1.0f;   // exp+
+                case 2: return -1.0f;  // exp-
+                case 3: return 2.0f;   // exp++
+                default: return 0.0f;
+            }
+        };
+        float normLC = curveMap(lc);
+        float normRC = curveMap(rc);
+        op->ksWidget.setScalingParams(normBP, normLD, normRD, normLC, normRC);
     }
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: calling repaint() to update UI" << std::endl;
     repaint();
@@ -466,6 +506,9 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders() {
     }
     envWidget.addMouseListener(this, true);
     ksWidget.addMouseListener(this, true);
+    // Ensure both widgets are visible in the UI
+    addAndMakeVisible(envWidget);
+    addAndMakeVisible(ksWidget);
 }
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
@@ -490,8 +533,11 @@ void VoiceEditorPanel::OperatorSliders::addAndLayoutSliderWithLabel(juce::Slider
 void VoiceEditorPanel::OperatorSliders::resized() {
     auto area = getLocalBounds();
     label.setBounds(area.removeFromLeft(32).reduced(2));
-    ksWidget.setBounds(area.removeFromRight(40).reduced(2));
-    envWidget.setBounds(area.removeFromRight(40).reduced(2));
+    // Reserve space for right-side widgets (envelope and keyboard scaling)
+    int widgetW = 128;
+    ksWidget.setBounds(area.removeFromRight(widgetW).reduced(2));
+    envWidget.setBounds(area.removeFromRight(widgetW).reduced(2));
+    // Sliders area
     int sliderW = 32, sliderH = area.getHeight() - 20;
     int gap = 0;
     int y = area.getY();
