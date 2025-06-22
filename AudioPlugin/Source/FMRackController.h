@@ -15,7 +15,7 @@ public:
 
     // Performance management
     bool loadPerformanceFile(const juce::String& path);
-    bool savePerformanceFile(const juce::String& path); // NEW: Save performance to file
+    bool savePerformanceFile(const juce::String& path);
     void setDefaultPerformance();
     void setPerformance(const FMRack::Performance& perf);
     FMRack::Performance* getPerformance();

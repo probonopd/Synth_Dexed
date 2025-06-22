@@ -28,13 +28,13 @@ VoiceEditorPanel::VoiceEditorPanel()
         algorithmSelector.setSelectedId(1);
         addAndMakeVisible(algorithmSelector);
 
-        patchNameLabel.setText("Patch Name", juce::dontSendNotification);
-        patchNameLabel.setColour(juce::Label::textColourId, juce::Colours::white);
-        addAndMakeVisible(patchNameLabel);
-        patchNameEditor.setText("UNKNOWN   ");
-        patchNameEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222));
-        patchNameEditor.setColour(juce::TextEditor::textColourId, juce::Colours::white);
-        addAndMakeVisible(patchNameEditor);
+        voiceNameLabel.setText("Name", juce::dontSendNotification);
+        voiceNameLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+        addAndMakeVisible(voiceNameLabel);
+        voiceNameEditor.setText("UNKNOWN   ");
+        voiceNameEditor.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222));
+        voiceNameEditor.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+        addAndMakeVisible(voiceNameEditor);
 
         channelLabel.setText("Channel", juce::dontSendNotification);
         channelLabel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -144,13 +144,13 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
 void VoiceEditorPanel::resized() {
     auto area = getLocalBounds();
 
-    // Top controls (algorithm, patch name, channel)
+    // Top controls (algorithm, voice name, channel)
     auto topControls = area.removeFromTop(40).reduced(10, 0);
     int colW = 120, gap = 10;
     algorithmLabel.setBounds(topControls.getX(), topControls.getY(), colW, 24);
     algorithmSelector.setBounds(topControls.getX() + colW, topControls.getY(), 60, 24);
-    patchNameLabel.setBounds(topControls.getX() + colW + 60 + gap, topControls.getY(), colW, 24);
-    patchNameEditor.setBounds(topControls.getX() + colW + 60 + gap + colW, topControls.getY(), 180, 24);
+    voiceNameLabel.setBounds(topControls.getX() + colW + 60 + gap, topControls.getY(), colW, 24);
+    voiceNameEditor.setBounds(topControls.getX() + colW + 60 + gap + colW, topControls.getY(), 180, 24);
     channelLabel.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap, topControls.getY(), colW, 24);
     channelSelector.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap + colW, topControls.getY(), 60, 24);
 
@@ -382,22 +382,6 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
             }
         }
     }
-    /*
-    // Not discrete: normal slider
-    slider.setRange(minValue, maxValue, step);
-    slider.setValue(defaultValue);
-    slider.setSliderStyle(Slider::LinearVertical);
-    slider.setTextBoxStyle(Slider::TextBoxAbove, false, 40, 10); // Value box above the slider
-    // No decimal places in the text box
-    slider.setNumDecimalPlacesToDisplay(0);
-    slider.setColour(Slider::trackColourId, Colour(0xff555555));
-    slider.setColour(Slider::thumbColourId, Colour(0xffaaaaaa));
-    slider.setColour(Slider::textBoxTextColourId, Colours::white);
-    slider.setColour(Slider::textBoxBackgroundColourId, Colour(0xff333333));
-    if (isDiscrete) {
-        slider.setNumDecimalPlacesToDisplay(0);
-    }
-    */
 }
 
 // Synchronize slider value with Dexed engine

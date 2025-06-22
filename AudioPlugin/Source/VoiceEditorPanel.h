@@ -76,9 +76,9 @@ public:
 
     // Top controls
     juce::ComboBox algorithmSelector;
-    juce::TextEditor patchNameEditor;
+    juce::TextEditor voiceNameEditor;
     juce::ComboBox channelSelector;
-    juce::Label patchNameLabel;
+    juce::Label voiceNameLabel;
     juce::Label algorithmLabel;
     juce::Label channelLabel;
     // Algorithm SVG overlay

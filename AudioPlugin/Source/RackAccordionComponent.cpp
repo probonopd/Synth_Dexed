@@ -140,6 +140,8 @@ void RackAccordionComponent::updatePanels()
 {
     try {
         juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() called");
+        // Save the currently selected tab index
+        int selectedTabIndex = tabs.getCurrentTabIndex();
         if (tabs.getNumTabs() > 0) {
             // Check if any ModuleTabComponent has an open file dialog
             for (const auto& tab : moduleTabs) {
@@ -172,6 +174,10 @@ void RackAccordionComponent::updatePanels()
         syncNumModulesSliderWithRack(); // Always sync slider at the end
         // After updating tabs, ensure slider matches the number of tabs
         numModulesSlider.setValue(tabs.getNumTabs(), juce::dontSendNotification);
+        // Restore the previously selected tab index if possible
+        if (selectedTabIndex >= 0 && selectedTabIndex < tabs.getNumTabs()) {
+            tabs.setCurrentTabIndex(selectedTabIndex);
+        }
         juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() completed successfully with " + juce::String(tabs.getNumTabs()) + " tabs");
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[RackAccordionComponent] Exception in updatePanels: " + juce::String(e.what()));
