@@ -117,6 +117,9 @@ void FileBrowserDialog::fileDoubleClicked(const juce::File& file)
 void FileBrowserDialog::fileClicked(const juce::File& file, const juce::MouseEvent&)
 {
     try {
+        // Always bring dialog to front when a file is clicked
+        if (dialogWindow)
+            dialogWindow->toFront(true);
         if ((dialogType == DialogType::Voice || dialogType == DialogType::Performance) && file.existsAsFile())
         {
             if (fileSelectedCallback && dialogWindow && dialogWindow->isVisible()) {

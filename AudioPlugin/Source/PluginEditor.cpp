@@ -14,7 +14,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         processorRef.setEditorPointer(this); // Register this editor with the processor
 
         juce::ignoreUnused (processorRef);
-        setSize (800, 600);
+        setSize (1000, 600);
 
         // Set up log text box
         logTextBox.setMultiLine(true);
@@ -242,7 +242,7 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
         );
         voiceEditorWindow->setContentOwned(voiceEditorPanel.get(), true);
         voiceEditorWindow->setUsingNativeTitleBar(true);
-        voiceEditorWindow->centreWithSize(800, 600);
+        voiceEditorWindow->centreWithSize(1000, 600);
         voiceEditorWindow->setResizable(true, false);
     }
     juce::Logger::writeToLog("[PluginEditor] Making voice editor window visible");

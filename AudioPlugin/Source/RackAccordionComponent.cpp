@@ -410,12 +410,12 @@ void ModuleTabComponent::loadVoiceFile(const juce::File& file)
             auto* perf = controller->getPerformance();
             if (perf && moduleIndex < 16) {
                 controller->setPartVoiceData(moduleIndex, dexedVoice);
-                
                 juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
                 juce::Logger::writeToLog("[ModuleTabComponent] Loaded voice: " + voiceName);
-                
                 if (editor) {
                     editor->appendLogMessage("Voice loaded: " + voiceName);
+                    // --- Force update of voice editor panel if open ---
+                    editor->showVoiceEditorPanel(moduleIndex);
                 }
             }
         } else {
