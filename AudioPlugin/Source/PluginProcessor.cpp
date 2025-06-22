@@ -393,6 +393,13 @@ bool AudioPluginAudioProcessor::loadPerformanceFile(const juce::String& path)
     return false;
 }
 
+bool AudioPluginAudioProcessor::savePerformanceFile(const juce::String& path)
+{
+    if (controller)
+        return controller->savePerformanceFile(path);
+    return false;
+}
+
 void AudioPluginAudioProcessor::setNumModules(int num) {
     if (controller && controller->getPerformance()) {
         for (int i = 0; i < 16; ++i)

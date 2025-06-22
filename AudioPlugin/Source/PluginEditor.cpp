@@ -54,6 +54,18 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
                 logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in loadPerformanceButtonClicked\n");
             }
         };
+        addAndMakeVisible(savePerformanceButton); // NEW
+        savePerformanceButton.onClick = [this]() {
+            try {
+                savePerformanceButtonClicked();
+            } catch (const std::exception& e) {
+                juce::Logger::writeToLog("[PluginEditor] Exception in savePerformanceButtonClicked: " + juce::String(e.what()));
+                logTextBox.insertTextAtCaret("[PluginEditor] Exception: " + juce::String(e.what()) + "\n");
+            } catch (...) {
+                juce::Logger::writeToLog("[PluginEditor] Unknown exception in savePerformanceButtonClicked");
+                logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in savePerformanceButtonClicked\n");
+            }
+        };
         juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(loadPerformanceButton)");
 
         resized(); // Force layout after construction
@@ -103,6 +115,7 @@ void AudioPluginAudioProcessorEditor::resized()
     
     int y = 10, h = 24, gap = 6;
     loadPerformanceButton.setBounds(10, y, 180, h);
+    savePerformanceButton.setBounds(200, y, 180, h); // NEW: Place next to load button
     y += h + gap;
     int accordionHeight = getHeight() - y - 140;
     if (accordionHeight < 100) accordionHeight = 100; // Ensure minimum height
@@ -201,9 +214,8 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
     dialog.release();
 }
 
-void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
-    juce::Logger::writeToLog("[PluginEditor] showVoiceEditorPanel() called");
-    
+void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
+    juce::Logger::writeToLog("[PluginEditor] showVoiceEditorPanel(" + juce::String(moduleIndex) + ") called");
     // Create the VoiceEditorPanel lazily when first requested
     if (!voiceEditorPanel) {
         juce::Logger::writeToLog("[PluginEditor] Creating VoiceEditorPanel lazily");
@@ -215,7 +227,10 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
         // Always update controller in case it changed
         voiceEditorPanel->setController(processorRef.getController());
     }
-    
+    // Set the module index for editing
+    voiceEditorPanel->setModuleIndex(moduleIndex);
+    // Refresh UI to show the correct module's parameters
+    voiceEditorPanel->syncAllOperatorSlidersWithDexed();
     // Create a new window for the VoiceEditorPanel
     if (!voiceEditorWindow) {
         juce::Logger::writeToLog("[PluginEditor] Creating voice editor window");
@@ -230,9 +245,44 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
         voiceEditorWindow->centreWithSize(800, 600);
         voiceEditorWindow->setResizable(true, false);
     }
-    
     juce::Logger::writeToLog("[PluginEditor] Making voice editor window visible");
     voiceEditorWindow->setVisible(true);
     voiceEditorWindow->toFront(true);
+}
+
+void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
+{
+    auto dialog = std::make_unique<FileBrowserDialog>(
+        "Save Performance File",
+        "*.ini",
+        juce::File(),
+        FileBrowserDialog::DialogType::Performance);
+    auto* dialogPtr = dialog.get();
+    dialogPtr->showDialog(this,
+        [this](const juce::File& file) {
+            juce::String path = file.getFullPathName();
+            if (!path.endsWithIgnoreCase(".ini"))
+                path += ".ini";
+            appendLogMessage("Saving performance: " + path);
+            bool saved = false;
+            try {
+                saved = processorRef.savePerformanceFile(path);
+            } catch (const std::exception& e) {
+                appendLogMessage("Exception saving performance: " + juce::String(e.what()));
+                juce::Logger::writeToLog("[PluginEditor] Exception in savePerformanceFile: " + juce::String(e.what()));
+            } catch (...) {
+                appendLogMessage("Unknown exception saving performance file.");
+                juce::Logger::writeToLog("[PluginEditor] Unknown exception in savePerformanceFile");
+            }
+            if (saved) {
+                appendLogMessage("Performance saved successfully.");
+            } else {
+                appendLogMessage("Failed to save performance.");
+            }
+        },
+        []() {
+            // Cancel callback - nothing needed
+        });
+    dialog.release();
 }
 

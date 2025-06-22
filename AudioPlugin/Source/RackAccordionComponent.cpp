@@ -322,7 +322,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     openVoiceEditorButton.onClick = [this] {
         auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
         if (editor) {
-            editor->showVoiceEditorPanel();
+            editor->showVoiceEditorPanel(moduleIndex);
         }
     };
 

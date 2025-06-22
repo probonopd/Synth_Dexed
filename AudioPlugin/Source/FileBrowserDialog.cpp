@@ -44,6 +44,12 @@ FileBrowserDialog::FileBrowserDialog(const juce::String& title,
     cancelButton = std::make_unique<juce::TextButton>("Cancel");
     cancelButton->addListener(this);
     addAndMakeVisible(cancelButton.get());
+    // Add OK button for save dialogs
+    if (dialogType == DialogType::Performance) {
+        okButton = std::make_unique<juce::TextButton>("OK");
+        okButton->addListener(this);
+        addAndMakeVisible(okButton.get());
+    }
 }
 
 FileBrowserDialog::~FileBrowserDialog()
@@ -52,6 +58,8 @@ FileBrowserDialog::~FileBrowserDialog()
         fileBrowser->removeListener(this);
     if (cancelButton)
         cancelButton->removeListener(this);
+    if (okButton)
+        okButton->removeListener(this);
 }
 
 void FileBrowserDialog::showDialog(juce::Component* parent,
@@ -142,6 +150,7 @@ void FileBrowserDialog::resized()
 {
     fileBrowser->setBounds(0, 0, getWidth(), getHeight() - 50);
     cancelButton->setBounds(10, getHeight() - 40, 100, 30);
+    if (okButton) okButton->setBounds(getWidth() - 110, getHeight() - 40, 100, 30);
 }
 
 void FileBrowserDialog::closeDialog()
@@ -165,8 +174,18 @@ void FileBrowserDialog::cancelButtonClicked()
 
 void FileBrowserDialog::buttonClicked(juce::Button* button)
 {
-    if (button == cancelButton.get())
+    if (button == cancelButton.get()) {
         cancelButtonClicked();
+    } else if (okButton && button == okButton.get()) {
+        // On OK, call the callback with the selected file (even if it doesn't exist yet)
+        if (fileSelectedCallback && fileBrowser) {
+            auto selected = fileBrowser->getSelectedFile(0);
+            if (selected.getFullPathName().isNotEmpty()) {
+                fileSelectedCallback(selected);
+                closeDialog();
+            }
+        }
+    }
 }
 
 // Static instance for plugin-wide settings

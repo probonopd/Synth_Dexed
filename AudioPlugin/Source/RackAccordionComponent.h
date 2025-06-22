@@ -58,7 +58,7 @@ public:
     juce::TextButton loadVoiceButton;
     juce::Slider midiChannelSlider;
     juce::Label midiChannelLabel;
-    juce::TextButton openVoiceEditorButton { "Voice Editor" };
+    juce::TextButton openVoiceEditorButton { "Edit Voice" };
 
     bool isFileDialogOpen() const;
 

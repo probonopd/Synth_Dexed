@@ -116,6 +116,14 @@ public:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoiceEditorPanel)
 private:
     FMRackController* controller = nullptr;
+    int moduleIndex = 0; // which module/part to edit
     juce::TextButton requestDumpButton;
     void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
+
+public:
+    void setModuleIndex(int idx) { 
+        moduleIndex = idx;
+        std::cout << "[VoiceEditorPanel::setModuleIndex] moduleIndex set to " << idx << std::endl;
+    }
+    int getModuleIndex() const { return moduleIndex; }
 };

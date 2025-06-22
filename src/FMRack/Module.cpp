@@ -265,7 +265,6 @@ void Module::onMidiFromDexed(const uint8_t* data, int len) {
         std::cout << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
         if (i < len - 1) std::cout << " ";    }
     std::cout << std::dec << std::endl;
-    
     // Debug the detection logic
     std::cout << "[FMRack::Module::onMidiFromDexed] Checking single voice dump detection:" << std::endl;
     std::cout << "  len=" << len << " (expected 163)" << std::endl;
@@ -275,14 +274,29 @@ void Module::onMidiFromDexed(const uint8_t* data, int len) {
         std::cout << "  data[5]=0x" << std::hex << (int)data[5] << " (expected 0x1B)" << std::endl;
         std::cout << std::dec;
     }
-    std::cout << "  singleVoiceDumpHandler_ is " << (singleVoiceDumpHandler_ ? "SET" : "NULL") << std::endl;
-    
-    // If this is a 163-byte DX7 single voice dump, call the handler
-    if (len == 163 && data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B && singleVoiceDumpHandler_) {
-        std::cout << "[FMRack::Module::onMidiFromDexed] Detected DX7 single voice dump, calling handler." << std::endl;
-        singleVoiceDumpHandler_(std::vector<uint8_t>(data, data + len));
+    // Always process single voice dump if detected
+    if (len == 163 && data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
+        std::cout << "[FMRack::Module::onMidiFromDexed] Detected DX7 single voice dump, processing directly." << std::endl;
+        for (auto& engine : fmEngines_) {
+            if (engine) {
+                // Preserve current OPE bitmask
+                uint8_t currentOpeBitmask = engine->getVoiceDataElement(155);
+                if (currentOpeBitmask == 0x0)
+                    currentOpeBitmask = 0x3F; // Enable all 6 operators by default
+
+                // Set the 155 bytes of voice parameters from the dump (positions 0-154)
+                for (int i = 0; i < 155; ++i)
+                    engine->setVoiceDataElement(i, data[6 + i]);
+
+                // Restore the OPE bitmask after loading the voice parameters
+                engine->setVoiceDataElement(155, currentOpeBitmask);
+
+                std::cout << "[FMRack::Module::onMidiFromDexed] Calling engine->doRefreshVoice()" << std::endl;
+                engine->doRefreshVoice();
+            }
+        }
     } else {
-        std::cout << "[FMRack::Module::onMidiFromDexed] Single voice dump NOT detected or handler not set." << std::endl;
+        std::cout << "[FMRack::Module::onMidiFromDexed] Single voice dump NOT detected." << std::endl;
     }
 }
 

@@ -7,6 +7,7 @@
 #include <cstring>
 #include <vector>
 #include <cstdint>
+#include <iomanip> // For std::setw, std::setfill
 
 // Add global debug flag
 extern bool debugEnabled;
@@ -197,6 +198,66 @@ bool Performance::loadFromFile(const std::string& filename) {
         }
     }
     
+    return true;
+}
+
+bool Performance::saveToFile(const std::string& filename) const {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cout << "[Performance::saveToFile] Could not open file for writing: " << filename << std::endl;
+        return false;
+    }
+    // Write header
+    file << "; FMRack Performance INI\n";
+    file << "; Saved on: ";
+    time_t now = time(nullptr);
+    file << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S") << "\n\n";
+
+    // Write part configs (1-based)
+    for (int part_num = 1; part_num <= 8; ++part_num) {
+        const auto& part = parts[part_num-1];
+        // Only save enabled parts (midiChannel > 0)
+        if (part.midiChannel == 0) continue;
+        file << "BankNumber" << part_num << "=" << (int)part.bankNumber << "\n";
+        file << "VoiceNumber" << part_num << "=" << (int)part.voiceNumber << "\n";
+        file << "MIDIChannel" << part_num << "=" << (int)part.midiChannel << "\n";
+        file << "Volume" << part_num << "=" << (int)part.volume << "\n";
+        file << "Pan" << part_num << "=" << (int)part.pan << "\n";
+        file << "Detune" << part_num << "=" << (int)part.detune << "\n";
+        file << "Cutoff" << part_num << "=" << (int)part.cutoff << "\n";
+        file << "Resonance" << part_num << "=" << (int)part.resonance << "\n";
+        file << "NoteLimitLow" << part_num << "=" << (int)part.noteLimitLow << "\n";
+        file << "NoteLimitHigh" << part_num << "=" << (int)part.noteLimitHigh << "\n";
+        file << "NoteShift" << part_num << "=" << (int)part.noteShift << "\n";
+        file << "ReverbSend" << part_num << "=" << (int)part.reverbSend << "\n";
+        file << "PitchBendRange" << part_num << "=" << (int)part.pitchBendRange << "\n";
+        file << "PitchBendStep" << part_num << "=" << (int)part.pitchBendStep << "\n";
+        file << "PortamentoMode" << part_num << "=" << (int)part.portamentoMode << "\n";
+        file << "PortamentoGlissando" << part_num << "=" << (int)part.portamentoGlissando << "\n";
+        file << "PortamentoTime" << part_num << "=" << (int)part.portamentoTime << "\n";
+        file << "MonoMode" << part_num << "=" << (int)part.monoMode << "\n";
+        file << "ModulationWheelRange" << part_num << "=" << (int)part.modulationWheelRange << "\n";
+        file << "ModulationWheelTarget" << part_num << "=" << (int)part.modulationWheelTarget << "\n";
+        file << "FootControlRange" << part_num << "=" << (int)part.footControlRange << "\n";
+        file << "FootControlTarget" << part_num << "=" << (int)part.footControlTarget << "\n";
+        file << "BreathControlRange" << part_num << "=" << (int)part.breathControlRange << "\n";
+        file << "BreathControlTarget" << part_num << "=" << (int)part.breathControlTarget << "\n";
+        file << "AftertouchRange" << part_num << "=" << (int)part.aftertouchRange << "\n";
+        file << "AftertouchTarget" << part_num << "=" << (int)part.aftertouchTarget << "\n";
+        // Write voice data as hex bytes
+        file << "VoiceData" << part_num << "=";
+        for (size_t i = 0; i < part.voiceData.size(); ++i) {
+            file << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (int)part.voiceData[i];
+            if (i < part.voiceData.size() - 1) file << " ";
+        }
+        file << std::dec << "\n";
+    }
+    // Write global effects
+    file << "\nReverbEnable=" << (effects.reverbEnable ? 1 : 0) << "\n";
+    file << "ReverbSize=" << (int)effects.reverbSize << "\n";
+    file << "ReverbLevel=" << (int)effects.reverbLevel << "\n";
+    // Optionally add more global effect parameters here if needed
+    file.close();
     return true;
 }
 

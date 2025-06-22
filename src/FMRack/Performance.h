@@ -94,6 +94,7 @@ public:
     
     // Methods
     bool loadFromFile(const std::string& filename);
+    bool saveToFile(const std::string& filename) const;
     const PartConfig& getPartConfig(int partIndex) const;
     int getEnabledPartCount() const;
     void setDefaults(int numParts, int unisonVoices);

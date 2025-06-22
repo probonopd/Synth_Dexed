@@ -71,6 +71,7 @@ public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
     void logToGui(const juce::String& message);
     bool loadPerformanceFile(const juce::String& path);
+    bool savePerformanceFile(const juce::String& path); // NEW: Save performance to file
     void setNumModules(int num);
     void setUnisonVoices(int num);
     void setUnisonDetune(float detune);

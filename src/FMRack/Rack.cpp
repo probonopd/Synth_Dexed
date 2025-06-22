@@ -75,11 +75,10 @@ void Rack::createModulesFromPerformance() {
     DEBUG_PRINT("  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n");
     DEBUG_PRINT("  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n");
     for (int i = 0; i < 16; ++i) {
-        if (i >= static_cast<int>(performance_->parts.size())) {
-            std::cout << "[DEBUG] Index " << i << " out of bounds for parts.size() " << performance_->parts.size() << std::endl;
-            break;
-        }
         auto config = performance_->getPartConfig(i);
+        if (config.midiChannel == 0)
+            continue; // Only create modules for enabled parts
+
         if (debugEnabled) {
             std::cout << "[DEBUG] Got part config for index: " << i << std::endl;
         }

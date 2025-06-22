@@ -15,6 +15,7 @@ public:
 
     // Performance management
     bool loadPerformanceFile(const juce::String& path);
+    bool savePerformanceFile(const juce::String& path); // NEW: Save performance to file
     void setDefaultPerformance();
     void setPerformance(const FMRack::Performance& perf);
     FMRack::Performance* getPerformance();
@@ -39,8 +40,7 @@ public:
 
     // Request a DX7 single voice dump from the given MIDI channel (1-16)
     void requestSingleVoiceDump(int midiChannel);
-    // Register a callback for when a single voice dump is received
-    void setSingleVoiceDumpCallback(std::function<void(const std::vector<uint8_t>&)> cb);    // This function should be called by the MIDI/SysEx receive path when a single voice dump is received
+    // This function should be called by the MIDI/SysEx receive path when a single voice dump is received
     void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
 
     // Voice data management

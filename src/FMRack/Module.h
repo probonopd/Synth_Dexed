@@ -47,13 +47,6 @@ public:
         return nullptr;
     }
     
-    // Register a callback for outgoing DX7 single voice dump SysEx
-    void setSingleVoiceDumpHandler(std::function<void(const std::vector<uint8_t>&)> cb) { 
-        std::cout << "[Module::setSingleVoiceDumpHandler] Handler being set, cb=" << (cb ? "VALID" : "NULL") << std::endl;
-        singleVoiceDumpHandler_ = std::move(cb); 
-        std::cout << "[Module::setSingleVoiceDumpHandler] Handler set, singleVoiceDumpHandler_=" << (singleVoiceDumpHandler_ ? "SET" : "NULL") << std::endl;
-    }
-    
 private:
     float sampleRate_;
     uint8_t midiChannel_;
@@ -83,9 +76,6 @@ private:
     
     // Pointer to live PartConfig for real-time updates
     Performance::PartConfig* partConfig_ = nullptr;
-    
-    // Callback for single voice dump SysEx
-    std::function<void(const std::vector<uint8_t>&)> singleVoiceDumpHandler_;
     
     // Helper methods
     bool isNoteInRange(uint8_t note) const;

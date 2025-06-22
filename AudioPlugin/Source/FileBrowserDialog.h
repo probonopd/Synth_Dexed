@@ -46,6 +46,7 @@ private:
     
     std::unique_ptr<juce::FileBrowserComponent> fileBrowser;
     std::unique_ptr<juce::TextButton> cancelButton;
+    std::unique_ptr<juce::TextButton> okButton; // NEW: OK button for save dialogs
     std::unique_ptr<juce::DialogWindow> dialogWindow;
     
     juce::String filePattern;

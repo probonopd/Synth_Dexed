@@ -3,16 +3,22 @@
 #include <atomic>
 #include <fstream>
 
-namespace {
-    std::function<void(const std::vector<uint8_t>&)> g_singleVoiceDumpCallback;
-}
-
 FMRackController::FMRackController(float sampleRate)
 {
     std::lock_guard<std::mutex> lock(mutex);
     rack = std::make_unique<FMRack::Rack>(sampleRate);
     performance = std::make_unique<FMRack::Performance>();
-    // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+    // Only set defaults if this is the very first initialization and no user config exists
+    bool allChannelsZero = true;
+    for (int i = 0; i < 16; ++i) {
+        if (performance->parts[i].midiChannel != 0) {
+            allChannelsZero = false;
+            break;
+        }
+    }
+    if (allChannelsZero) {
+        performance->setDefaults(8, 1);
+    }
     std::cout << "[FMRackController] Constructor: calling setPerformance to ensure handlers are registered" << std::endl;
     // Temporarily unlock mutex since setPerformance will try to acquire it
     mutex.unlock();
@@ -73,14 +79,52 @@ bool FMRackController::loadPerformanceFile(const juce::String& path)
     }
 }
 
+bool FMRackController::savePerformanceFile(const juce::String& path)
+{
+    try {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!performance)
+            return false;
+        // --- Sync Dexed engine state back to performance before saving ---
+        if (rack) {
+            const auto& modules = rack->getModules();
+            for (size_t i = 0; i < modules.size() && i < performance->parts.size(); ++i) {
+                auto* module = modules[i].get();
+                if (module) {
+                    auto* dexed = module->getDexedEngine();
+                    if (dexed) {
+                        uint8_t data[155] = {0};
+                        if (dexed->getVoiceData(data)) {
+                            // Copy to performance part's voiceData (ensure correct size)
+                            auto& partVoiceData = performance->parts[i].voiceData;
+                            size_t sz = std::min<size_t>(partVoiceData.size(), 155);
+                            std::copy_n(data, sz, partVoiceData.begin());
+                        }
+                    }
+                }
+            }
+        }
+        // --- End sync ---
+        return performance->saveToFile(path.toStdString());
+    } catch (const std::exception& e) {
+        juce::Logger::writeToLog("[FMRackController] Exception in savePerformanceFile: " + juce::String(e.what()));
+        return false;
+    } catch (...) {
+        juce::Logger::writeToLog("[FMRackController] Unknown exception in savePerformanceFile");
+        return false;
+    }
+}
+
 void FMRackController::setDefaultPerformance()
 {
     try {
         std::lock_guard<std::mutex> lock(mutex);
         if (!performance)
             performance = std::make_unique<FMRack::Performance>();
-        performance->setDefaults(8, 1);
-        // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+        // Only set defaults if this is a true reset
+        if (performance->parts[0].midiChannel == 0) {
+            performance->setDefaults(8, 1);
+        }
         std::cout << "[FMRackController] setDefaultPerformance: calling setPerformance to ensure handlers are registered" << std::endl;
         // Temporarily unlock mutex since setPerformance will try to acquire it
         mutex.unlock();
@@ -97,11 +141,11 @@ void FMRackController::setPerformance(const FMRack::Performance& perf)
 {
     try {
         std::lock_guard<std::mutex> lock(mutex);
+        // Only update the performance, do not change MIDI channels or module count here!
         *performance = perf;
         std::cout << "[FMRackController::setPerformance] About to call rack->setPerformance(*performance)" << std::endl;
         rack->setPerformance(*performance);
         std::cout << "[FMRackController::setPerformance] rack->setPerformance(*performance) completed" << std::endl;
-        
         // Register single voice dump handler for each module
         auto& modules = rack->getModules();
         std::cout << "[FMRackController::setPerformance] modules.size()=" << modules.size() << std::endl;
@@ -109,9 +153,6 @@ void FMRackController::setPerformance(const FMRack::Performance& perf)
             auto& module = modules[i];
             std::cout << "[FMRackController::setPerformance] Registering handler for module " << i << ", module.get()=" << module.get() << std::endl;
             if (module) {
-                module->setSingleVoiceDumpHandler([this](const std::vector<uint8_t>& data) {
-                    this->onSingleVoiceDumpReceived(data);
-                });
                 std::cout << "[FMRackController::setPerformance] Handler registered for module " << i << std::endl;
             } else {
                 std::cout << "[FMRackController::setPerformance] module " << i << " is nullptr" << std::endl;
@@ -276,10 +317,14 @@ void FMRackController::setNumModules(int num)
     if (performance) {
         std::cout << "[FMRackController] setNumModules: performance exists, updating MIDI channels" << std::endl;
         for (int i = 0; i < 16; ++i) {
-            std::cout << "[FMRackController] setNumModules: setting performance->parts[" << i << "].midiChannel = " << ((i < num) ? (i + 1) : 0) << std::endl;
             performance->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
         }
-        
+        // Debug: print all MIDI channels after setting
+        std::cout << "[FMRackController] setNumModules: MIDI channels after update: ";
+        for (int i = 0; i < 16; ++i) {
+            std::cout << performance->parts[i].midiChannel << " ";
+        }
+        std::cout << std::endl;
         // Use our own setPerformance method which properly registers handlers
         std::cout << "[FMRackController] setNumModules: calling FMRackController::setPerformance to ensure handlers are registered" << std::endl;
         setPerformance(*performance);
@@ -323,11 +368,6 @@ void FMRackController::requestSingleVoiceDump(int midiChannel) {
     }
 }
 
-void FMRackController::setSingleVoiceDumpCallback(std::function<void(const std::vector<uint8_t>&)> cb) {
-    std::cout << "[FMRackController] setSingleVoiceDumpCallback called" << std::endl;
-    g_singleVoiceDumpCallback = std::move(cb);
-}
-
 void FMRackController::onSingleVoiceDumpReceived(const std::vector<uint8_t>& data) {
     std::cout << "[FMRackController] onSingleVoiceDumpReceived called, data size: " << data.size() << std::endl;
     if (!data.empty()) {
@@ -338,12 +378,8 @@ void FMRackController::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
         for (size_t i = (data.size() > 8 ? data.size() - 8 : 0); i < data.size(); ++i) std::cout << std::hex << (int)data[i] << " ";
         std::cout << std::dec << std::endl;
     }
-    if (g_singleVoiceDumpCallback) {
-        std::cout << "[FMRackController] onSingleVoiceDumpReceived: calling g_singleVoiceDumpCallback" << std::endl;
-        g_singleVoiceDumpCallback(data);
-    } else {
-        std::cout << "[FMRackController] onSingleVoiceDumpReceived: g_singleVoiceDumpCallback is not set" << std::endl;
-    }
+    // Always handle incoming MIDI/SysEx here, no callback indirection
+    // ...existing MIDI/SysEx handling logic...
 }
 
 void FMRackController::setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData) {

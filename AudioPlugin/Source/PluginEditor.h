@@ -22,7 +22,7 @@ public:
     void appendLogMessage(const juce::String& message); // Public method to append log
 
     AudioPluginAudioProcessor* getProcessor() const { return &processorRef; } // Added method to access processor
-    void showVoiceEditorPanel(); // Added method to show the VoiceEditorPanel
+    void showVoiceEditorPanel(int moduleIndex); // Accepts module index
     VoiceEditorPanel* getVoiceEditorPanel() const { return voiceEditorPanel.get(); } // Added getter for voiceEditorPanel
 
 private:
@@ -47,7 +47,9 @@ private:
     juce::TextEditor logTextBox; // For displaying log messages
 
     juce::TextButton loadPerformanceButton { "Load Performance .ini" };
+    juce::TextButton savePerformanceButton { "Save Performance .ini" }; // NEW: Save button
     void loadPerformanceButtonClicked();
+    void savePerformanceButtonClicked(); // NEW: Save handler
     
     void numModulesChanged();
     void unisonVoicesChanged();
