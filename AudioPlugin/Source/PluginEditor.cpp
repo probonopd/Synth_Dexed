@@ -84,12 +84,12 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 {
     try {
         processorRef.setEditorPointer(nullptr);
+        // --- CRASH PREVENTION: Ensure all child windows are closed before main editor is destroyed ---
         if (voiceEditorWindow) {
+            // Remove content to break parent-child relationship and avoid dangling pointers
             voiceEditorWindow->setVisible(false);
+            voiceEditorWindow->setContentOwned(nullptr, false); // Remove content after hiding
             voiceEditorWindow.reset();
-        }
-        if (voiceEditorPanel) {
-            voiceEditorPanel.reset();
         }
         if (rackAccordion) {
             rackAccordion.reset();
@@ -126,9 +126,6 @@ void AudioPluginAudioProcessorEditor::resized()
     }
     logTextBox.setBounds(10, getHeight() - 130, getWidth() - 20, 120);
 
-    // Set bounds for the voice editor panel
-    if (voiceEditorPanel)
-        voiceEditorPanel->setBounds(0, 0, getWidth(), getHeight());
     juce::Logger::writeToLog("[PluginEditor] resized() end");
 }
 
@@ -201,11 +198,6 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                         }
                     }
                 }
-                if (voiceEditorPanel) {
-                    // Always update controller after loading a performance
-                    voiceEditorPanel->setController(processorRef.getController());
-                    voiceEditorPanel->syncAllOperatorSlidersWithDexed();
-                }
             }
         },
         []() {
@@ -216,22 +208,11 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 
 void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
     juce::Logger::writeToLog("[PluginEditor] showVoiceEditorPanel(" + juce::String(moduleIndex) + ") called");
-    // Create the VoiceEditorPanel lazily when first requested
-    if (!voiceEditorPanel) {
-        juce::Logger::writeToLog("[PluginEditor] Creating VoiceEditorPanel lazily");
-        voiceEditorPanel = std::make_unique<VoiceEditorPanel>();
-        juce::Logger::writeToLog("[PluginEditor] VoiceEditorPanel created");
-        // Set the controller pointer after creation
-        voiceEditorPanel->setController(processorRef.getController());
-    } else {
-        // Always update controller in case it changed
-        voiceEditorPanel->setController(processorRef.getController());
-    }
-    // Set the module index for editing
-    voiceEditorPanel->setModuleIndex(moduleIndex);
-    // Refresh UI to show the correct module's parameters
-    voiceEditorPanel->syncAllOperatorSlidersWithDexed();
-    // Create a new window for the VoiceEditorPanel
+    // Always create a new VoiceEditorPanel for the window, owned by the window
+    auto newVoiceEditorPanel = std::make_unique<VoiceEditorPanel>();
+    newVoiceEditorPanel->setController(processorRef.getController());
+    newVoiceEditorPanel->setModuleIndex(moduleIndex);
+    newVoiceEditorPanel->syncAllOperatorSlidersWithDexed();
     if (!voiceEditorWindow) {
         juce::Logger::writeToLog("[PluginEditor] Creating voice editor window");
         voiceEditorWindow = std::make_unique<VoiceEditorWindow>(
@@ -240,14 +221,20 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
             juce::DocumentWindow::allButtons,
             this // Pass the editor instance to the window
         );
-        voiceEditorWindow->setContentOwned(voiceEditorPanel.get(), true);
+        // Give ownership of the panel to the window (window will delete it)
+        voiceEditorWindow->setContentOwned(newVoiceEditorPanel.release(), true);
         voiceEditorWindow->setUsingNativeTitleBar(true);
         voiceEditorWindow->centreWithSize(1000, 600);
         voiceEditorWindow->setResizable(true, false);
+    } else {
+        // If window already exists, replace its content with a new panel
+        voiceEditorWindow->setContentOwned(newVoiceEditorPanel.release(), true);
     }
     juce::Logger::writeToLog("[PluginEditor] Making voice editor window visible");
     voiceEditorWindow->setVisible(true);
     voiceEditorWindow->toFront(true);
+    // Do not keep a unique_ptr to the panel in the editor anymore
+    voiceEditorPanel.reset();
 }
 
 void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
