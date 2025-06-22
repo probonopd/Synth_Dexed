@@ -66,11 +66,54 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     g.setFont(juce::Font(10.0f));
     g.setColour(juce::Colours::white);
     // Top: Breakpoint, LeftDepth, RightDepth
-    juce::String topText = juce::String::formatted("BP: %.2f  LD: %.2f  RD: %.2f", breakPoint, leftDepth, rightDepth);
-    g.drawText(topText, area.withHeight(textHeight), juce::Justification::centredTop, false);
+    juce::Rectangle<float> topArea = area.withHeight(textHeight);
+    float itemW = area.getWidth() / 3.0f;
+    juce::String topValues[3] = {
+        juce::String(breakPoint, 2),
+        juce::String(leftDepth, 2),
+        juce::String(rightDepth, 2)
+    };
+    juce::String topLabels[3] = { "BP", "LD", "RD" };
+    for (int i = 0; i < 3; ++i) {
+        juce::Rectangle<float> r(topArea.getX() + i * itemW, topArea.getY(), itemW, textHeight);
+        g.setColour(hoveredParam == i ? juce::Colours::yellow : juce::Colours::white);
+        g.drawText(topValues[i], r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
+        g.drawText(topLabels[i], r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
+    }
     // Bottom: LeftCurve, RightCurve
-    juce::String bottomText = juce::String::formatted("LC: %.2f  RC: %.2f", leftCurve, rightCurve);
-    g.drawText(bottomText, area.withY(area.getBottom() - textHeight).withHeight(textHeight), juce::Justification::centredBottom, false);
+    juce::Rectangle<float> bottomArea = area.withY(area.getBottom() - textHeight).withHeight(textHeight);
+    itemW = area.getWidth() / 2.0f;
+    juce::String bottomValues[2] = {
+        juce::String(leftCurve, 2),
+        juce::String(rightCurve, 2)
+    };
+    juce::String bottomLabels[2] = { "LC", "RC" };
+    for (int i = 0; i < 2; ++i) {
+        g.setColour(hoveredParam == (i + 3) ? juce::Colours::yellow : juce::Colours::white);
+        juce::Rectangle<float> r(bottomArea.getX() + i * itemW, bottomArea.getY(), itemW, textHeight);
+        g.drawText(bottomValues[i], r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
+        g.drawText(bottomLabels[i], r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
+    }
+}
+
+void KeyboardScalingDisplay::mouseMove(const juce::MouseEvent& e) {
+    auto area = getLocalBounds().reduced(4).toFloat();
+    float textHeight = 14.0f;
+    float w = area.getWidth();
+    float itemW = w / 3.0f;
+    hoveredParam = -1;
+    // Top row (BP, LD, RD)
+    for (int i = 0; i < 3; ++i) {
+        juce::Rectangle<float> r(area.getX() + i * itemW, area.getY(), itemW, textHeight);
+        if (r.contains(e.position)) { hoveredParam = i; repaint(); return; }
+    }
+    // Bottom row (LC, RC)
+    itemW = w / 2.0f;
+    for (int i = 0; i < 2; ++i) {
+        juce::Rectangle<float> r(area.getX() + i * itemW, area.getBottom() - textHeight, itemW, textHeight);
+        if (r.contains(e.position)) { hoveredParam = i + 3; repaint(); return; }
+    }
+    if (hoveredParam != -1) { hoveredParam = -1; repaint(); }
 }
 
 void KeyboardScalingDisplay::mouseEnter(const juce::MouseEvent& e) {
@@ -83,10 +126,71 @@ void KeyboardScalingDisplay::mouseEnter(const juce::MouseEvent& e) {
 }
 
 void KeyboardScalingDisplay::mouseExit(const juce::MouseEvent& e) {
+    hoveredParam = -1;
+    repaint();
     if (auto* parent = getParentComponent()) {
         if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
             if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
                 vep->restoreDefaultHelp();
         }
     }
+}
+
+void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
+    if (hoveredParam == -1) return;
+    float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
+    int opIdx = -1;
+    int paramOffset = -1;
+    if (auto* parent = getParentComponent()) {
+        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
+            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent())) {
+                for (int idx = 0; idx < vep->operators.size(); ++idx) {
+                    if (vep->operators[idx].get() == op) {
+                        opIdx = idx;
+                        break;
+                    }
+                }
+                if (opIdx >= 0) {
+                    float* param = nullptr;
+                    uint8_t paramAddress = 0;
+                    if (hoveredParam == 0) { // BP
+                        breakPoint = juce::jlimit(0.0f, 1.0f, breakPoint + delta);
+                        uint8_t value = static_cast<uint8_t>(breakPoint * 99.0f + 0.5f);
+                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 8);
+                        vep->setDexedParam(paramAddress, value);
+                    } else if (hoveredParam == 1) { // LD
+                        leftDepth = juce::jlimit(0.0f, 1.0f, leftDepth + delta);
+                        uint8_t value = static_cast<uint8_t>(leftDepth * 99.0f + 0.5f);
+                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 9);
+                        vep->setDexedParam(paramAddress, value);
+                    } else if (hoveredParam == 2) { // RD
+                        rightDepth = juce::jlimit(0.0f, 1.0f, rightDepth + delta);
+                        uint8_t value = static_cast<uint8_t>(rightDepth * 99.0f + 0.5f);
+                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 10);
+                        vep->setDexedParam(paramAddress, value);
+                    } else if (hoveredParam == 3) { // LC
+                        leftCurve = juce::jlimit(-1.0f, 2.0f, leftCurve + delta);
+                        // Map back to Dexed curve value (0=linear, 1=exp+, 2=exp++, -1=exp-)
+                        uint8_t value = 0;
+                        if (leftCurve == 0.0f) value = 0;
+                        else if (leftCurve == 1.0f) value = 1;
+                        else if (leftCurve == -1.0f) value = 2;
+                        else if (leftCurve == 2.0f) value = 3;
+                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 11);
+                        vep->setDexedParam(paramAddress, value);
+                    } else if (hoveredParam == 4) { // RC
+                        rightCurve = juce::jlimit(-1.0f, 2.0f, rightCurve + delta);
+                        uint8_t value = 0;
+                        if (rightCurve == 0.0f) value = 0;
+                        else if (rightCurve == 1.0f) value = 1;
+                        else if (rightCurve == -1.0f) value = 2;
+                        else if (rightCurve == 2.0f) value = 3;
+                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 12);
+                        vep->setDexedParam(paramAddress, value);
+                    }
+                }
+            }
+        }
+    }
+    repaint();
 }
