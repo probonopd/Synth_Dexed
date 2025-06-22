@@ -600,7 +600,7 @@ uint8_t VoiceEditorPanel::getDexedParam(uint8_t address) const {
     const auto& modules = rack->getModules();
     if (modules.empty() || moduleIndex < 0 || moduleIndex >= (int)modules.size()) { std::cout << " [VoiceEditorPanel] getDexedParam: modules empty or bad index" << std::endl; return 0; }
     auto* dexed = modules[moduleIndex]->getDexedEngine();
-    std::cout << ", module ptr=" << modules[moduleIndex] << std::endl;
+    std::cout << ", module ptr=" << modules[moduleIndex].get() << std::endl;
     if (!dexed) { std::cout << " [VoiceEditorPanel] getDexedParam: dexed is null" << std::endl; return 0; }
     uint8_t v = dexed->getVoiceDataElement(address);
     std::cout << "[VoiceEditorPanel] getDexedParam: address=" << (int)address << " value=" << (int)v << std::endl;

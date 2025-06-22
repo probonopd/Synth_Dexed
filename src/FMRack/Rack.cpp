@@ -74,6 +74,17 @@ void Rack::createModulesFromPerformance() {
     DEBUG_PRINT("  ReverbLowDamp: " << static_cast<int>(performance_->effects.reverbLowDamp) << "/127\n");
     DEBUG_PRINT("  ReverbLowPass: " << static_cast<int>(performance_->effects.reverbLowPass) << "/127\n");
     DEBUG_PRINT("  ReverbDiffusion: " << static_cast<int>(performance_->effects.reverbDiffusion) << "/127\n");
+
+    // First pass: count modules per MIDI channel (1-16)
+    int midiChannelCounts[17] = {0}; // 1-based, midiChannelCounts[0] unused
+    for (int i = 0; i < 16; ++i) {
+        auto config = performance_->getPartConfig(i);
+        if (config.midiChannel > 0 && config.midiChannel <= 16) {
+            midiChannelCounts[config.midiChannel]++;
+        }
+    }
+
+    // Second pass: create modules and assign gain compensation
     for (int i = 0; i < 16; ++i) {
         auto config = performance_->getPartConfig(i);
         if (config.midiChannel == 0)
@@ -133,10 +144,10 @@ void Rack::createModulesFromPerformance() {
             }
             // Use new constructor to load voice at creation
             auto module = std::make_unique<Module>(sampleRate_, config);
-            DEBUG_PRINT("[DEBUG] Module " << (i + 1)
-                << " MIDI channel: " << (int)module->getMIDIChannel()
-                << " Note range: " << (int)config.noteLimitLow << "-" << (int)config.noteLimitHigh
-                << " Pan: " << (int)config.pan);
+            // Gain compensation: 1/sqrt(N) for N modules on this MIDI channel
+            int count = midiChannelCounts[config.midiChannel];
+            float gainComp = (count > 0) ? (1.0f / std::sqrt(static_cast<float>(count))) : 1.0f;
+            module->setOutputGain(gainComp);
             modules_.push_back(std::move(module));
             std::string voiceName = VoiceData::extractDX7VoiceName(std::vector<uint8_t>(config.voiceData.begin(), config.voiceData.end()));
             std::cout << "Module " << (i + 1) << " created and configured with MIDI channel "

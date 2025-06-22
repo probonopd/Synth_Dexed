@@ -209,11 +209,9 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
     // Apply module-level volume and panning
     float moduleLeftGain = std::sqrt(1.0f - pan_) * volume_;
     float moduleRightGain = std::sqrt(pan_) * volume_;
-    
     for (int i = 0; i < numSamples; ++i) {
-        float left = leftOut[i] * moduleLeftGain;
-        float right = rightOut[i] * moduleRightGain;
-        
+        float left = leftOut[i] * moduleLeftGain * outputGain_;
+        float right = rightOut[i] * moduleRightGain * outputGain_;
         leftOut[i] = left;
         rightOut[i] = right;
         
@@ -315,6 +313,10 @@ void Module::panic() {
     for (auto& engine : fmEngines_) {
         engine->panic();
     }
+}
+
+void Module::setOutputGain(float gain) {
+    outputGain_ = gain;
 }
 
 } // namespace FMRack

@@ -32,6 +32,7 @@ public:
     bool isActive() const;
     void panic();
     
+    // Set output gain for gain compensation (e.g., for MIDI channel layering)
     void setOutputGain(float gain);
     
     // Add SysEx handler
