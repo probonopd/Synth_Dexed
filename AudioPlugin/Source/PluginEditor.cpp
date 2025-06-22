@@ -9,12 +9,12 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     : AudioProcessorEditor (&p), processorRef (p)
 {
     try {
-        std::cout << "[PluginEditor] Constructor. this=" << this << std::endl;
-        setSize(800, 600); // Ensure the editor has a reasonable size
+        // Use JUCE logging system for VST3 compatibility
+        juce::Logger::writeToLog("[PluginEditor] Constructor. this=" + juce::String::toHexString((juce::pointer_sized_int)this));
         processorRef.setEditorPointer(this); // Register this editor with the processor
 
         juce::ignoreUnused (processorRef);
-        setSize (600, 600);
+        setSize (800, 600);
 
         // Set up log text box
         logTextBox.setMultiLine(true);
@@ -31,13 +31,15 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 #pragma warning(pop)
 #endif
         addAndMakeVisible(logTextBox);
-        std::cout << "[PluginEditor] After addAndMakeVisible(logTextBox)" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(logTextBox)");
+        logTextBox.insertTextAtCaret("[PluginEditor] Constructor started\n");
 
         // Add the rack accordion GUI
         rackAccordion = std::make_unique<RackAccordionComponent>(&processorRef);
         rackAccordion->setEditor(this); // Set the editor pointer for child access
         addAndMakeVisible(rackAccordion.get());
-        std::cout << "[PluginEditor] After addAndMakeVisible(rackAccordion)" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(rackAccordion)");
+        logTextBox.insertTextAtCaret("[PluginEditor] RackAccordion created and added\n");
 
         // Add the performance button back to the UI (keep in editor for now)
         addAndMakeVisible(loadPerformanceButton);
@@ -45,22 +47,23 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
             try {
                 loadPerformanceButtonClicked();
             } catch (const std::exception& e) {
-                std::cout << "[PluginEditor] Exception in loadPerformanceButtonClicked: " << e.what() << std::endl;
+                juce::Logger::writeToLog("[PluginEditor] Exception in loadPerformanceButtonClicked: " + juce::String(e.what()));
                 logTextBox.insertTextAtCaret("[PluginEditor] Exception: " + juce::String(e.what()) + "\n");
             } catch (...) {
-                std::cout << "[PluginEditor] Unknown exception in loadPerformanceButtonClicked" << std::endl;
+                juce::Logger::writeToLog("[PluginEditor] Unknown exception in loadPerformanceButtonClicked");
                 logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in loadPerformanceButtonClicked\n");
             }
         };
-        std::cout << "[PluginEditor] After addAndMakeVisible(loadPerformanceButton)" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(loadPerformanceButton)");
 
         resized(); // Force layout after construction
-        std::cout << "[PluginEditor] End of constructor" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] End of constructor");
+        logTextBox.insertTextAtCaret("[PluginEditor] Constructor completed\n");
     } catch (const std::exception& e) {
-        std::cout << "[PluginEditor] Exception in constructor: " << e.what() << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] Exception in constructor: " + juce::String(e.what()));
         logTextBox.insertTextAtCaret("[PluginEditor] Exception: " + juce::String(e.what()) + "\n");
     } catch (...) {
-        std::cout << "[PluginEditor] Unknown exception in constructor" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] Unknown exception in constructor");
         logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in constructor\n");
     }
 }
@@ -80,9 +83,9 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
             rackAccordion.reset();
         }
     } catch (const std::exception& e) {
-        std::cout << "[PluginEditor] Exception in destructor: " << e.what() << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] Exception in destructor: " + juce::String(e.what()));
     } catch (...) {
-        std::cout << "[PluginEditor] Unknown exception in destructor" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] Unknown exception in destructor");
     }
 }
 
@@ -95,20 +98,25 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 
 void AudioPluginAudioProcessorEditor::resized()
 {
-    std::cout << "[PluginEditor] resized() called. this=" << this << " size=" << getWidth() << "x" << getHeight() << std::endl;
+    juce::Logger::writeToLog("[PluginEditor] resized() called. this=" + juce::String::toHexString((juce::pointer_sized_int)this) + " size=" + juce::String(getWidth()) + "x" + juce::String(getHeight()));
+    logTextBox.insertTextAtCaret("[PluginEditor] resized() called. size=" + juce::String(getWidth()) + "x" + juce::String(getHeight()) + "\n");
+    
     int y = 10, h = 24, gap = 6;
     loadPerformanceButton.setBounds(10, y, 180, h);
     y += h + gap;
     int accordionHeight = getHeight() - y - 140;
     if (accordionHeight < 100) accordionHeight = 100; // Ensure minimum height
-    if (rackAccordion)
+    if (rackAccordion) {
         rackAccordion->setBounds(10, y, getWidth() - 20, accordionHeight);
+        juce::Logger::writeToLog("[PluginEditor] rackAccordion bounds set to: x=10, y=" + juce::String(y) + ", width=" + juce::String(getWidth() - 20) + ", height=" + juce::String(accordionHeight));
+        logTextBox.insertTextAtCaret("[PluginEditor] rackAccordion bounds: " + juce::String(getWidth() - 20) + "x" + juce::String(accordionHeight) + "\n");
+    }
     logTextBox.setBounds(10, getHeight() - 130, getWidth() - 20, 120);
 
     // Set bounds for the voice editor panel
     if (voiceEditorPanel)
         voiceEditorPanel->setBounds(0, 0, getWidth(), getHeight());
-    std::cout << "[PluginEditor] resized() end" << std::endl;
+    juce::Logger::writeToLog("[PluginEditor] resized() end");
 }
 
 void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& message)
@@ -142,10 +150,10 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                     loaded = processorRef.loadPerformanceFile(file.getFullPathName());
                 } catch (const std::exception& e) {
                     appendLogMessage("Exception loading performance: " + juce::String(e.what()));
-                    std::cout << "[PluginEditor] Exception in loadPerformanceFile: " << e.what() << std::endl;
+                    juce::Logger::writeToLog("[PluginEditor] Exception in loadPerformanceFile: " + juce::String(e.what()));
                 } catch (...) {
                     appendLogMessage("Unknown exception loading performance file.");
-                    std::cout << "[PluginEditor] Unknown exception in loadPerformanceFile" << std::endl;
+                    juce::Logger::writeToLog("[PluginEditor] Unknown exception in loadPerformanceFile");
                 }
                 if (loaded) {
                     appendLogMessage("Performance loaded successfully.");
@@ -173,10 +181,10 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
                             rackAccordion->updatePanels();
                         } catch (const std::exception& e) {
                             appendLogMessage("Exception in rackAccordion->updatePanels: " + juce::String(e.what()));
-                            std::cout << "[PluginEditor] Exception in updatePanels: " << e.what() << std::endl;
+                            juce::Logger::writeToLog("[PluginEditor] Exception in updatePanels: " + juce::String(e.what()));
                         } catch (...) {
                             appendLogMessage("Unknown exception in rackAccordion->updatePanels.");
-                            std::cout << "[PluginEditor] Unknown exception in updatePanels" << std::endl;
+                            juce::Logger::writeToLog("[PluginEditor] Unknown exception in updatePanels");
                         }
                     }
                 }
@@ -194,13 +202,13 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 }
 
 void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
-    std::cout << "[PluginEditor] showVoiceEditorPanel() called" << std::endl;
+    juce::Logger::writeToLog("[PluginEditor] showVoiceEditorPanel() called");
     
     // Create the VoiceEditorPanel lazily when first requested
     if (!voiceEditorPanel) {
-        std::cout << "[PluginEditor] Creating VoiceEditorPanel lazily" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] Creating VoiceEditorPanel lazily");
         voiceEditorPanel = std::make_unique<VoiceEditorPanel>();
-        std::cout << "[PluginEditor] VoiceEditorPanel created" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] VoiceEditorPanel created");
         // Set the controller pointer after creation
         voiceEditorPanel->setController(processorRef.getController());
     } else {
@@ -210,7 +218,7 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
     
     // Create a new window for the VoiceEditorPanel
     if (!voiceEditorWindow) {
-        std::cout << "[PluginEditor] Creating voice editor window" << std::endl;
+        juce::Logger::writeToLog("[PluginEditor] Creating voice editor window");
         voiceEditorWindow = std::make_unique<VoiceEditorWindow>(
             "Voice Editor", 
             juce::Colours::darkgrey, 
@@ -223,7 +231,7 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel() {
         voiceEditorWindow->setResizable(true, false);
     }
     
-    std::cout << "[PluginEditor] Making voice editor window visible" << std::endl;
+    juce::Logger::writeToLog("[PluginEditor] Making voice editor window visible");
     voiceEditorWindow->setVisible(true);
     voiceEditorWindow->toFront(true);
 }

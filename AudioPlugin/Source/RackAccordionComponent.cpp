@@ -1,4 +1,5 @@
 #include "OperatorSliderLookAndFeel.h"
+#include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "RackAccordionComponent.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -31,80 +32,92 @@ RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* proces
             try {
                 setNumModulesVT((int)numModulesSlider.getValue());
             } catch (const std::exception& e) {
-                std::cout << "[RackAccordionComponent] Exception in numModulesSlider.onValueChange: " << e.what() << std::endl;
+                juce::Logger::writeToLog("[RackAccordionComponent] Exception in numModulesSlider.onValueChange: " + juce::String(e.what()));
             } catch (...) {
-                std::cout << "[RackAccordionComponent] Unknown exception in numModulesSlider.onValueChange" << std::endl;
+                juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in numModulesSlider.onValueChange");
             }
         };
         editor = nullptr; // must be set by the parent (PluginEditor)
         // Register UI update callback
         if (processor && processor->getController()) {
+            juce::Logger::writeToLog("[RackAccordionComponent] Registering onModulesChanged callback");
             processor->getController()->onModulesChanged = [this]() {
                 juce::MessageManager::callAsync([this] {
                     try {
                         updatePanels();
                     } catch (const std::exception& e) {
-                        std::cout << "[RackAccordionComponent] Exception in onModulesChanged callback: " << e.what() << std::endl;
+                        juce::Logger::writeToLog("[RackAccordionComponent] Exception in onModulesChanged callback: " + juce::String(e.what()));
                     } catch (...) {
-                        std::cout << "[RackAccordionComponent] Unknown exception in onModulesChanged callback" << std::endl;
+                        juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in onModulesChanged callback");
                     }
                 });
             };
+        } else {
+            juce::Logger::writeToLog("[RackAccordionComponent] Warning: processor or controller is null, cannot register callback");
         }
+        juce::Logger::writeToLog("[RackAccordionComponent] Calling initial updatePanels()");
         updatePanels();
     } catch (const std::exception& e) {
-        std::cout << "[RackAccordionComponent] Exception in constructor: " << e.what() << std::endl;
+        juce::Logger::writeToLog("[RackAccordionComponent] Exception in constructor: " + juce::String(e.what()));
     } catch (...) {
-        std::cout << "[RackAccordionComponent] Unknown exception in constructor" << std::endl;
+        juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in constructor");
     }
 }
 
 void RackAccordionComponent::setNumModulesVT(int num) {
     try {
-        valueTree.setProperty("numModules", num, nullptr);
-        auto* editor = getEditor();
-        auto* processor = this->processor;
+        if (num < 1) num = 1;
+        if (num > 8) num = 8;
+        if (getNumModulesVT() != num) {
+            valueTree.setProperty("numModules", num, nullptr);
+        }
         auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (controller && perf) {
-            int current = controller->getNumModules();
-            for (int i = num; i < 16; ++i) {
-                perf->parts[i] = FMRack::Performance::PartConfig{};
-            }
-            if (num > current) {
-                for (int i = current; i < num; ++i) {
-                    perf->parts[i].midiChannel = i + 1;
-                    perf->parts[i].unisonVoices = 1;
-                    perf->parts[i].unisonDetune = 7.0f;
-                    perf->parts[i].unisonSpread = 0.5f;
-                    perf->parts[i].volume = 100;
+        if (controller) {
+            auto* perf = controller->getPerformance();
+            if (perf) {
+                // Create a new performance with the correct number of parts
+                FMRack::Performance newPerf;
+                
+                // Copy existing parts up to the minimum of current and target size
+                int minSize = std::min((int)perf->parts.size(), num);
+                for (int i = 0; i < minSize; ++i) {
+                    newPerf.parts[i] = perf->parts[i];
                 }
+                
+                // Initialize any additional parts if expanding
+                for (int i = minSize; i < num && i < 16; ++i) {
+                    newPerf.parts[i] = FMRack::Performance::PartConfig();
+                    newPerf.parts[i].midiChannel = i + 1; // Set unique MIDI channels
+                }
+                
+                // Copy effects settings
+                newPerf.effects = perf->effects;
+                
+                controller->setPerformance(newPerf);
             }
-            controller->setPerformance(*perf);
             updatePanels();
             // Ensure slider matches the number of tabs (modules)
             numModulesSlider.setValue(controller->getNumModules(), juce::dontSendNotification);
         }
     } catch (const std::exception& e) {
-        std::cout << "[RackAccordionComponent] Exception in setNumModulesVT: " << e.what() << std::endl;
+        juce::Logger::writeToLog("[RackAccordionComponent] Exception in setNumModulesVT: " + juce::String(e.what()));
     } catch (...) {
-        std::cout << "[RackAccordionComponent] Unknown exception in setNumModulesVT" << std::endl;
+        juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in setNumModulesVT");
     }
 }
 
 int RackAccordionComponent::getNumModulesVT() const {
-    return (int)valueTree.getProperty("numModules", 1);
+    return valueTree.getProperty("numModules", 1);
 }
 
 void RackAccordionComponent::valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property)
 {
-    if (property == juce::Identifier("numModules")) {
-        int num = getNumModulesVT();
-        auto* controller = processor ? processor->getController() : nullptr;
-        if (controller && controller->getNumModules() != num) {
-            controller->setNumModules(num);
+    if (property == juce::Identifier("numModules") && tree == valueTree)
+    {
+        int newNumModules = tree.getProperty("numModules", 1);
+        if ((int)numModulesSlider.getValue() != newNumModules) {
+            numModulesSlider.setValue(newNumModules, juce::dontSendNotification);
         }
-        syncNumModulesSliderWithRack();
         updatePanels();
     }
 }
@@ -126,6 +139,7 @@ void RackAccordionComponent::syncNumModulesSliderWithRack()
 void RackAccordionComponent::updatePanels()
 {
     try {
+        juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() called");
         if (tabs.getNumTabs() > 0) {
             // Check if any ModuleTabComponent has an open file dialog
             for (const auto& tab : moduleTabs) {
@@ -138,11 +152,16 @@ void RackAccordionComponent::updatePanels()
         tabs.clearTabs();
         moduleTabs.clear();
         auto* controller = processor ? processor->getController() : nullptr;
-        if (!controller) return;
+        if (!controller) {
+            juce::Logger::writeToLog("[RackAccordionComponent] No controller available!");
+            return;
+        }
         const auto& modules = controller->getModules();
         int numModules = (int)modules.size();
+        juce::Logger::writeToLog("[RackAccordionComponent] Number of modules: " + juce::String(numModules));
         for (int i = 0; i < numModules; ++i)
         {
+            juce::Logger::writeToLog("[RackAccordionComponent] Creating tab " + juce::String(i));
             auto tab = std::make_unique<ModuleTabComponent>(i, this);
             tab->updateFromModule(); // NEW: sync controls to module state
             tabs.addTab(juce::String(i + 1), juce::Colours::darkgrey, tab.get(), false);
@@ -153,10 +172,11 @@ void RackAccordionComponent::updatePanels()
         syncNumModulesSliderWithRack(); // Always sync slider at the end
         // After updating tabs, ensure slider matches the number of tabs
         numModulesSlider.setValue(tabs.getNumTabs(), juce::dontSendNotification);
+        juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() completed successfully with " + juce::String(tabs.getNumTabs()) + " tabs");
     } catch (const std::exception& e) {
-        std::cout << "[RackAccordionComponent] Exception in updatePanels: " << e.what() << std::endl;
+        juce::Logger::writeToLog("[RackAccordionComponent] Exception in updatePanels: " + juce::String(e.what()));
     } catch (...) {
-        std::cout << "[RackAccordionComponent] Unknown exception in updatePanels" << std::endl;
+        juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in updatePanels");
     }
 }
 
@@ -352,59 +372,52 @@ void ModuleTabComponent::resized()
 
 void ModuleTabComponent::loadVoiceFile(const juce::File& file)
 {
-    juce::Logger::writeToLog("[Load Voice] Loading file: " + file.getFullPathName());
-    juce::FileInputStream stream(file);
-    if (!stream.openedOk()) {
-        juce::Logger::writeToLog("[Load Voice] Failed to open file: " + file.getFullPathName());
-        return;
-    }
-    std::vector<uint8_t> data;
-    data.resize((size_t)stream.getTotalLength());
-    auto bytesRead = stream.read(data.data(), (int)data.size());
-    if (bytesRead != (int)data.size()) {
-        juce::Logger::writeToLog("[Load Voice] Failed to read all bytes from file: " + file.getFullPathName());
-        return;
-    }
-    juce::Logger::writeToLog("[Load Voice] Read " + juce::String((int)data.size()) + " bytes from file: " + file.getFullPathName());
-    // Convert to Dexed format if needed
-    if (data.size() == 128 || data.size() == 155) {
-        juce::Logger::writeToLog("[Load Voice] Converting 128/155-byte voice to Dexed format (156 bytes)...");
-        data = VoiceData::convertDX7ToDexed(data);
-    } else if (data.size() == 163 && data[0] == 0xF0 && data[1] == 0x43) {
-        juce::Logger::writeToLog("[Load Voice] Detected 163-byte DX7 sysex, extracting voice data...");
-        if (data.size() >= 163) {
-            std::vector<uint8_t> voiceData(data.begin() + 6, data.begin() + 161);
-            data = VoiceData::convertDX7ToDexed(voiceData);
-        }
-    }
-    if (data.size() < 156) {
-        juce::Logger::writeToLog("[Load Voice] Error: Voice data is too short (" + juce::String((int)data.size()) + " bytes). Needs 156 bytes.");
-        return;
-    }
     auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
     auto* processor = editor ? editor->getProcessor() : nullptr;
     auto* controller = processor ? processor->getController() : nullptr;
-    auto* perf = controller ? controller->getPerformance() : nullptr;
-    if (perf) {
-        perf->setPartVoiceData(moduleIndex, data);
-        controller->setPerformance(*perf);
-        juce::Logger::writeToLog("[Load Voice] Voice loaded successfully for module " + juce::String(moduleIndex+1) + ".");
-        // --- PATCH: After loading a voice, update the UI safely ---
-        if (auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr) {
-            if (auto* panel = editor->getVoiceEditorPanel()) {
-                // Defensive: update controller pointer and sync sliders
-                panel->setController(controller);
-                try {
-                    panel->syncAllOperatorSlidersWithDexed();
-                } catch (const std::exception& e) {
-                    juce::Logger::writeToLog("[Load Voice] Exception syncing operator sliders: " + juce::String(e.what()));
-                } catch (...) {
-                    juce::Logger::writeToLog("[Load Voice] Unknown exception syncing operator sliders");
+    if (controller) {
+        // Use VoiceData to load the voice file
+        VoiceData voiceData;
+        bool loaded = voiceData.loadFromFile(file.getFullPathName().toStdString());
+        
+        if (loaded && !voiceData.voices.empty()) {
+            // Get the first voice from the file
+            const auto& voiceBytes = voiceData.voices[0];
+            
+            // Convert to Dexed format if needed
+            std::vector<uint8_t> dexedVoice;
+            if (voiceBytes.size() == 128) {
+                // Convert DX7 voice to Dexed format
+                dexedVoice = VoiceData::convertDX7ToDexed(voiceBytes);
+            } else if (voiceBytes.size() == 156) {
+                // Already in Dexed format
+                dexedVoice = voiceBytes;
+            } else {
+                juce::Logger::writeToLog("[ModuleTabComponent] Unsupported voice data size: " + juce::String((int)voiceBytes.size()));
+                if (editor) {
+                    editor->appendLogMessage("Unsupported voice data format");
+                }
+                return;
+            }
+            
+            // Set the voice data in the performance
+            auto* perf = controller->getPerformance();
+            if (perf && moduleIndex < 16) {
+                controller->setPartVoiceData(moduleIndex, dexedVoice);
+                
+                juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
+                juce::Logger::writeToLog("[ModuleTabComponent] Loaded voice: " + voiceName);
+                
+                if (editor) {
+                    editor->appendLogMessage("Voice loaded: " + voiceName);
                 }
             }
+        } else {
+            juce::Logger::writeToLog("[ModuleTabComponent] Failed to load voice file: " + file.getFullPathName());
+            if (editor) {
+                editor->appendLogMessage("Failed to load voice file");
+            }
         }
-    } else {
-        juce::Logger::writeToLog("[Load Voice] Error: Could not get performance object.");
     }
 }
 

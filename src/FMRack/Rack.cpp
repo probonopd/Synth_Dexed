@@ -371,6 +371,8 @@ void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_chann
     for (auto& module : modules_) {
         if (sysex_channel == 0 || module->getMIDIChannel() == sysex_channel) {
             module->processSysex(data, len);
+            std::cout << "[SYSEX] Forwarded SysEx to module on MIDI channel " 
+                      << static_cast<int>(module->getMIDIChannel()) << "\n";
         }
     }
 }

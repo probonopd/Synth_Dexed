@@ -10,3 +10,5 @@ cd AudioPlugin && cmake --build build --config Release && build\FMRack_artefacts
 After each build DON'T forget the `cd ..`
 
 The code outside of `AudioPlugin` must not depend on JUCE. The `AudioPlugin` directory is the only place where JUCE is used, and it should be kept separate from the rest of the codebase.
+
+DO NOT CHANGE code in src/ (only read it)

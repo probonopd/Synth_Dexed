@@ -37,6 +37,15 @@ public:
     // Set a Dexed parameter (address, value)
     void setDexedParam(uint8_t address, uint8_t value);
 
+    // Request a DX7 single voice dump from the given MIDI channel (1-16)
+    void requestSingleVoiceDump(int midiChannel);
+    // Register a callback for when a single voice dump is received
+    void setSingleVoiceDumpCallback(std::function<void(const std::vector<uint8_t>&)> cb);    // This function should be called by the MIDI/SysEx receive path when a single voice dump is received
+    void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
+
+    // Voice data management
+    void setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData);
+
     // Thread safety
     std::mutex& getMutex();
     FMRack::Rack* getRack() const { return rack.get(); }

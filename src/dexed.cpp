@@ -40,6 +40,7 @@
 #include "porta.h"
 #include "int_math.h"
 #include <iostream>
+#include <functional>
 
 #include <chrono>
 
@@ -912,6 +913,13 @@ void Dexed::setVoiceDataElement(uint8_t address, uint8_t value)
 {
   address = constrain(address, 0, NUM_VOICE_PARAMETERS);
   data[address] = value;
+  
+  // If we're setting the OPE (Operator Enable) bitmask at position 155,
+  // synchronize it with controllers.opSwitch used by the sound generation engine
+  if (address == 155) {
+    setOPAll(value);
+  }
+  
   doRefreshVoice();
 }
 
@@ -929,6 +937,18 @@ void Dexed::loadVoiceParameters(uint8_t* new_data)
 
   panic();
   memcpy(&data, new_data, 155);
+  
+  // Synchronize OPE (Operator Enable) bitmask with sound generation engine
+  // The OPE bitmask is stored at data[155] and needs to be synced with controllers.opSwitch
+  // which is used by the sound generation engine in dx7note.cpp
+  uint8_t opeBitmask = data[155];
+  if (opeBitmask == 0) {
+    // If no OPE bitmask is set, default to all operators enabled (0x3F)
+    opeBitmask = 0x3F;
+    data[155] = opeBitmask;
+  }
+  setOPAll(opeBitmask);  // Sync with controllers.opSwitch used by sound generation
+  
   doRefreshVoice();
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
   strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
@@ -1119,10 +1139,44 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
   // check for Yamaha sysex
   if (sysex[1] != 0x43)
     return(-2);
-
   // Decode SYSEX by means of length
   switch (len)
-  {
+  {    case 6: // Single voice dump request
+      // F0 43 2n 00 7F F7 - Request current voice dump
+      if ((sysex[2] & 0xF0) == 0x20 && sysex[3] == 0x00 && sysex[4] == 0x7F)
+      {
+        // Generate and send single voice dump response
+        if (midiOutCallback_) {
+          uint8_t response[163];
+          // Header: F0 43 00 00 01 1B
+          response[0] = 0xF0;
+          response[1] = 0x43;
+          response[2] = 0x00;
+          response[3] = 0x00;
+          response[4] = 0x01;
+          response[5] = 0x1B;
+          
+          // Copy the current voice data (155 bytes in raw format)
+          // This is the internal Dexed format which matches DX7 single voice format
+          memcpy(&response[6], data, 155);
+          
+          // Calculate checksum (sum of 155 data bytes, then (128 - sum) & 0x7F)
+          int32_t checksum = 0;
+          for (int i = 6; i < 161; i++) {
+            checksum += response[i];
+          }
+          response[161] = (128 - checksum) & 0x7F;
+          
+          // End byte
+          response[162] = 0xF7;
+          
+          // Send response via callback
+          midiOutCallback_(response, 163);
+        }
+        return(500); // New return code for voice dump request handled
+      }
+      return(-12); // Unknown 6-byte message
+      break;
     case 7: // parse parameter change
       if (((sysex[3] & 0x7c) >> 2) != 0 && ((sysex[3] & 0x7c) >> 2) != 2)
         return(-3);
@@ -2091,9 +2145,9 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
             // Apply voice data
             loadVoiceParameters((uint8_t*)&midiData[6]);
             ret = true;
-        } else if (sysex_ret >= 300 && sysex_ret < 456) { // Parameter change
+        } else if (sysex_ret >= 300 && sysex_ret < 456) // Parameter change
             ret = true;
-        } else if (sysex_ret == 200) { // Bank bulk
+        else if (sysex_ret == 200) { // Bank bulk
             // Optionally: implement bank loading
             ret = true;
         } else if (sysex_ret >= 0) {
@@ -2111,6 +2165,14 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
     }
     return ret;
 }
+
+void Dexed::setMidiOutCallback(std::function<void(const uint8_t*, int)> cb) {
+    midiOutCallback_ = cb;
+}
+
+// When sending outgoing SysEx (e.g., single voice dump response), call the callback if set.
+// Example (pseudo):
+// if (midiOutCallback_) midiOutCallback_(sysexData, sysexLen);
 
 #ifndef constrain
 

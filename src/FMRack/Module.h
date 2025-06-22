@@ -3,6 +3,8 @@
 #include <vector>
 #include <memory>
 #include <cstdint>
+#include <functional>
+#include <iostream>
 #include "../dexed.h"
 #include "Performance.h"
 
@@ -34,12 +36,22 @@ public:
     
     // Add SysEx handler
     void processSysex(const uint8_t* data, int len);
-    
+
+    // Print any MIDI data received from the synth (Dexed) in FF FF FF... format
+    void onMidiFromDexed(const uint8_t* data, int len);
+
     // Add public getter for Dexed engine(s)
     Dexed* getDexedEngine(int idx = 0) {
         if (idx >= 0 && idx < static_cast<int>(fmEngines_.size()))
             return fmEngines_[idx].get();
         return nullptr;
+    }
+    
+    // Register a callback for outgoing DX7 single voice dump SysEx
+    void setSingleVoiceDumpHandler(std::function<void(const std::vector<uint8_t>&)> cb) { 
+        std::cout << "[Module::setSingleVoiceDumpHandler] Handler being set, cb=" << (cb ? "VALID" : "NULL") << std::endl;
+        singleVoiceDumpHandler_ = std::move(cb); 
+        std::cout << "[Module::setSingleVoiceDumpHandler] Handler set, singleVoiceDumpHandler_=" << (singleVoiceDumpHandler_ ? "SET" : "NULL") << std::endl;
     }
     
 private:
@@ -71,6 +83,9 @@ private:
     
     // Pointer to live PartConfig for real-time updates
     Performance::PartConfig* partConfig_ = nullptr;
+    
+    // Callback for single voice dump SysEx
+    std::function<void(const std::vector<uint8_t>&)> singleVoiceDumpHandler_;
     
     // Helper methods
     bool isNoteInRange(uint8_t note) const;

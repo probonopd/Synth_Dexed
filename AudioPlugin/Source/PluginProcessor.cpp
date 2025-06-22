@@ -134,7 +134,39 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     try {
-        // Removed: if (controller) controller->setSampleRate((float)sampleRate);
+        juce::Logger::writeToLog("[PluginProcessor] prepareToPlay called. sampleRate=" + juce::String(sampleRate) + ", samplesPerBlock=" + juce::String(samplesPerBlock));
+        std::cout << "[PluginProcessor] prepareToPlay called. sampleRate=" << sampleRate << ", samplesPerBlock=" << samplesPerBlock << std::endl;
+
+        // If the controller was constructed with a different sample rate, re-create it
+        bool needRecreate = false;
+        if (!controller) {
+            needRecreate = true;
+            std::cout << "[PluginProcessor] Controller is null, will create new controller." << std::endl;
+        } else {
+            if (std::abs(lastSampleRate - (float)sampleRate) > 1.0f) {
+                std::cout << "[PluginProcessor] Sample rate changed (old=" << lastSampleRate << ", new=" << sampleRate << "), recreating controller." << std::endl;
+                needRecreate = true;
+            }
+        }
+        lastSampleRate = (float)sampleRate;
+        if (needRecreate) {
+            // Save current performance if possible
+            std::unique_ptr<FMRack::Performance> oldPerf;
+            if (controller && controller->getPerformance()) {
+                oldPerf = std::make_unique<FMRack::Performance>(*controller->getPerformance());
+            }
+            controller = std::make_unique<FMRackController>((float)sampleRate);
+            if (oldPerf) {
+                std::cout << "[PluginProcessor] Restoring previous performance after controller recreation." << std::endl;
+                controller->setPerformance(*oldPerf);
+            }
+        } else {
+            // Always call setPerformance to ensure modules are created
+            if (controller && controller->getPerformance()) {
+                std::cout << "[PluginProcessor] Calling setPerformance in prepareToPlay to ensure modules are created." << std::endl;
+                controller->setPerformance(*controller->getPerformance());
+            }
+        }
     } catch (const std::exception& e) {
         std::cout << "[PluginProcessor] Exception in prepareToPlay: " << e.what() << std::endl;
         juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in prepareToPlay: ") + e.what());
@@ -242,10 +274,32 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
         if (controller) {
             for (const auto metadata : midiMessages) {
                 const auto msg = metadata.getMessage();
+                std::cout << "[PluginProcessor] MIDI event: status=0x" << std::hex << (int)msg.getRawData()[0] << ", size=" << std::dec << msg.getRawDataSize() << std::endl;
+                if (msg.isSysEx()) {
+                    std::cout << "[PluginProcessor] SysEx event: size=" << msg.getSysExDataSize() << std::endl;
+                    if (msg.getSysExDataSize() > 0) {
+                        std::cout << "[PluginProcessor] SysEx first 16 bytes: ";
+                        const uint8_t* d = msg.getSysExData();
+                        for (size_t i = 0; i < std::min<size_t>(16, msg.getSysExDataSize()); ++i) std::cout << std::hex << (int)d[i] << " ";
+                        std::cout << std::dec << std::endl;
+                        std::cout << "[PluginProcessor] SysEx last 8 bytes: ";
+                        for (size_t i = (msg.getSysExDataSize() > 8 ? msg.getSysExDataSize() - 8 : 0); i < msg.getSysExDataSize(); ++i) std::cout << std::hex << (int)d[i] << " ";
+                        std::cout << std::dec << std::endl;
+                    }
+                }
                 if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() || msg.isPitchWheel()) {
                     controller->processMidiMessage(msg.getRawData()[0],
                                                   msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
                                                   msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
+                }
+                // --- Handle incoming SysEx: DX7 single voice dump (163 bytes) ---
+                if (msg.isSysEx() && msg.getSysExDataSize() == 163) {
+                    const uint8_t* data = msg.getSysExData();
+                    if (data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
+                        std::cout << "[PluginProcessor] Detected DX7 single voice dump (163 bytes), forwarding to controller->onSingleVoiceDumpReceived" << std::endl;
+                        std::vector<uint8_t> sysexData(data, data + 163);
+                        controller->onSingleVoiceDumpReceived(sysexData);
+                    }
                 }
             }
         }

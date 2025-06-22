@@ -1,5 +1,6 @@
 #include "Module.h"
 #include <iostream>
+#include <iomanip>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -115,6 +116,8 @@ void Module::setupUnison(uint8_t voices, float detune, float spread) {
     // Create engines with detuning and panning
     for (uint8_t i = 0; i < voices; ++i) {
         auto engine = std::make_unique<Dexed>(16, static_cast<uint16_t>(sampleRate_));
+        // Register MIDI out callback to print MIDI from Dexed
+        engine->setMidiOutCallback([this](const uint8_t* data, int len) { this->onMidiFromDexed(data, len); });
         
         // Calculate detune and pan for this voice
         float voiceDetune = 0.0f;
@@ -221,6 +224,14 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
 }
 
 void Module::processSysex(const uint8_t* data, int len) {
+    std::cout << "[FMRack::Module::processSysex] len=" << len << std::endl;
+    // Print all incoming MIDI/SysEx in FF FF FF... format
+    std::cout << "[MIDI IN] ";
+    for (int i = 0; i < len; ++i) {
+        std::cout << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
+        if (i < len - 1) std::cout << " ";
+    }
+    std::cout << std::dec << std::endl;
     // Only handle Yamaha/Dexed engine-specific SysEx here.
     // All MiniDexed performance parameter SysEx is now handled in Performance.
     // Yamaha SysEx: F0 43 1n 01 1B vv F7 (operator ON/OFF mask)
@@ -235,8 +246,43 @@ void Module::processSysex(const uint8_t* data, int len) {
     // Forward all other SysEx to all FM engines (Dexed instances)
     for (auto& engine : fmEngines_) {
         if (engine) {
+            std::cout << "[SYSEX] Forwarding SysEx to FM engine on MIDI channel " 
+                      << static_cast<int>(midiChannel_) << ", length: " << len << " bytes\n";
+            for (int i = 0; i < len; ++i) {
+                std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]) << " ";
+            }
             engine->midiDataHandler(midiChannel_, const_cast<uint8_t*>(data), len);
         }
+    }
+}
+
+// Print any MIDI data received from the synth (Dexed) in FF FF FF... format
+// This should be called from the callback or handler that receives MIDI from Dexed
+void Module::onMidiFromDexed(const uint8_t* data, int len) {
+    std::cout << "[FMRack::Module::onMidiFromDexed] len=" << len << std::endl;
+    std::cout << "[MIDI FROM DEXED] ";
+    for (int i = 0; i < len; ++i) {
+        std::cout << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
+        if (i < len - 1) std::cout << " ";    }
+    std::cout << std::dec << std::endl;
+    
+    // Debug the detection logic
+    std::cout << "[FMRack::Module::onMidiFromDexed] Checking single voice dump detection:" << std::endl;
+    std::cout << "  len=" << len << " (expected 163)" << std::endl;
+    if (len >= 6) {
+        std::cout << "  data[0]=0x" << std::hex << (int)data[0] << " (expected 0xF0)" << std::endl;
+        std::cout << "  data[1]=0x" << std::hex << (int)data[1] << " (expected 0x43)" << std::endl;
+        std::cout << "  data[5]=0x" << std::hex << (int)data[5] << " (expected 0x1B)" << std::endl;
+        std::cout << std::dec;
+    }
+    std::cout << "  singleVoiceDumpHandler_ is " << (singleVoiceDumpHandler_ ? "SET" : "NULL") << std::endl;
+    
+    // If this is a 163-byte DX7 single voice dump, call the handler
+    if (len == 163 && data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B && singleVoiceDumpHandler_) {
+        std::cout << "[FMRack::Module::onMidiFromDexed] Detected DX7 single voice dump, calling handler." << std::endl;
+        singleVoiceDumpHandler_(std::vector<uint8_t>(data, data + len));
+    } else {
+        std::cout << "[FMRack::Module::onMidiFromDexed] Single voice dump NOT detected or handler not set." << std::endl;
     }
 }
 

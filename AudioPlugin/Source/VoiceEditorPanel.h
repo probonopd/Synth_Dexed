@@ -87,8 +87,7 @@ public:
     juce::Rectangle<float> svgDrawArea; // Area to draw SVG, for scaling
     std::vector<float> operatorRowCenters; // Y positions of operator row centers for SVG alignment
 
-    // Status/help panel
-    juce::Label statusBar;
+    // help panel
     juce::Label helpPanel;
 
     // Help data loaded from JSON
@@ -97,7 +96,6 @@ public:
     juce::String defaultHelpText;
 
     void loadAlgorithmSvg(int algorithmIdx);
-    void updateStatusBar(const juce::String& text);
     void setupOperatorSlider(juce::Slider& slider, const juce::String& name, int min, int max, int defaultValue);
     void loadHelpJson();
 
@@ -118,4 +116,6 @@ public:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoiceEditorPanel)
 private:
     FMRackController* controller = nullptr;
+    juce::TextButton requestDumpButton;
+    void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
 };

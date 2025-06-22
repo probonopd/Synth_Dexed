@@ -1,12 +1,23 @@
 #include "FMRackController.h"
 #include <iostream>
+#include <atomic>
+#include <fstream>
+
+namespace {
+    std::function<void(const std::vector<uint8_t>&)> g_singleVoiceDumpCallback;
+}
 
 FMRackController::FMRackController(float sampleRate)
 {
     std::lock_guard<std::mutex> lock(mutex);
     rack = std::make_unique<FMRack::Rack>(sampleRate);
     performance = std::make_unique<FMRack::Performance>();
-    rack->setPerformance(*performance);
+    // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+    std::cout << "[FMRackController] Constructor: calling setPerformance to ensure handlers are registered" << std::endl;
+    // Temporarily unlock mutex since setPerformance will try to acquire it
+    mutex.unlock();
+    setPerformance(*performance);
+    mutex.lock();
 }
 
 FMRackController::~FMRackController() = default;
@@ -17,17 +28,46 @@ bool FMRackController::loadPerformanceFile(const juce::String& path)
         std::lock_guard<std::mutex> lock(mutex);
         if (!performance)
             performance = std::make_unique<FMRack::Performance>();
+        juce::Logger::writeToLog("[FMRackController] Attempting to load performance file: " + path);
+        std::cout << "[FMRackController] Attempting to load performance file: " << path << std::endl;
+        // Extra logging: check file existence and permissions
+        juce::File juceFile(path);
+        juce::Logger::writeToLog("[FMRackController] File exists: " + juce::String(juceFile.exists() ? "yes" : "no") + ", readable: " + juce::String(juceFile.hasReadAccess() ? "yes" : "no"));
+        std::cout << "[FMRackController] File exists: " << (juceFile.exists() ? "yes" : "no") << ", readable: " << (juceFile.hasReadAccess() ? "yes" : "no") << std::endl;
+        // Log current working directory
+        juce::File cwd = juce::File::getCurrentWorkingDirectory();
+        juce::Logger::writeToLog("[FMRackController] Current working directory: " + cwd.getFullPathName());
+        std::cout << "[FMRackController] Current working directory: " << cwd.getFullPathName() << std::endl;
         if (!performance->loadFromFile(path.toStdString())) {
+            juce::Logger::writeToLog("[FMRackController] Performance loadFromFile failed: " + path);
             std::cout << "[FMRackController] Performance loadFromFile failed: " << path << std::endl;
+            // Try to open the file directly for debug
+            std::ifstream testFile(path.toStdString());
+            if (!testFile.is_open()) {
+                juce::Logger::writeToLog("[FMRackController] DEBUG: Could not open file with std::ifstream: " + path);
+                std::cout << "[FMRackController] DEBUG: Could not open file with std::ifstream: " << path << std::endl;
+            } else {
+                juce::Logger::writeToLog("[FMRackController] DEBUG: File opened with std::ifstream: " + path);
+                std::cout << "[FMRackController] DEBUG: File opened with std::ifstream: " << path << std::endl;
+            }
             return false;
         }
-        rack->setPerformance(*performance);
+        // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+        juce::Logger::writeToLog("[FMRackController] loadPerformanceFile: calling setPerformance to ensure handlers are registered");
+        std::cout << "[FMRackController] loadPerformanceFile: calling setPerformance to ensure handlers are registered" << std::endl;
+        // Temporarily unlock mutex since setPerformance will try to acquire it
+        mutex.unlock();
+        setPerformance(*performance);
+        mutex.lock();
+        juce::Logger::writeToLog("[FMRackController] Performance loaded and rack configured from: " + path);
         std::cout << "[FMRackController] Performance loaded and rack configured from: " << path << std::endl;
         return true;
     } catch (const std::exception& e) {
+        juce::Logger::writeToLog("[FMRackController] Exception in loadPerformanceFile: " + juce::String(e.what()));
         std::cout << "[FMRackController] Exception in loadPerformanceFile: " << e.what() << std::endl;
         return false;
     } catch (...) {
+        juce::Logger::writeToLog("[FMRackController] Unknown exception in loadPerformanceFile");
         std::cout << "[FMRackController] Unknown exception in loadPerformanceFile" << std::endl;
         return false;
     }
@@ -40,7 +80,12 @@ void FMRackController::setDefaultPerformance()
         if (!performance)
             performance = std::make_unique<FMRack::Performance>();
         performance->setDefaults(8, 1);
-        rack->setPerformance(*performance);
+        // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+        std::cout << "[FMRackController] setDefaultPerformance: calling setPerformance to ensure handlers are registered" << std::endl;
+        // Temporarily unlock mutex since setPerformance will try to acquire it
+        mutex.unlock();
+        setPerformance(*performance);
+        mutex.lock();
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setDefaultPerformance: " << e.what() << std::endl;
     } catch (...) {
@@ -53,7 +98,25 @@ void FMRackController::setPerformance(const FMRack::Performance& perf)
     try {
         std::lock_guard<std::mutex> lock(mutex);
         *performance = perf;
+        std::cout << "[FMRackController::setPerformance] About to call rack->setPerformance(*performance)" << std::endl;
         rack->setPerformance(*performance);
+        std::cout << "[FMRackController::setPerformance] rack->setPerformance(*performance) completed" << std::endl;
+        
+        // Register single voice dump handler for each module
+        auto& modules = rack->getModules();
+        std::cout << "[FMRackController::setPerformance] modules.size()=" << modules.size() << std::endl;
+        for (size_t i = 0; i < modules.size(); ++i) {
+            auto& module = modules[i];
+            std::cout << "[FMRackController::setPerformance] Registering handler for module " << i << ", module.get()=" << module.get() << std::endl;
+            if (module) {
+                module->setSingleVoiceDumpHandler([this](const std::vector<uint8_t>& data) {
+                    this->onSingleVoiceDumpReceived(data);
+                });
+                std::cout << "[FMRackController::setPerformance] Handler registered for module " << i << std::endl;
+            } else {
+                std::cout << "[FMRackController::setPerformance] module " << i << " is nullptr" << std::endl;
+            }
+        }
         if (onModulesChanged) onModulesChanged();
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setPerformance: " << e.what() << std::endl;
@@ -159,7 +222,12 @@ void FMRackController::setReverbEnabled(bool enabled)
         std::lock_guard<std::mutex> lock(mutex);
         if (rack && performance) {
             performance->effects.reverbEnable = enabled;
-            rack->setPerformance(*performance);
+            // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+            std::cout << "[FMRackController] setReverbEnabled: calling setPerformance to ensure handlers are registered" << std::endl;
+            // Temporarily unlock mutex since setPerformance will try to acquire it
+            mutex.unlock();
+            setPerformance(*performance);
+            mutex.lock();
         }
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setReverbEnabled: " << e.what() << std::endl;
@@ -174,7 +242,12 @@ void FMRackController::setReverbLevel(float level)
         std::lock_guard<std::mutex> lock(mutex);
         if (rack && performance) {
             performance->effects.reverbLevel = static_cast<uint8_t>(level * 127.0f);
-            rack->setPerformance(*performance);
+            // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+            std::cout << "[FMRackController] setReverbLevel: calling setPerformance to ensure handlers are registered" << std::endl;
+            // Temporarily unlock mutex since setPerformance will try to acquire it
+            mutex.unlock();
+            setPerformance(*performance);
+            mutex.lock();
         }
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setReverbLevel: " << e.what() << std::endl;
@@ -188,33 +261,107 @@ void FMRackController::setReverbSize(float size)
     std::lock_guard<std::mutex> lock(mutex);
     if (rack && performance) {
         performance->effects.reverbSize = static_cast<uint8_t>(size * 127.0f);
-        rack->setPerformance(*performance);
+        // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+        std::cout << "[FMRackController] setReverbSize: calling setPerformance to ensure handlers are registered" << std::endl;
+        // Temporarily unlock mutex since setPerformance will try to acquire it
+        mutex.unlock();
+        setPerformance(*performance);
+        mutex.lock();
     }
 }
 
 void FMRackController::setNumModules(int num)
 {
-    std::lock_guard<std::mutex> lock(mutex);
+    std::cout << "[FMRackController] setNumModules(" << num << ") called" << std::endl;
     if (performance) {
-        for (int i = 0; i < 16; ++i)
+        std::cout << "[FMRackController] setNumModules: performance exists, updating MIDI channels" << std::endl;
+        for (int i = 0; i < 16; ++i) {
+            std::cout << "[FMRackController] setNumModules: setting performance->parts[" << i << "].midiChannel = " << ((i < num) ? (i + 1) : 0) << std::endl;
             performance->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
-        if (rack) rack->setPerformance(*performance);
+        }
+        
+        // Use our own setPerformance method which properly registers handlers
+        std::cout << "[FMRackController] setNumModules: calling FMRackController::setPerformance to ensure handlers are registered" << std::endl;
+        setPerformance(*performance);
+    } else {
+        std::cout << "[FMRackController] setNumModules: performance is nullptr" << std::endl;
     }
-    if (onModulesChanged) onModulesChanged();
+    if (onModulesChanged) {
+        std::cout << "[FMRackController] setNumModules: calling onModulesChanged()" << std::endl;
+        onModulesChanged();
+    }
 }
 
 void FMRackController::setDexedParam(uint8_t address, uint8_t value)
 {
-    std::cout << "[FMRackController] Setting Dexed parameter address " << static_cast<int>(address)
-              << " to value " << static_cast<int>(value) << std::endl;
+    std::cout << "[FMRackController] setDexedParam(" << static_cast<int>(address) << ", " << static_cast<int>(value) << ") called" << std::endl;
     std::lock_guard<std::mutex> lock(mutex);
-    if (!rack) return;
+    if (!rack) { std::cout << "[FMRackController] setDexedParam: rack is nullptr" << std::endl; return; }
     const auto& modules = rack->getModules();
-    if (modules.empty()) return;
+    std::cout << "[FMRackController] setDexedParam: modules.size()=" << modules.size() << std::endl;
+    if (modules.empty()) { std::cout << "[FMRackController] setDexedParam: modules is empty" << std::endl; return; }
     auto* dexed = modules[0]->getDexedEngine();
-    if (!dexed) return;
+    if (!dexed) { std::cout << "[FMRackController] setDexedParam: dexed is nullptr" << std::endl; return; }
+    std::cout << "[FMRackController] setDexedParam: calling dexed->setVoiceDataElement(" << (int)address << ", " << (int)value << ") and doRefreshVoice" << std::endl;
     dexed->setVoiceDataElement(address, value);
     dexed->doRefreshVoice();
+}
+
+void FMRackController::requestSingleVoiceDump(int midiChannel) {
+    std::cout << "[FMRackController] requestSingleVoiceDump(" << midiChannel << ") called" << std::endl;
+    uint8_t n = static_cast<uint8_t>((midiChannel - 1) & 0x0F);
+    std::vector<uint8_t> sysex = {0xF0, 0x43, static_cast<uint8_t>(0x20 | n), 0x00, 0x7F, 0xF7};
+    std::cout << "[FMRackController] requestSingleVoiceDump: constructed sysex: ";
+    for (auto b : sysex) std::cout << std::hex << (int)b << " ";
+    std::cout << std::dec << std::endl;
+    std::lock_guard<std::mutex> lock(mutex);
+    if (rack) {
+        std::cout << "[FMRackController] requestSingleVoiceDump: calling rack->routeSysexToModules with sysex.size()=" << sysex.size() << ", midiChannel=" << midiChannel << std::endl;
+        rack->routeSysexToModules(sysex.data(), (int)sysex.size(), midiChannel);
+    } else {
+        std::cout << "[FMRackController] requestSingleVoiceDump: rack is nullptr" << std::endl;
+    }
+}
+
+void FMRackController::setSingleVoiceDumpCallback(std::function<void(const std::vector<uint8_t>&)> cb) {
+    std::cout << "[FMRackController] setSingleVoiceDumpCallback called" << std::endl;
+    g_singleVoiceDumpCallback = std::move(cb);
+}
+
+void FMRackController::onSingleVoiceDumpReceived(const std::vector<uint8_t>& data) {
+    std::cout << "[FMRackController] onSingleVoiceDumpReceived called, data size: " << data.size() << std::endl;
+    if (!data.empty()) {
+        std::cout << "[FMRackController] onSingleVoiceDumpReceived: first 32 bytes: ";
+        for (size_t i = 0; i < std::min<size_t>(32, data.size()); ++i) std::cout << std::hex << (int)data[i] << " ";
+        std::cout << std::dec << std::endl;
+        std::cout << "[FMRackController] onSingleVoiceDumpReceived: last 8 bytes: ";
+        for (size_t i = (data.size() > 8 ? data.size() - 8 : 0); i < data.size(); ++i) std::cout << std::hex << (int)data[i] << " ";
+        std::cout << std::dec << std::endl;
+    }
+    if (g_singleVoiceDumpCallback) {
+        std::cout << "[FMRackController] onSingleVoiceDumpReceived: calling g_singleVoiceDumpCallback" << std::endl;
+        g_singleVoiceDumpCallback(data);
+    } else {
+        std::cout << "[FMRackController] onSingleVoiceDumpReceived: g_singleVoiceDumpCallback is not set" << std::endl;
+    }
+}
+
+void FMRackController::setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData) {
+    try {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (performance && partIndex >= 0 && partIndex < 16) {
+            performance->setPartVoiceData(partIndex, voiceData);
+            // Update the rack with the new performance
+            if (rack) {
+                rack->setPerformance(*performance);
+            }
+            juce::Logger::writeToLog("[FMRackController] Voice data set for part " + juce::String(partIndex));
+        }
+    } catch (const std::exception& e) {
+        juce::Logger::writeToLog("[FMRackController] Exception in setPartVoiceData: " + juce::String(e.what()));
+    } catch (...) {
+        juce::Logger::writeToLog("[FMRackController] Unknown exception in setPartVoiceData");
+    }
 }
 
 std::mutex& FMRackController::getMutex() { return mutex; }

@@ -327,3 +327,4 @@ FMRack_artefacts
 CPM_modules
 cmake
 cpm-package-lock.cmake
+AudioPlugin/juce_binarydata_BinaryData/JuceLibraryCode/input_file_list

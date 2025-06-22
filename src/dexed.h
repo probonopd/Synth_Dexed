@@ -31,6 +31,7 @@
 #if defined(TEENSYDUINO)
 #include <Audio.h>
 #endif
+#include <functional>
 
 // Add DLL export/import declarations for Windows
 #if defined(_WIN32) && !defined(SYNTH_DEXED_STATIC)
@@ -388,19 +389,21 @@ class DEXED_API Dexed
 
     void getSamples(int16_t* buffer, uint16_t n_samples);
 
+    void setMidiOutCallback(std::function<void(const uint8_t*, int)> cb);
+
     protected:
     uint8_t init_voice[NUM_VOICE_PARAMETERS] = {
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP6 eg_rate_1-4, level_1-4, kbd_lev_scl_brk_pt, kbd_lev_scl_lft_depth, kbd_lev_scl_rht_depth, kbd_lev_scl_lft_curve, kbd_lev_scl_rht_curve, kbd_rate_scaling, amp_mod_sensitivity, key_vel_sensitivity, operator_output_level, osc_mode, osc_freq_coarse, osc_freq_fine, osc_detune
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP5
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP4
       99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP3
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP2
-      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP1
+      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP2      99, 99, 99, 99, 99, 99, 99, 00, 33, 00, 00, 00, 00, 00, 00, 00, 00, 00, 01, 00, 00, // OP1
       99, 99, 99, 99, 50, 50, 50, 50,                                                     // 4 * pitch EG rates, 4 * pitch EG level
       01, 00, 01,                                                                         // algorithm, feedback, osc sync
       35, 00, 00, 00, 01, 00,                                                             // lfo speed, lfo delay, lfo pitch_mod_depth, lfo_amp_mod_depth, lfo_sync, lfo_waveform
       03, 48,                                                                             // pitch_mod_sensitivity, transpose
-      73, 78, 73, 84, 32, 86, 79, 73, 67, 69                                              // 10 * char for name ("INIT VOICE")
+      73, 78, 73, 84, 32, 86, 79, 73, 67, 69,                                             // 10 * char for name ("INIT VOICE")
+      63                                                                                  // OPE bitmask: 63 = 0x3F = all 6 operators enabled (111111 binary)
     };
     float samplerate;
     uint8_t data[NUM_VOICE_PARAMETERS];
@@ -449,6 +452,7 @@ class DEXED_API Dexed
     int32_t lowpassFilter(int32_t val);
     bool filter_enabled = true;
 #endif
+    std::function<void(const uint8_t*, int)> midiOutCallback_;
 };
 
 #ifdef USE_COMPRESSOR

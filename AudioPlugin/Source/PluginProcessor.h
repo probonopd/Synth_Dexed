@@ -65,6 +65,7 @@ private:
     std::unique_ptr<juce::FileLogger> fileLogger; // Added for file logging
     bool wasMidiEmptyLastBlock = true; // Added to track MIDI state for logging
     class AudioPluginAudioProcessorEditor* editorPtr = nullptr;
+    float lastSampleRate = 44100.0f; // Added to track the last used sample rate
 
 public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);

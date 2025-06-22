@@ -29,6 +29,7 @@ bool Performance::loadFromFile(const std::string& filename) {
         std::cout << "Could not open performance file: " << filename << std::endl;
         return false;
     }
+    std::cout << "[Performance::loadFromFile] File opened successfully: " << filename << std::endl;
     std::string line;
     int lineNum = 0;
     int max_part_number_in_file = 0; // Track the highest part number (1-based) with settings in the file
@@ -52,7 +53,7 @@ bool Performance::loadFromFile(const std::string& filename) {
         key.erase(key.find_last_not_of(" \t") + 1);
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t") + 1);
-        if (debugEnabled) std::cout << "[DEBUG] Parsed key: '" << key << "', value: '" << value << "' (line " << lineNum << ")" << std::endl;
+        std::cout << "[Performance::loadFromFile] Parsed key: '" << key << "', value: '" << value << "' (line " << lineNum << ")" << std::endl;
         // Parse numbered parameters for parts 1-8
         for (int part_num = 1; part_num <= 8; ++part_num) { // part_num is 1-based
             bool setting_found_for_this_part_key = false;
