@@ -61,6 +61,7 @@ public:
     juce::TextButton openVoiceEditorButton { "Edit Voice" };
 
     bool isFileDialogOpen() const;
+    void closeFileDialog();
 
 private:
     int moduleIndex;

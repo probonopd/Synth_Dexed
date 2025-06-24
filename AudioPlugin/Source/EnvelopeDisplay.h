@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <functional>
 
 class EnvelopeDisplay : public juce::Component {
 public:
@@ -10,8 +11,9 @@ public:
     void mouseExit(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    int hoveredParam = -1;
+    std::function<void(int)> onHoveredParamChanged; // Callback for hovered param change
 private:
     std::vector<float> envRates;
     std::vector<float> envLevels;
-    int hoveredParam = -1;
 };

@@ -86,12 +86,17 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
         processorRef.setEditorPointer(nullptr);
         // --- CRASH PREVENTION: Ensure all child windows are closed before main editor is destroyed ---
         if (voiceEditorWindow) {
-            // Remove content to break parent-child relationship and avoid dangling pointers
             voiceEditorWindow->setVisible(false);
-            voiceEditorWindow->setContentOwned(nullptr, false); // Remove content after hiding
+            voiceEditorWindow->setContentOwned(nullptr, false);
             voiceEditorWindow.reset();
         }
+        // Close any open FileBrowserDialog windows in all module tabs
         if (rackAccordion) {
+            for (const auto& tab : rackAccordion->getModuleTabs()) {
+                if (tab && tab->isFileDialogOpen()) {
+                    tab->closeFileDialog();
+                }
+            }
             rackAccordion.reset();
         }
     } catch (const std::exception& e) {

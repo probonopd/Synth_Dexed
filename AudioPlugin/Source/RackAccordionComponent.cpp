@@ -434,3 +434,13 @@ ModuleTabComponent::~ModuleTabComponent() {
 bool ModuleTabComponent::isFileDialogOpen() const {
     return fileDialogOpen;
 }
+
+void ModuleTabComponent::closeFileDialog() {
+    // Defensive: try to find any FileBrowserDialog child and close it
+    for (int i = 0; i < getNumChildComponents(); ++i) {
+        if (auto* dialog = dynamic_cast<FileBrowserDialog*>(getChildComponent(i))) {
+            dialog->closeDialog();
+        }
+    }
+    fileDialogOpen = false;
+}

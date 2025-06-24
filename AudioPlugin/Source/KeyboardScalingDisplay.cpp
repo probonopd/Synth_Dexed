@@ -83,9 +83,16 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     // Bottom: LeftCurve, RightCurve
     juce::Rectangle<float> bottomArea = area.withY(area.getBottom() - textHeight).withHeight(textHeight);
     itemW = area.getWidth() / 2.0f;
+    // Show curve meaning for LC and RC
+    auto curveMeaning = [](float v) -> juce::String {
+        if (v < 0.25f) return "linear";
+        else if (v < 0.5f) return "exp+";
+        else if (v < 0.75f) return "exp-";
+        else return "exp++";
+    };
     juce::String bottomValues[2] = {
-        juce::String(leftCurve, 2),
-        juce::String(rightCurve, 2)
+        curveMeaning(leftCurve),
+        curveMeaning(rightCurve)
     };
     juce::String bottomLabels[2] = { "LC", "RC" };
     for (int i = 0; i < 2; ++i) {
@@ -101,28 +108,29 @@ void KeyboardScalingDisplay::mouseMove(const juce::MouseEvent& e) {
     float textHeight = 14.0f;
     float w = area.getWidth();
     float itemW = w / 3.0f;
+    int prevHovered = hoveredParam;
     hoveredParam = -1;
     // Top row (BP, LD, RD)
     for (int i = 0; i < 3; ++i) {
         juce::Rectangle<float> r(area.getX() + i * itemW, area.getY(), itemW, textHeight);
-        if (r.contains(e.position)) { hoveredParam = i; repaint(); return; }
+        if (r.contains(e.position)) { hoveredParam = i; break; }
     }
     // Bottom row (LC, RC)
-    itemW = w / 2.0f;
-    for (int i = 0; i < 2; ++i) {
-        juce::Rectangle<float> r(area.getX() + i * itemW, area.getBottom() - textHeight, itemW, textHeight);
-        if (r.contains(e.position)) { hoveredParam = i + 3; repaint(); return; }
+    if (hoveredParam == -1) {
+        itemW = w / 2.0f;
+        for (int i = 0; i < 2; ++i) {
+            juce::Rectangle<float> r(area.getX() + i * itemW, area.getBottom() - textHeight, itemW, textHeight);
+            if (r.contains(e.position)) { hoveredParam = i + 3; break; }
+        }
     }
-    if (hoveredParam != -1) { hoveredParam = -1; repaint(); }
+    if (hoveredParam != prevHovered) {
+        if (onHoveredParamChanged) onHoveredParamChanged(hoveredParam);
+        repaint();
+    }
 }
 
 void KeyboardScalingDisplay::mouseEnter(const juce::MouseEvent& e) {
-    if (auto* parent = getParentComponent()) {
-        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
-            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
-                vep->showHelpForKey("RD"); // Or more specific
-        }
-    }
+    // No-op: help text is now handled by callback in mouseMove
 }
 
 void KeyboardScalingDisplay::mouseExit(const juce::MouseEvent& e) {
@@ -138,9 +146,7 @@ void KeyboardScalingDisplay::mouseExit(const juce::MouseEvent& e) {
 
 void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     if (hoveredParam == -1) return;
-    float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
     int opIdx = -1;
-    int paramOffset = -1;
     if (auto* parent = getParentComponent()) {
         if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
             if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent())) {
@@ -151,40 +157,47 @@ void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juc
                     }
                 }
                 if (opIdx >= 0) {
-                    float* param = nullptr;
                     uint8_t paramAddress = 0;
                     if (hoveredParam == 0) { // BP
+                        // Continuous
+                        float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
                         breakPoint = juce::jlimit(0.0f, 1.0f, breakPoint + delta);
                         uint8_t value = static_cast<uint8_t>(breakPoint * 99.0f + 0.5f);
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 8);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 1) { // LD
+                        float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
                         leftDepth = juce::jlimit(0.0f, 1.0f, leftDepth + delta);
                         uint8_t value = static_cast<uint8_t>(leftDepth * 99.0f + 0.5f);
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 9);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 2) { // RD
+                        float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
                         rightDepth = juce::jlimit(0.0f, 1.0f, rightDepth + delta);
                         uint8_t value = static_cast<uint8_t>(rightDepth * 99.0f + 0.5f);
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 10);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 3) { // LC
-                        leftCurve = juce::jlimit(-1.0f, 2.0f, leftCurve + delta);
-                        // Map back to Dexed curve value (0=linear, 1=exp+, 2=exp++, -1=exp-)
-                        uint8_t value = 0;
-                        if (leftCurve == 0.0f) value = 0;
-                        else if (leftCurve == 1.0f) value = 1;
-                        else if (leftCurve == -1.0f) value = 2;
-                        else if (leftCurve == 2.0f) value = 3;
+                        // Discrete: 0=linear, 1=exp+, 2=exp-, 3=exp++
+                        static const float curveVals[4] = { 0.0f, 1.0f, -1.0f, 2.0f };
+                        int idx = 0;
+                        for (int i = 0; i < 4; ++i) if (leftCurve == curveVals[i]) idx = i;
+                        int n = 4;
+                        int dir = wheel.deltaY > 0 ? 1 : -1;
+                        idx = (idx + dir + n) % n;
+                        leftCurve = curveVals[idx];
+                        uint8_t value = (uint8_t)idx;
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 11);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 4) { // RC
-                        rightCurve = juce::jlimit(-1.0f, 2.0f, rightCurve + delta);
-                        uint8_t value = 0;
-                        if (rightCurve == 0.0f) value = 0;
-                        else if (rightCurve == 1.0f) value = 1;
-                        else if (rightCurve == -1.0f) value = 2;
-                        else if (rightCurve == 2.0f) value = 3;
+                        static const float curveVals[4] = { 0.0f, 1.0f, -1.0f, 2.0f };
+                        int idx = 0;
+                        for (int i = 0; i < 4; ++i) if (rightCurve == curveVals[i]) idx = i;
+                        int n = 4;
+                        int dir = wheel.deltaY > 0 ? 1 : -1;
+                        idx = (idx + dir + n) % n;
+                        rightCurve = curveVals[idx];
+                        uint8_t value = (uint8_t)idx;
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 12);
                         vep->setDexedParam(paramAddress, value);
                     }

@@ -95,6 +95,9 @@ public:
     std::map<std::string, std::string> helpTextByKey;
     juce::String defaultHelpText;
 
+    // Operator slider parameter offset mapping (built from VCED.json)
+    static std::map<juce::String, uint8_t> operatorSliderParamOffsets;
+
     void loadAlgorithmSvg(int algorithmIdx);
     void setupOperatorSlider(juce::Slider& slider, const juce::String& name, int min, int max, int defaultValue);
     void loadHelpJson();

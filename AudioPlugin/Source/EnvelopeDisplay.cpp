@@ -17,24 +17,43 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
     graphArea.removeFromTop(textHeight);
     graphArea.removeFromBottom(textHeight);
     g.setColour(juce::Colours::white);
-    // Draw envelope shape
+    // Draw envelope shape with rate-based time axis
     if (envRates.size() == 4 && envLevels.size() == 4) {
         float w = graphArea.getWidth();
         float h = graphArea.getHeight();
         float x0 = graphArea.getX();
         float y0 = graphArea.getBottom();
-        float stepW = w / 4.0f;
+        // --- Compute time durations for each segment based on rates (DX7: higher rate = shorter time) ---
+        std::array<float, 4> durations;
+        float totalTime = 0.0f;
+        for (int i = 0; i < 4; ++i) {
+            // Avoid div by zero, add small epsilon
+            float rate = juce::jlimit(0.01f, 1.0f, envRates[i]);
+            // Inverse mapping: time = 1/(rate^2) for more DX7-like feel
+            durations[i] = 1.0f / (rate * rate);
+            totalTime += durations[i];
+        }
+        // Compute normalized time positions for each point
+        std::array<float, 5> timePos = {0};
+        for (int i = 1; i < 5; ++i) {
+            timePos[i] = timePos[i-1] + durations[i-1] / totalTime;
+        }
+        // Draw envelope path
         juce::Path envPath;
-        float prevX = x0;
+        float prevX = x0 + w * timePos[0];
         float prevY = y0 - h * envLevels[0];
         envPath.startNewSubPath(prevX, prevY);
         for (int i = 1; i < 4; ++i) {
-            float x = x0 + stepW * i;
+            float x = x0 + w * timePos[i];
             float y = y0 - h * envLevels[i];
             envPath.lineTo(x, y);
             prevX = x;
             prevY = y;
         }
+        // Last point (L4)
+        float x4 = x0 + w * timePos[4];
+        float y4 = y0 - h * envLevels[3];
+        envPath.lineTo(x4, y4);
         g.strokePath(envPath, juce::PathStrokeType(2.0f));
     }
     // Draw parameter values as separate items
@@ -49,7 +68,7 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
             g.setColour(juce::Colours::yellow);
         else
             g.setColour(juce::Colours::white);
-        juce::String valueTxt = juce::String(envRates[i], 2);
+        juce::String valueTxt;
         juce::String labelTxt;
         switch (i) {
             case 0: labelTxt = "R1"; break;
@@ -58,6 +77,7 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
             case 3: labelTxt = "R4"; break;
         }
         // Draw value centered at top, label below value, both centered
+        valueTxt = juce::String(envRates[i], 2);
         g.drawText(valueTxt, r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
         g.drawText(labelTxt, r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
     }
@@ -68,7 +88,7 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
             g.setColour(juce::Colours::yellow);
         else
             g.setColour(juce::Colours::white);
-        juce::String valueTxt = juce::String(envLevels[i], 2);
+        juce::String valueTxt;
         juce::String labelTxt;
         switch (i) {
             case 0: labelTxt = "L1"; break;
@@ -76,6 +96,8 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
             case 2: labelTxt = "L3"; break;
             case 3: labelTxt = "L4"; break;
         }
+        // For LC and RC (L3 and L4), show numeric value (not curve meaning)
+        valueTxt = juce::String(envLevels[i], 2);
         g.drawText(valueTxt, r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
         g.drawText(labelTxt, r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
     }
@@ -86,29 +108,29 @@ void EnvelopeDisplay::mouseMove(const juce::MouseEvent& e) {
     float textHeight = 14.0f;
     float w = area.getWidth();
     float itemW = w / 4.0f;
+    int prevHovered = hoveredParam;
     hoveredParam = -1;
     // Top row
     for (int i = 0; i < 4; ++i) {
         juce::Rectangle<float> r(area.getX() + i * itemW, area.getY(), itemW, textHeight);
-        if (r.contains(e.position)) { hoveredParam = i; repaint(); return; }
+        if (r.contains(e.position)) { hoveredParam = i; break; }
     }
     // Bottom row
-    for (int i = 0; i < 4; ++i) {
-        juce::Rectangle<float> r(area.getX() + i * itemW, area.getBottom() - textHeight, itemW, textHeight);
-        if (r.contains(e.position)) { hoveredParam = i + 4; repaint(); return; }
+    if (hoveredParam == -1) {
+        for (int i = 0; i < 4; ++i) {
+            juce::Rectangle<float> r(area.getX() + i * itemW, area.getBottom() - textHeight, itemW, textHeight);
+            if (r.contains(e.position)) { hoveredParam = i + 4; break; }
+        }
     }
-    if (hoveredParam != -1) { hoveredParam = -1; repaint(); }
+    if (hoveredParam != prevHovered) {
+        if (onHoveredParamChanged) onHoveredParamChanged(hoveredParam);
+        repaint();
+    }
 }
 
 void EnvelopeDisplay::mouseExit(const juce::MouseEvent& e) {
     hoveredParam = -1;
     repaint();
-    if (auto* parent = getParentComponent()) {
-        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
-            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
-                vep->restoreDefaultHelp();
-        }
-    }
 }
 
 void EnvelopeDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
@@ -151,10 +173,5 @@ void EnvelopeDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::Mous
 }
 
 void EnvelopeDisplay::mouseEnter(const juce::MouseEvent& e) {
-    if (auto* parent = getParentComponent()) {
-        if (auto* op = dynamic_cast<VoiceEditorPanel::OperatorSliders*>(parent)) {
-            if (auto* vep = dynamic_cast<VoiceEditorPanel*>(op->getParentComponent()))
-                vep->showHelpForKey("R1"); // Or more specific
-        }
-    }
+    // No-op: help text is now handled by callback in mouseMove
 }

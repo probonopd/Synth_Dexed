@@ -260,36 +260,36 @@ void VoiceEditorPanel::loadHelpJson() {
     }
     helpJson = json;
     helpTextByKey.clear();
+    operatorSliderParamOffsets.clear();
+    // Instead of filtering by opSliderKeys, include all parameters with a parameter_number
     if (auto* params = json["parameters"].getArray()) {
         for (auto& p : *params) {
             auto* obj = p.getDynamicObject();
-            if (obj) {
-                auto key = obj->getProperty("key").toString().toStdString();
-                juce::String name = obj->getProperty("name").toString();
-                juce::String range = obj->getProperty("range").toString();
-                juce::String desc = obj->getProperty("long_description").toString();
-                if (desc.isEmpty()) desc = obj->getProperty("description").toString();
-                juce::String shortDesc = obj->getProperty("description").toString();
-                juce::String reference = obj->getProperty("reference").toString();
-
-                juce::String hoverText;
-                // First line: name (range)
-                hoverText << name;
-                if (!range.isEmpty())
-                    hoverText << " (" << range << ")";
-                hoverText << "\n";
-                // Second line: short description or range
-                if (!shortDesc.isEmpty() && shortDesc != desc)
-                    hoverText << shortDesc << "\n";
-                // Blank line
-                hoverText << "\n";
-                // Long description
-                hoverText << desc << "\n";
-                // Reference, if present
-                if (!reference.isEmpty())
-                    hoverText << "\nReference: " << reference << "\n";
-                helpTextByKey[key] = hoverText.toStdString();
+            if (obj && obj->hasProperty("key") && obj->hasProperty("parameter_number")) {
+                auto key = obj->getProperty("key").toString();
+                uint8_t paramNum = (uint8_t)obj->getProperty("parameter_number").toString().getIntValue();
+                operatorSliderParamOffsets[key] = paramNum;
+                std::cout << "[VoiceEditorPanel] operatorSliderParamOffsets: " << key << " -> " << (int)paramNum << std::endl;
             }
+            auto keyStd = obj ? obj->getProperty("key").toString().toStdString() : std::string();
+            juce::String name = obj ? obj->getProperty("name").toString() : juce::String();
+            juce::String range = obj ? obj->getProperty("range").toString() : juce::String();
+            juce::String desc = obj ? obj->getProperty("long_description").toString() : juce::String();
+            if (desc.isEmpty() && obj) desc = obj->getProperty("description").toString();
+            juce::String shortDesc = obj ? obj->getProperty("description").toString() : juce::String();
+            juce::String reference = obj ? obj->getProperty("reference").toString() : juce::String();
+            juce::String hoverText;
+            hoverText << name;
+            if (!range.isEmpty())
+                hoverText << " (" << range << ")";
+            hoverText << "\n";
+            if (!shortDesc.isEmpty() && shortDesc != desc)
+                hoverText << shortDesc << "\n";
+            hoverText << "\n";
+            hoverText << desc << "\n";
+            if (!reference.isEmpty())
+                hoverText << "\nReference: " << reference << "\n";
+            helpTextByKey[keyStd] = hoverText.toStdString();
         }
     }
     // Log all loaded keys
@@ -405,27 +405,29 @@ void VoiceEditorPanel::syncOperatorSliderWithDexed(Slider& slider, uint8_t param
 }
 
 void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
-    static const uint8_t dexedParamOffsets[OperatorSliders::NumSliders] = {
-        0, 16, 14, 18, 19, 20, 15, 17, 13
-    };
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: syncing all operator sliders from Dexed engine" << std::endl;
     uint8_t opeBitmask = getDexedParam(155);
     int numOps = static_cast<int>(operators.size());
     for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
         auto& op = operators[uiRowIdx];
-        int dexedOpIdx = uiRowIdx; // UI row 0 (top) = OP1 (dexed 0), row 5 (bottom) = OP6 (dexed 5)
+        int dexedOpIdx = uiRowIdx;
         std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: OP" << (dexedOpIdx+1) << " (UI row " << uiRowIdx << ")" << std::endl;
         // Set operator enable/disable (OPE slider)
         bool opEnabled = (opeBitmask & (1 << dexedOpIdx)) != 0;
         double oldOpeValue = op->sliders[0].getValue();
         op->sliders[0].setValue(opEnabled ? 1 : 0, juce::dontSendNotification);
         std::cout << "  OPE: opeBitmask=0x" << std::hex << (int)opeBitmask << std::dec << " enabled=" << opEnabled << " oldSlider=" << oldOpeValue << " newSlider=" << op->sliders[0].getValue() << std::endl;
-        
         for (int s = 1; s < OperatorSliders::NumSliders; ++s) {
-            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + dexedParamOffsets[s]);
+            const juce::String sliderName = OperatorSliders::sliderNames[s];
+            auto it = operatorSliderParamOffsets.find(sliderName);
+            if (it == operatorSliderParamOffsets.end()) {
+                std::cout << "  [WARN] No param offset for slider '" << sliderName << "'\n";
+                continue;
+            }
+            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             uint8_t value = getDexedParam(paramAddress);
-            std::cout << "  OP" << (dexedOpIdx+1) << " " << OperatorSliders::sliderNames[s] << " paramAddr=" << (int)paramAddress << " value=" << (int)value << std::endl;
-            syncOperatorSliderWithDexed(op->sliders[s], paramAddress, OperatorSliders::sliderNames[s]);
+            std::cout << "  OP" << (dexedOpIdx+1) << " " << sliderName << " paramAddr=" << (int)paramAddress << " value=" << (int)value << std::endl;
+            syncOperatorSliderWithDexed(op->sliders[s], paramAddress, sliderName.toRawUTF8());
         }
         // --- Envelope widget update ---
         // DX7 operator envelope: R1-R4, L1-L4, consecutive in voice data
@@ -490,9 +492,9 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
     // Draw background: greenish if carrier, else dark
     bool carrier = false;
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
-        // Map row index to operator index: row 0 (top) = OP6, row 5 (bottom) = OP1
+        // Reverse the mapping: row 0 (top) = OP1 (dexed 0), row 5 (bottom) = OP6 (dexed 5)
         int opNum = label.getText().getIntValue(); // label is "6" for OP6, ... "1" for OP1
-        int opIdx = opNum - 1; // OP1 = 0, OP6 = 5
+        int opIdx = 6 - opNum; // OP1 = 0 (top), OP6 = 5 (bottom)
         carrier = parent->isCarrier(opIdx);
     }
     g.setColour(carrier ? Colour(44, 67, 63) : Colour(33, 33, 33)); // greenish for carrier, dark for non-carrier
@@ -509,6 +511,29 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders() {
     // Ensure both widgets are visible in the UI
     addAndMakeVisible(envWidget);
     addAndMakeVisible(ksWidget);
+
+    // Set up live help text update for envelope widget
+    envWidget.onHoveredParamChanged = [this](int hovered) {
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            if (hovered >= 0 && hovered < 8) {
+                static const char* envKeys[] = {"R1", "R2", "R3", "R4", "L1", "L2", "L3", "L4"};
+                parent->showHelpForKey(envKeys[hovered]);
+            } else {
+                parent->restoreDefaultHelp();
+            }
+        }
+    };
+    // Set up live help text update for keyboard scaling widget
+    ksWidget.onHoveredParamChanged = [this](int hovered) {
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            if (hovered >= 0 && hovered < 5) {
+                static const char* ksKeys[] = {"BP", "LD", "RD", "LC", "RC"};
+                parent->showHelpForKey(ksKeys[hovered]);
+            } else {
+                parent->restoreDefaultHelp();
+            }
+        }
+    };
 }
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
@@ -542,11 +567,6 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     int gap = 0;
     int y = area.getY();
     int x = area.getX() + 60;
-
-    static const uint8_t dexedParamOffsets[NumSliders] = {
-        0, 16, 14, 18, 19, 20, 15, 17, 13
-    };
-
     // Find our UI row index (0 = top, 5 = bottom)
     int uiRowIdx = -1;
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
@@ -558,17 +578,20 @@ void VoiceEditorPanel::OperatorSliders::resized() {
         }
     }
     int dexedOpIdx = (uiRowIdx >= 0) ? uiRowIdx : 0;
-
     for (int i = 0; i < NumSliders; ++i) {
         addAndLayoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], x, y, sliderW, sliderH, gap);
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
-            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + dexedParamOffsets[i]);
-            parent->syncOperatorSliderWithDexed(sliders[i], paramAddress, sliderNames[i]);
+            const juce::String sliderName = sliderNames[i];
+            auto it = operatorSliderParamOffsets.find(sliderName);
+            if (it == operatorSliderParamOffsets.end()) continue;
+            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
+            parent->syncOperatorSliderWithDexed(sliders[i], paramAddress, sliderName.toRawUTF8());
             if (i == 0) {
-                sliders[i].setRange(0, 1, 1.0);                sliders[i].onValueChange = [parent]() {
+                sliders[i].setRange(0, 1, 1.0);
+                sliders[i].onValueChange = [parent]() {
                     uint8_t bitmask = 0;
                     for (int op = 0; op < parent->operators.size(); ++op) {
-                        int dexedOp = op; // UI row 0 (top) = OP1 (dexed 0), row 5 (bottom) = OP6 (dexed 5)
+                        int dexedOp = op;
                         auto& opSliders = parent->operators[op];
                         int val = static_cast<int>(opSliders->sliders[0].getValue());
                         if (val != 0) bitmask |= (1 << dexedOp);
@@ -592,14 +615,30 @@ void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
             return;
         }
     }
+    // Envelope widget: show help for the hovered envelope parameter (R1, R2, R3, R4, L1, L2, L3, L4)
     if (e.eventComponent == &envWidget) {
-        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
-            parent->showHelpForKey("R1");
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            // envWidget should provide a way to get the hovered parameter key
+            if (envWidget.hoveredParam >= 0 && envWidget.hoveredParam < 8) {
+                // 0-3: R1-R4, 4-7: L1-L4
+                static const char* envKeys[] = {"R1", "R2", "R3", "R4", "L1", "L2", "L3", "L4"};
+                parent->showHelpForKey(envKeys[envWidget.hoveredParam]);
+            } else {
+                parent->showHelpForKey("R1"); // fallback
+            }
+        }
         return;
     }
+    // Keyboard scaling widget: show help for the hovered scaling parameter (BP, LD, RD, LC, RC)
     if (e.eventComponent == &ksWidget) {
-        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
-            parent->showHelpForKey("RD");
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            if (ksWidget.hoveredParam >= 0 && ksWidget.hoveredParam < 5) {
+                static const char* ksKeys[] = {"BP", "LD", "RD", "LC", "RC"};
+                parent->showHelpForKey(ksKeys[ksWidget.hoveredParam]);
+            } else {
+                parent->showHelpForKey("RD"); // fallback
+            }
+        }
         return;
     }
 }
@@ -750,3 +789,7 @@ void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
         std::cout << "[VoiceEditorPanel::setDexedParam] controller is nullptr" << std::endl;
     }
 }
+
+// --- Operator parameter offset mapping ---
+// Build this dynamically from VCED.json
+std::map<juce::String, uint8_t> VoiceEditorPanel::operatorSliderParamOffsets;

@@ -1,5 +1,6 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <functional>
 
 class KeyboardScalingDisplay : public juce::Component {
 public:
@@ -10,11 +11,12 @@ public:
     void mouseExit(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    int hoveredParam = -1;
+    std::function<void(int)> onHoveredParamChanged; // Callback for hovered param change
 private:
     float breakPoint = 0.5f;
     float leftDepth = 0.0f;
     float rightDepth = 0.0f;
     float leftCurve = 0.0f;
     float rightCurve = 0.0f;
-    int hoveredParam = -1;
 };
