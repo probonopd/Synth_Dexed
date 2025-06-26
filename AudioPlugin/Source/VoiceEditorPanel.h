@@ -20,6 +20,10 @@ public:
     void showHelpForKey(const juce::String& key);
     void restoreDefaultHelp();
 
+    // MouseListener overrides for global slider hover help
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+
     // Set the controller pointer for backend access
     void setController(FMRackController* controller_);
     // Set a Dexed parameter (address, value)
@@ -68,7 +72,6 @@ public:
         void addAndLayoutSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap);
         void mouseEnter(const juce::MouseEvent&) override;
         void mouseExit(const juce::MouseEvent&) override;
-        void mouseMove(const juce::MouseEvent&) override;
         void sliderMouseEnter(int sliderIdx);
         void sliderMouseExit(int sliderIdx);
     };
@@ -129,4 +132,18 @@ public:
         std::cout << "[VoiceEditorPanel::setModuleIndex] moduleIndex set to " << idx << std::endl;
     }
     int getModuleIndex() const { return moduleIndex; }
+
+    // --- Global (non-per-operator) controls ---
+    static constexpr int numGlobalSliders = 14;
+    static constexpr const char* globalSliderKeys[numGlobalSliders] = {
+        "FB", "KSR", "LFS", "LFD", "PMD", "AMD", "LFW", "LFSN", "PMS", "TRN", "MPL", "PRT", "PBR", "OPL"
+    };
+    static constexpr const char* globalSliderLabels[numGlobalSliders] = {
+        "Feedback", "Key Sync", "LFO Speed", "LFO Delay", "LFO PMD", "LFO AMD", "LFO Waveform", "LFO Sync", "Pitch Mod Sens", "Transpose", "Mono/Poly", "Portamento", "Pitch Bend Range", "Output Level"
+    };
+    std::array<juce::Slider, numGlobalSliders> globalSliders;
+    std::array<juce::Label, numGlobalSliders> globalSliderLabelsUI;
+    // PEG Envelope widget
+    EnvelopeDisplay pegEnvelopeWidget;
+    juce::Label pegEnvelopeLabel;
 };

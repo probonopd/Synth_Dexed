@@ -74,6 +74,35 @@ VoiceEditorPanel::VoiceEditorPanel()
             operators.push_back(std::move(op));
         }
 
+        // --- Global controls (dynamic, JSON-driven) ---
+        for (int i = 0; i < numGlobalSliders; ++i) {
+            // Use short key as label (2-4 chars)
+            globalSliderLabelsUI[i].setText(globalSliderKeys[i], juce::dontSendNotification);
+            globalSliderLabelsUI[i].setFont(juce::Font(juce::FontOptions(10.0f)));
+            globalSliderLabelsUI[i].setColour(juce::Label::textColourId, juce::Colours::white);
+            globalSliderLabelsUI[i].setJustificationType(juce::Justification::centred);
+            addAndMakeVisible(globalSliderLabelsUI[i]);
+            addAndMakeVisible(globalSliders[i]);
+            globalSliders[i].setLookAndFeel(&operatorSliderLookAndFeel);
+            globalSliders[i].setSliderStyle(juce::Slider::LinearVertical);
+            globalSliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, 32, 10);
+            globalSliders[i].setNumDecimalPlacesToDisplay(0);
+            globalSliders[i].setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+            // Setup from JSON
+            setupOperatorSlider(globalSliders[i], globalSliderKeys[i], 0, 99, 0);
+            globalSliders[i].onValueChange = [this, i] {
+                auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
+                if (it != operatorSliderParamOffsets.end())
+                    setDexedParam(it->second, (uint8_t)globalSliders[i].getValue());
+            };
+            // --- Hover help for global sliders ---
+            globalSliders[i].addMouseListener(this, false);
+        }
+        // PEG Envelope
+        pegEnvelopeLabel.setText("Pitch Envelope Generator", juce::dontSendNotification);
+        addAndMakeVisible(pegEnvelopeLabel);
+        addAndMakeVisible(pegEnvelopeWidget);
+
         algorithmSelector.onChange = [this]() {
             try {
                 int idx = algorithmSelector.getSelectedId() - 1;
@@ -95,6 +124,21 @@ VoiceEditorPanel::VoiceEditorPanel()
         // Load initial SVG
         loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);
         loadHelpJson();
+
+        for (int i = 0; i < numGlobalSliders; ++i) {
+            globalSliderLabelsUI[i].setText(globalSliderLabels[i], juce::dontSendNotification);
+            addAndMakeVisible(globalSliderLabelsUI[i]);
+            addAndMakeVisible(globalSliders[i]);
+            // Apply custom look and feel to global sliders
+            globalSliders[i].setLookAndFeel(&operatorSliderLookAndFeel);
+            // Setup from JSON
+            setupOperatorSlider(globalSliders[i], globalSliderKeys[i], 0, 99, 0);
+            globalSliders[i].onValueChange = [this, i] {
+                auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
+                if (it != operatorSliderParamOffsets.end())
+                    setDexedParam(it->second, (uint8_t)globalSliders[i].getValue());
+            };
+        }
     }
     catch (const std::exception& e) {
         std::cout << "[VoiceEditorPanel] Exception in constructor: " << e.what() << std::endl;
@@ -170,12 +214,17 @@ void VoiceEditorPanel::resized() {
     // Help panel on the right (restore to fixed width and margin)
     helpPanel.setBounds(area.getRight() - helpPanelWidth + margin, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
 
+    // Reserve space for global controls and PEG envelope
+    int globalRowH = 48;
+    int pegEnvelopeH = 20 + 60 + 10; // label + widget + margin
+    int reservedBottom = globalRowH + 10 + pegEnvelopeH + 10; // global + gap + peg + gap
+
     // Operator rows: span from after SVG area to help panel (leave space for help panel, but not extra margin)
     auto opArea = juce::Rectangle<int>(
         svgPanelWidth,
         area.getY() + margin,
         area.getWidth() - helpPanelWidth - svgPanelWidth,
-        area.getHeight() - 2 * margin
+        area.getHeight() - 2 * margin - reservedBottom
     );
 
     // Store operator row centers for SVG alignment
@@ -212,6 +261,31 @@ void VoiceEditorPanel::resized() {
             }
         }
     }
+
+    // Layout global controls row below operator rows
+    int globalRowY = opArea.getBottom() + 10;
+    int globalSliderW = 32, globalSliderH = opArea.getHeight() > 0 && !operators.empty() ? (opArea.getHeight() - 10) / 6 - 20 : 100; // match operator slider height
+    int globalValueBoxH = 10;
+    int globalLabelH = 10;
+    int globalGap = 8;
+    int gx = svgPanelWidth + 10;
+    int gy = globalRowY;
+    for (int i = 0; i < numGlobalSliders; ++i) {
+        globalSliders[i].setBounds(gx, gy, globalSliderW, globalSliderH);
+        globalSliders[i].toFront(false);
+        globalSliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, globalSliderW, globalValueBoxH);
+        globalSliderLabelsUI[i].setText(globalSliderKeys[i], juce::dontSendNotification); // short label
+        globalSliderLabelsUI[i].setFont(juce::Font(juce::FontOptions(10.0f)));
+        globalSliderLabelsUI[i].setBounds(gx, gy + globalSliderH + globalValueBoxH, globalSliderW, globalLabelH);
+        globalSliderLabelsUI[i].setJustificationType(juce::Justification::centred);
+        globalSliderLabelsUI[i].toFront(false);
+        gx += globalSliderW + globalGap;
+    }
+
+    // PEG Envelope widget below global controls, with enough gap to avoid overlap
+    int pegY = gy + globalSliderH + globalValueBoxH + globalLabelH + 16; // add extra gap after global sliders
+    pegEnvelopeLabel.setBounds(svgPanelWidth + 10, pegY, 200, 20);
+    pegEnvelopeWidget.setBounds(svgPanelWidth + 10, pegY + 20, 400, 60);
 }
 
 void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
@@ -462,6 +536,18 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         float normRC = curveMap(rc);
         op->ksWidget.setScalingParams(normBP, normLD, normRD, normLC, normRC);
     }
+    // --- Sync global controls from Dexed engine ---
+    for (int i = 0; i < numGlobalSliders; ++i) {
+        auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
+        if (it != operatorSliderParamOffsets.end()) {
+            globalSliders[i].setValue(getDexedParam(it->second), juce::dontSendNotification);
+        }
+    }
+    // --- PEG Envelope ---
+    std::vector<float> pegRates, pegLevels;
+    for (int i = 0; i < 4; ++i) pegRates.push_back(getDexedParam(124 + i) / 99.0f); // Example
+    for (int i = 0; i < 4; ++i) pegLevels.push_back(getDexedParam(128 + i) / 99.0f); // Example
+    pegEnvelopeWidget.setEnvelope(pegRates, pegLevels);
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: calling repaint() to update UI" << std::endl;
     repaint();
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: completed" << std::endl;
@@ -608,6 +694,36 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     }
 }
 
+// --- VoiceEditorPanel hover help for global sliders ---
+void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
+    for (int i = 0; i < numGlobalSliders; ++i) {
+        if (e.eventComponent == &globalSliders[i]) {
+            showHelpForKey(globalSliderKeys[i]);
+            return;
+        }
+    }
+}
+
+void VoiceEditorPanel::mouseExit(const juce::MouseEvent& e) {
+    for (int i = 0; i < numGlobalSliders; ++i) {
+        if (e.eventComponent == &globalSliders[i]) {
+            restoreDefaultHelp();
+            return;
+        }
+    }
+}
+
+void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx) {
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+        parent->showHelpForKey(sliderNames[sliderIdx]);
+}
+
+void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
+        parent->restoreDefaultHelp();
+}
+
+// --- OperatorSliders hover help for operator sliders, envelope, and keyboard scaling ---
 void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
     for (int i = 0; i < NumSliders; ++i) {
         if (e.eventComponent == &sliders[i]) {
@@ -618,13 +734,11 @@ void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
     // Envelope widget: show help for the hovered envelope parameter (R1, R2, R3, R4, L1, L2, L3, L4)
     if (e.eventComponent == &envWidget) {
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
-            // envWidget should provide a way to get the hovered parameter key
             if (envWidget.hoveredParam >= 0 && envWidget.hoveredParam < 8) {
-                // 0-3: R1-R4, 4-7: L1-L4
                 static const char* envKeys[] = {"R1", "R2", "R3", "R4", "L1", "L2", "L3", "L4"};
                 parent->showHelpForKey(envKeys[envWidget.hoveredParam]);
             } else {
-                parent->showHelpForKey("R1"); // fallback
+                parent->restoreDefaultHelp();
             }
         }
         return;
@@ -636,7 +750,7 @@ void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
                 static const char* ksKeys[] = {"BP", "LD", "RD", "LC", "RC"};
                 parent->showHelpForKey(ksKeys[ksWidget.hoveredParam]);
             } else {
-                parent->showHelpForKey("RD"); // fallback
+                parent->restoreDefaultHelp();
             }
         }
         return;
@@ -655,25 +769,6 @@ void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
             parent->restoreDefaultHelp();
         return;
     }
-}
-
-void VoiceEditorPanel::OperatorSliders::mouseMove(const juce::MouseEvent& e) {
-    for (int i = 0; i < NumSliders; ++i) {
-        if (sliders[i].isMouseOver(true)) {
-            sliderMouseEnter(i);
-            return;
-        }
-    }
-}
-
-void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx) {
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
-        parent->showHelpForKey(sliderNames[sliderIdx]);
-}
-
-void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
-        parent->restoreDefaultHelp();
 }
 
 // EnvelopeDisplay mouse hover
