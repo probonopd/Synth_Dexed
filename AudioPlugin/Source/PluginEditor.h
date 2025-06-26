@@ -24,6 +24,7 @@ public:
     AudioPluginAudioProcessor* getProcessor() const { return &processorRef; } // Added method to access processor
     void showVoiceEditorPanel(int moduleIndex); // Accepts module index
     VoiceEditorPanel* getVoiceEditorPanel() const { return voiceEditorPanel.get(); } // Added getter for voiceEditorPanel
+    RackAccordionComponent* getRackAccordion() const { return rackAccordion.get(); } // Added getter for rackAccordion
 
 private:
     // This reference is provided as a quick way for your editor to

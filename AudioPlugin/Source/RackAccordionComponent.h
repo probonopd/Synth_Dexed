@@ -33,12 +33,17 @@ public:
     // Expose moduleTabs for safe read-only access (for crash prevention logic)
     const std::vector<std::unique_ptr<ModuleTabComponent>>& getModuleTabs() const { return moduleTabs; }
 
+    void suppressNumModulesSync(bool shouldSuppress) { suppressSetNumModulesVT = shouldSuppress; }
+
 private:
     void syncNumModulesSliderWithRack();
     AudioPluginAudioProcessor* processor;
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     std::vector<std::unique_ptr<ModuleTabComponent>> moduleTabs;
     AudioPluginAudioProcessorEditor* editor = nullptr;
+
+    // Suppress setNumModulesVT during state/UI sync
+    bool suppressSetNumModulesVT = false;
 };
 
 class ModuleTabComponent : public juce::Component {

@@ -1,6 +1,10 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "FMRackController.h"
+#include <cstdio> // for std::tmpnam
+#include <fstream>
+#include <sstream>
+#include <memory>
 
 bool debugEnabled = false; // Enable debug logging for plugin
 
@@ -137,7 +141,6 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         juce::Logger::writeToLog("[PluginProcessor] prepareToPlay called. sampleRate=" + juce::String(sampleRate) + ", samplesPerBlock=" + juce::String(samplesPerBlock));
         std::cout << "[PluginProcessor] prepareToPlay called. sampleRate=" << sampleRate << ", samplesPerBlock=" << samplesPerBlock << std::endl;
 
-        // If the controller was constructed with a different sample rate, re-create it
         bool needRecreate = false;
         if (!controller) {
             needRecreate = true;
@@ -150,20 +153,24 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
         }
         lastSampleRate = (float)sampleRate;
         if (needRecreate) {
-            // Save current performance if possible
+            // Use cachedPerformance if available
             std::unique_ptr<FMRack::Performance> oldPerf;
-            if (controller && controller->getPerformance()) {
+            if (cachedPerformance) {
+                oldPerf = std::make_unique<FMRack::Performance>(*cachedPerformance);
+                juce::Logger::writeToLog("[PluginProcessor] Using cachedPerformance for controller recreation. MIDI channels: " + juce::String(cachedPerformance->parts[0].midiChannel) + ", " + juce::String(cachedPerformance->parts[1].midiChannel) + ", ...");
+            } else if (controller && controller->getPerformance()) {
                 oldPerf = std::make_unique<FMRack::Performance>(*controller->getPerformance());
             }
             controller = std::make_unique<FMRackController>((float)sampleRate);
             if (oldPerf) {
                 std::cout << "[PluginProcessor] Restoring previous performance after controller recreation." << std::endl;
+                juce::Logger::writeToLog("[PluginProcessor] Restoring previous performance after controller recreation. MIDI channels: " + juce::String(oldPerf->parts[0].midiChannel) + ", " + juce::String(oldPerf->parts[1].midiChannel) + ", ...");
                 controller->setPerformance(*oldPerf);
             }
         } else {
-            // Always call setPerformance to ensure modules are created
             if (controller && controller->getPerformance()) {
                 std::cout << "[PluginProcessor] Calling setPerformance in prepareToPlay to ensure modules are created." << std::endl;
+                juce::Logger::writeToLog("[PluginProcessor] prepareToPlay: setPerformance MIDI channels: " + juce::String(controller->getPerformance()->parts[0].midiChannel) + ", " + juce::String(controller->getPerformance()->parts[1].midiChannel) + ", ...");
                 controller->setPerformance(*controller->getPerformance());
             }
         }
@@ -264,7 +271,7 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<double>& buffer,
 template <typename FloatType>
 void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, juce::MidiBuffer& midiMessages) {
     try {
-        juce::Logger::writeToLog("Process block. Samples: " + juce::String(buffer.getNumSamples()) + ", MIDI events: " + juce::String(midiMessages.getNumEvents()));
+        // juce::Logger::writeToLog("Process block. Samples: " + juce::String(buffer.getNumSamples()) + ", MIDI events: " + juce::String(midiMessages.getNumEvents()));
         auto totalNumOutputChannels = getTotalNumOutputChannels();
         auto numSamples = buffer.getNumSamples();
         for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
@@ -366,17 +373,59 @@ void AudioPluginAudioProcessor::logToGui(const juce::String& message) {
 //==============================================================================
 void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused (destData);
+    if (controller && controller->getPerformance())
+    {
+        // Use a temporary file to save the performance as INI
+        char tmpPath[L_tmpnam];
+        std::tmpnam(tmpPath);
+        controller->getPerformance()->saveToFile(tmpPath);
+        std::ifstream file(tmpPath, std::ios::binary);
+        if (file)
+        {
+            std::ostringstream oss;
+            oss << file.rdbuf();
+            std::string iniString = oss.str();
+            juce::Logger::writeToLog("[PluginProcessor] getStateInformation: saving INI string:\n" + juce::String(iniString.c_str()));
+            juce::MemoryOutputStream stream(destData, false);
+            stream.writeString(iniString);
+        }
+        std::remove(tmpPath);
+    }
 }
 
 void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
-    juce::ignoreUnused (data, sizeInBytes);
+    if (controller && data && sizeInBytes > 0)
+    {
+        juce::Logger::writeToLog("[PluginProcessor] setStateInformation called");
+        juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
+        juce::String iniString = stream.readString();
+        char tmpPath[L_tmpnam];
+        std::tmpnam(tmpPath);
+        {
+            std::ofstream file(tmpPath, std::ios::binary);
+            file << iniString.toStdString();
+        }
+        controller->getPerformance()->loadFromFile(tmpPath);
+        std::remove(tmpPath);
+        // Cache the loaded performance for later controller recreation
+        if (!cachedPerformance) cachedPerformance = std::make_unique<FMRack::Performance>();
+        *cachedPerformance = *controller->getPerformance();
+        // Log all MIDI channels after loading
+        juce::String midiChannels;
+        for (int i = 0; i < 8; ++i) midiChannels += juce::String(cachedPerformance->parts[i].midiChannel) + " ";
+        juce::Logger::writeToLog("[PluginProcessor] setStateInformation: cachedPerformance MIDI channels: " + midiChannels);
+        midiChannels = "";
+        for (int i = 0; i < 8; ++i) midiChannels += juce::String(controller->getPerformance()->parts[i].midiChannel) + " ";
+        juce::Logger::writeToLog("[PluginProcessor] setStateInformation: controller->getPerformance() MIDI channels: " + midiChannels);
+        controller->setPerformance(*controller->getPerformance());
+        // Suppress UI-triggered module count changes after loading state
+        if (editorPtr && editorPtr->getRackAccordion()) {
+            editorPtr->getRackAccordion()->suppressNumModulesSync(true);
+            editorPtr->getRackAccordion()->updatePanels();
+            editorPtr->getRackAccordion()->suppressNumModulesSync(false);
+        }
+    }
 }
 
 //==============================================================================
@@ -401,10 +450,32 @@ bool AudioPluginAudioProcessor::savePerformanceFile(const juce::String& path)
 }
 
 void AudioPluginAudioProcessor::setNumModules(int num) {
+    juce::Logger::writeToLog("[PluginProcessor] setNumModules called with num=" + juce::String(num));
+    // WARNING: This should only be called in direct response to user action (e.g. UI slider),
+    // NEVER after loading a performance or restoring state, or you will overwrite MIDI channels.
+    jassert(controller && controller->getPerformance());
     if (controller && controller->getPerformance()) {
-        for (int i = 0; i < 16; ++i)
-            controller->getPerformance()->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
-        controller->setPerformance(*controller->getPerformance());
+        // Only set MIDI channels if all are currently zero (no modules active)
+        bool allZero = true;
+        for (int i = 0; i < 16; ++i) {
+            if (controller->getPerformance()->parts[i].midiChannel != 0) {
+                allZero = false;
+                break;
+            }
+        }
+        if (allZero) {
+            juce::Logger::writeToLog("[PluginProcessor] setNumModules: all MIDI channels zero, assigning 1..N");
+            for (int i = 0; i < 16; ++i)
+                controller->getPerformance()->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
+            controller->setPerformance(*controller->getPerformance());
+        } else {
+            juce::Logger::writeToLog("[PluginProcessor] setNumModules: NOT all MIDI channels zero, skipping assignment");
+            jassertfalse; // This should never be called after state restore or performance load!
+        }
+        // Log MIDI channels after setNumModules
+        juce::String midiChannels;
+        for (int i = 0; i < 8; ++i) midiChannels += juce::String(controller->getPerformance()->parts[i].midiChannel) + " ";
+        juce::Logger::writeToLog("[PluginProcessor] setNumModules: MIDI channels after: " + midiChannels);
     }
 }
 void AudioPluginAudioProcessor::setUnisonVoices(int num) {

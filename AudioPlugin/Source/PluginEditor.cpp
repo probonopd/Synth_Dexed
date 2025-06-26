@@ -71,6 +71,11 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         resized(); // Force layout after construction
         juce::Logger::writeToLog("[PluginEditor] End of constructor");
         logTextBox.insertTextAtCaret("[PluginEditor] Constructor completed\n");
+
+        // Force UI sync from processor's current performance after construction
+        if (processorRef.getController() && processorRef.getController()->getPerformance()) {
+            rackAccordion->updatePanels();
+        }
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[PluginEditor] Exception in constructor: " + juce::String(e.what()));
         logTextBox.insertTextAtCaret("[PluginEditor] Exception: " + juce::String(e.what()) + "\n");

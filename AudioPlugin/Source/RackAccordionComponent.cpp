@@ -65,6 +65,26 @@ RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* proces
 }
 
 void RackAccordionComponent::setNumModulesVT(int num) {
+    if (suppressSetNumModulesVT) {
+        juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT suppressed (suppressSetNumModulesVT=true)");
+        return;
+    }
+    juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT called with num=" + juce::String(num));
+    auto* controller = processor ? processor->getController() : nullptr;
+    if (controller && controller->getPerformance()) {
+        // Check if MIDI channels are already set (not all zero)
+        bool allZero = true;
+        for (int i = 0; i < 16; ++i) {
+            if (controller->getPerformance()->parts[i].midiChannel != 0) {
+                allZero = false;
+                break;
+            }
+        }
+        if (!allZero) {
+            juce::Logger::writeToLog("[RackAccordionComponent] WARNING: setNumModulesVT called when MIDI channels are not all zero! This should only happen on user action.");
+            jassertfalse; // This should only be called in direct response to user action
+        }
+    }
     try {
         if (num < 1) num = 1;
         if (num > 8) num = 8;
@@ -75,24 +95,38 @@ void RackAccordionComponent::setNumModulesVT(int num) {
         if (controller) {
             auto* perf = controller->getPerformance();
             if (perf) {
+                // Log MIDI channels before change
+                juce::String midiChannelsBefore;
+                for (int i = 0; i < 8; ++i) midiChannelsBefore += juce::String(perf->parts[i].midiChannel) + " ";
+                juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels before: " + midiChannelsBefore);
                 // Create a new performance with the correct number of parts
                 FMRack::Performance newPerf;
-                
                 // Copy existing parts up to the minimum of current and target size
                 int minSize = std::min((int)perf->parts.size(), num);
                 for (int i = 0; i < minSize; ++i) {
                     newPerf.parts[i] = perf->parts[i];
                 }
-                
                 // Initialize any additional parts if expanding
                 for (int i = minSize; i < num && i < 16; ++i) {
                     newPerf.parts[i] = FMRack::Performance::PartConfig();
-                    newPerf.parts[i].midiChannel = i + 1; // Set unique MIDI channels
+                    // Only assign a MIDI channel if it is zero (unassigned)
+                    if (newPerf.parts[i].midiChannel == 0) {
+                        // Find the lowest unused MIDI channel (1-16)
+                        std::set<uint8_t> usedChannels;
+                        for (int j = 0; j < num; ++j) {
+                            if (j != i) usedChannels.insert(newPerf.parts[j].midiChannel);
+                        }
+                        uint8_t assignChannel = 1;
+                        while (usedChannels.count(assignChannel) && assignChannel <= 16) ++assignChannel;
+                        newPerf.parts[i].midiChannel = assignChannel <= 16 ? assignChannel : 0;
+                    }
                 }
-                
                 // Copy effects settings
                 newPerf.effects = perf->effects;
-                
+                // Log MIDI channels after change
+                juce::String midiChannelsAfter;
+                for (int i = 0; i < 8; ++i) midiChannelsAfter += juce::String(newPerf.parts[i].midiChannel) + " ";
+                juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels after: " + midiChannelsAfter);
                 controller->setPerformance(newPerf);
             }
             updatePanels();
@@ -114,16 +148,19 @@ void RackAccordionComponent::valueTreePropertyChanged(juce::ValueTree& tree, con
 {
     if (property == juce::Identifier("numModules") && tree == valueTree)
     {
+        suppressSetNumModulesVT = true;
         int newNumModules = tree.getProperty("numModules", 1);
         if ((int)numModulesSlider.getValue() != newNumModules) {
             numModulesSlider.setValue(newNumModules, juce::dontSendNotification);
         }
+        suppressSetNumModulesVT = false;
         updatePanels();
     }
 }
 
 void RackAccordionComponent::syncNumModulesSliderWithRack()
 {
+    suppressSetNumModulesVT = true;
     auto* controller = processor ? processor->getController() : nullptr;
     if (controller) {
         int rackNum = controller->getNumModules();
@@ -134,6 +171,7 @@ void RackAccordionComponent::syncNumModulesSliderWithRack()
             valueTree.setProperty("numModules", rackNum, nullptr);
         }
     }
+    suppressSetNumModulesVT = false;
 }
 
 void RackAccordionComponent::updatePanels()
@@ -165,7 +203,15 @@ void RackAccordionComponent::updatePanels()
         {
             juce::Logger::writeToLog("[RackAccordionComponent] Creating tab " + juce::String(i));
             auto tab = std::make_unique<ModuleTabComponent>(i, this);
-            tab->updateFromModule(); // NEW: sync controls to module state
+            tab->updateFromModule(); // Always sync controls to module state
+            // NEW: Force all per-tab controls to match processor/controller's performance
+            auto* perf = controller->getPerformance();
+            if (perf) {
+                // Only set controls for members that exist in PartConfig
+                tab->unisonVoicesSlider.setValue(perf->parts[i].unisonVoices, juce::dontSendNotification);
+                tab->unisonDetuneSlider.setValue(perf->parts[i].unisonDetune, juce::dontSendNotification);
+                // tab->unisonPanSlider.setValue(perf->parts[i].unisonPan, juce::dontSendNotification); // Removed: not a member
+            }
             tabs.addTab(juce::String(i + 1), juce::Colours::darkgrey, tab.get(), false);
             moduleTabs.push_back(std::move(tab));
         }

@@ -66,6 +66,7 @@ private:
     bool wasMidiEmptyLastBlock = true; // Added to track MIDI state for logging
     class AudioPluginAudioProcessorEditor* editorPtr = nullptr;
     float lastSampleRate = 44100.0f; // Added to track the last used sample rate
+    std::unique_ptr<FMRack::Performance> cachedPerformance;
 
 public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
