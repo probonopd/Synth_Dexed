@@ -214,11 +214,32 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
         float right = rightOut[i] * moduleRightGain * outputGain_;
         leftOut[i] = left;
         rightOut[i] = right;
-        
         // Calculate reverb send
         reverbSendLeft[i] = left * reverbSend_;
         reverbSendRight[i] = right * reverbSend_;
     }
+    // --- Metering: compute pre-gain RMS for this buffer and store atomically ---
+    float sumLPre = 0.0f, sumRPre = 0.0f;
+    for (int i = 0; i < numSamples; ++i) {
+        sumLPre += leftOut[i] * leftOut[i];
+        sumRPre += rightOut[i] * rightOut[i];
+    }
+    float rmsLPre = numSamples > 0 ? std::sqrt(sumLPre / numSamples) : 0.0f;
+    float rmsRPre = numSamples > 0 ? std::sqrt(sumRPre / numSamples) : 0.0f;
+    preGainLevelL_.store(rmsLPre);
+    preGainLevelR_.store(rmsRPre);
+    // --- Post-gain metering (after gain applied) ---
+    float sumL = 0.0f, sumR = 0.0f;
+    for (int i = 0; i < numSamples; ++i) {
+        float left = leftOut[i] * std::sqrt(1.0f - pan_) * volume_ * outputGain_;
+        float right = rightOut[i] * std::sqrt(pan_) * volume_ * outputGain_;
+        sumL += left * left;
+        sumR += right * right;
+    }
+    float rmsL = numSamples > 0 ? std::sqrt(sumL / numSamples) : 0.0f;
+    float rmsR = numSamples > 0 ? std::sqrt(sumR / numSamples) : 0.0f;
+    outputLevelL_.store(rmsL);
+    outputLevelR_.store(rmsR);
 }
 
 void Module::processSysex(const uint8_t* data, int len) {

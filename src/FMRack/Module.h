@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <atomic>
 #include "../dexed.h"
 #include "Performance.h"
 
@@ -48,6 +49,19 @@ public:
         return nullptr;
     }
     
+    // Add: Get current output levels (RMS or peak, for metering)
+    void getOutputLevels(float& l, float& r) const {
+        l = outputLevelL_.load();
+        r = outputLevelR_.load();
+    }
+
+    // Get both pre-gain and post-gain output levels (for metering)
+    void getOutputLevels(float& l, float& r, float& lPre, float& rPre) const {
+        getOutputLevels(l, r);
+        lPre = preGainLevelL_.load();
+        rPre = preGainLevelR_.load();
+    }
+    
 private:
     float sampleRate_;
     uint8_t midiChannel_;
@@ -82,6 +96,12 @@ private:
     bool isNoteInRange(uint8_t note) const;
     void applyNoteShift(uint8_t& note) const;
     void setupUnison(uint8_t voices, float detune, float spread);
+    
+    // Add: Atomics for metering
+    std::atomic<float> outputLevelL_ {0.0f};
+    std::atomic<float> outputLevelR_ {0.0f};
+    std::atomic<float> preGainLevelL_ {0.0f};
+    std::atomic<float> preGainLevelR_ {0.0f};
 };
 
 } // namespace FMRack

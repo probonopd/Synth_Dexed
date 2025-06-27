@@ -26,6 +26,11 @@ public:
     const std::vector<std::unique_ptr<FMRack::Module>>& getModules() const;
     FMRack::Module* getModule(int index);
 
+    // Metering: get output levels for a module (returns average, sets l/r)
+    float getModuleOutputLevels(int moduleIndex, float& l, float& r);
+    // Metering: get both pre-gain and post-gain levels for a module
+    void getModuleOutputLevelsExtended(int moduleIndex, float& l, float& r, float& lPre, float& rPre);
+
     // MIDI and audio
     void processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2);
     void processAudio(float* leftOut, float* rightOut, int numSamples);

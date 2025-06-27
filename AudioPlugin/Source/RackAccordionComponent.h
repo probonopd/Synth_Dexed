@@ -72,6 +72,7 @@ private:
     int moduleIndex;
     RackAccordionComponent* parentAccordion;
     std::atomic<bool> fileDialogOpen { false };
+    std::unique_ptr<class StereoVolumeMeter> volumeMeter;
 
     void loadVoiceFile(const juce::File& file);
 };

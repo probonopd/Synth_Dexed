@@ -7,8 +7,50 @@
 #include <juce_events/juce_events.h>
 #include <fstream>
 #include "../../src/FMRack/VoiceData.h" // NEW: Include VoiceData for conversion function
+#include <juce_gui_extra/juce_gui_extra.h>
 
 static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
+
+// --- StereoVolumeMeter: simple L/R bar meter with pre-gain only, in color ---
+class StereoVolumeMeter : public juce::Component, private juce::Timer {
+public:
+    StereoVolumeMeter() {
+        startTimerHz(30); // 30 Hz update
+        pre[0] = pre[1] = 0.0f;
+    }
+    void setLevels(float preL, float preR) {
+        // Scale up the RMS for better visual feedback, clamp to 1.0
+        pre[0] = juce::jlimit(0.0f, 1.0f, preL * 15.0f);
+        pre[1] = juce::jlimit(0.0f, 1.0f, preR * 15.0f);
+        repaint();
+    }
+    void paint(juce::Graphics& g) override {
+        auto area = getLocalBounds().reduced(2);
+        g.setColour(juce::Colours::black);
+        g.fillRect(area); // Black background
+        int w = area.getWidth() / 2 - 2;
+        int h = area.getHeight();
+        // Draw left (pre-gain, limegreen)
+        int preLH = juce::jlimit(0, h, (int)(pre[0] * h));
+        g.setColour(juce::Colours::limegreen);
+        g.fillRect(area.getX(), area.getBottom() - preLH, w, preLH);
+        // Draw right (pre-gain, aqua)
+        int preRH = juce::jlimit(0, h, (int)(pre[1] * h));
+        g.setColour(juce::Colours::aqua);
+        g.fillRect(area.getX() + w + 4, area.getBottom() - preRH, w, preRH);
+    }
+    void timerCallback() override {
+        if (onRequestLevels) {
+            float preL = 0, preR = 0;
+            onRequestLevels(preL, preR);
+            setLevels(preL, preR);
+        }
+    }
+    // Callback: (preL, preR)
+    std::function<void(float&, float&)> onRequestLevels;
+private:
+    float pre[2];
+};
 
 // ================= RackAccordionComponent =================
 RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* processorPtr)
@@ -383,6 +425,19 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     unisonDetuneSlider.setLookAndFeel(&operatorSliderLookAndFeel);
     unisonPanSlider.setLookAndFeel(&operatorSliderLookAndFeel);
     midiChannelSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+
+    volumeMeter = std::make_unique<StereoVolumeMeter>();
+    addAndMakeVisible(*volumeMeter);
+    volumeMeter->onRequestLevels = [this](float& preL, float& preR) {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        auto* processor = editor ? editor->getProcessor() : nullptr;
+        if (processor) {
+            float dummyL, dummyR;
+            processor->getModuleOutputLevels(moduleIndex, dummyL, dummyR, preL, preR);
+        } else {
+            preL = preR = 0.0f;
+        }
+    };
 }
 
 void ModuleTabComponent::updateFromModule()
@@ -420,6 +475,14 @@ void ModuleTabComponent::resized()
     x = 20;
     loadVoiceButton.setBounds(x, buttonY, 120, 28);
     openVoiceEditorButton.setBounds(x + 140, buttonY, 140, 28);
+    // Place volume meter to the right of sliders, 1/5 of tab height
+    int meterW = 32;
+    int tabH = getHeight();
+    int meterH = std::max(24, tabH / 5);
+    int meterX = getWidth() - meterW - 20;
+    int meterY = 20;
+    if (volumeMeter)
+        volumeMeter->setBounds(meterX, meterY, meterW, meterH);
 }
 
 void ModuleTabComponent::loadVoiceFile(const juce::File& file)

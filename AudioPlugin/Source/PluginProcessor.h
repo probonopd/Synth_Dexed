@@ -81,5 +81,17 @@ public:
     FMRack::Performance* getPerformance() const;
     FMRackController* getController() const { return controller.get(); }
 
+    // Metering: get output levels for a module (returns average, sets l/r)
+    float getModuleOutputLevels(int moduleIndex, float& l, float& r) {
+        if (controller) return controller->getModuleOutputLevels(moduleIndex, l, r);
+        l = r = 0.0f;
+        return 0.0f;
+    }
+    // Metering: get both pre-gain and post-gain levels for a module
+    void getModuleOutputLevels(int moduleIndex, float& l, float& r, float& lPre, float& rPre) {
+        if (controller) controller->getModuleOutputLevelsExtended(moduleIndex, l, r, lPre, rPre);
+        else l = r = lPre = rPre = 0.0f;
+    }
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

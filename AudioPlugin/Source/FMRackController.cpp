@@ -99,6 +99,8 @@ bool FMRackController::savePerformanceFile(const juce::String& path)
                             auto& partVoiceData = performance->parts[i].voiceData;
                             size_t sz = std::min<size_t>(partVoiceData.size(), 155);
                             std::copy_n(data, sz, partVoiceData.begin());
+                            // Also copy the voice name (bytes 145-154) from Dexed engine (already updated by UI)
+                            for (int n = 0; n < 10; ++n) partVoiceData[145 + n] = data[145 + n];
                         }
                     }
                 }
@@ -398,6 +400,26 @@ void FMRackController::setPartVoiceData(int partIndex, const std::vector<uint8_t
     } catch (...) {
         juce::Logger::writeToLog("[FMRackController] Unknown exception in setPartVoiceData");
     }
+}
+
+float FMRackController::getModuleOutputLevels(int moduleIndex, float& l, float& r)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return 0.0f;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= (int)modules.size()) return 0.0f;
+    modules[moduleIndex]->getOutputLevels(l, r);
+    return (l + r) * 0.5f;
+}
+
+void FMRackController::getModuleOutputLevelsExtended(int moduleIndex, float& l, float& r, float& lPre, float& rPre)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    l = r = lPre = rPre = 0.0f;
+    if (!rack) return;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= (int)modules.size()) return;
+    modules[moduleIndex]->getOutputLevels(l, r, lPre, rPre);
 }
 
 std::mutex& FMRackController::getMutex() { return mutex; }
