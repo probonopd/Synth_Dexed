@@ -143,8 +143,6 @@ void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& messa
 {
     logTextBox.moveCaretToEnd();
     logTextBox.insertTextAtCaret(message + "\n");
-    if (rackAccordion)
-        rackAccordion->updatePanels();
 }
 
 void AudioPluginAudioProcessorEditor::numModulesChanged() {
