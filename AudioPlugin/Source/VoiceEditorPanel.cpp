@@ -17,6 +17,8 @@ VoiceEditorPanel::VoiceEditorPanel()
 {
     std::cout << "[VoiceEditorPanel] Constructor start" << std::endl;
     try {
+        loadHelpJson(); // <-- Moved to the start to ensure helpJson and operatorSliderParamOffsets are initialized
+
         setBounds(0, 0, 1100, 700);
         setColour(juce::ResizableWindow::backgroundColourId, juce::Colour(0xff2a2a2a));
 
@@ -74,30 +76,31 @@ VoiceEditorPanel::VoiceEditorPanel()
             operators.push_back(std::move(op));
         }
 
-        // --- Global controls (dynamic, JSON-driven, 2 rows) ---
+        // --- Global controls (dynamic, JSON-driven, 3 rows) ---
         int globalSliderW = 32, globalSliderH = 120, globalValueBoxH = 10, globalLabelH = 10, globalGap = 8;
-        int numRows = 2;
+        int numRows = 3;
         int slidersPerRow = (numGlobalSliders + numRows - 1) / numRows;
-        int rowY[2] = {0, 0};
-        int rowX[2] = {0, 0};
-        // We'll set rowY/rowX in resized()
         for (int i = 0; i < numGlobalSliders; ++i) {
             juce::String vcedKey = globalSliderKeys[i];
             auto it = operatorSliderParamOffsets.find(vcedKey);
             bool enabled = (it != operatorSliderParamOffsets.end());
-            // Find the 'short' label from VCED.json
             juce::String shortLabel;
             if (helpJson.isObject()) {
-                if (auto* params = helpJson["parameters"].getArray()) {
-                    for (auto& p : *params) {
-                        auto* obj = p.getDynamicObject();
-                        if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(vcedKey)) {
-                            if (obj->hasProperty("short"))
-                                shortLabel = obj->getProperty("short").toString();
-                            break;
+                // Search both 'parameters' and 'TX816Perf' for short label
+                auto searchShort = [&](const char* arrName) {
+                    if (auto* arr = helpJson[arrName].getArray()) {
+                        for (auto& p : *arr) {
+                            auto* obj = p.getDynamicObject();
+                            if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(vcedKey)) {
+                                if (obj->hasProperty("short"))
+                                    shortLabel = obj->getProperty("short").toString();
+                                break;
+                            }
                         }
                     }
-                }
+                };
+                searchShort("parameters");
+                searchShort("TX816Perf");
             }
             addAndMakeVisible(globalSliders[i]);
             addAndMakeVisible(globalSliderLabelsUI[i]);
@@ -112,8 +115,15 @@ VoiceEditorPanel::VoiceEditorPanel()
             globalSliderLabelsUI[i].setFont(juce::Font(juce::FontOptions(10.0f)));
             globalSliderLabelsUI[i].setJustificationType(juce::Justification::centred);
             setupOperatorSlider(globalSliders[i], vcedKey, 0, 99, 0);
+            // Always set up the handler if enabled
             globalSliders[i].onValueChange = [this, i, vcedKey, enabled] {
+                if (!isInitialized) {
+                    std::cout << "[VoiceEditorPanel] globalSlider[" << i << "] onValueChange called before isInitialized, skipping" << std::endl;
+                    return;
+                }
+                std::cout << "[VoiceEditorPanel] globalSlider[" << i << "] onValueChange, controller=" << controller << std::endl;
                 if (!enabled) return;
+                if (!controller) return;
                 auto it2 = operatorSliderParamOffsets.find(vcedKey);
                 if (it2 != operatorSliderParamOffsets.end())
                     setDexedParam(it2->second, (uint8_t)globalSliders[i].getValue());
@@ -157,6 +167,10 @@ VoiceEditorPanel::VoiceEditorPanel()
             // Setup from JSON
             setupOperatorSlider(globalSliders[i], globalSliderKeys[i], 0, 99, 0);
             globalSliders[i].onValueChange = [this, i] {
+                if (!isInitialized) {
+                    std::cout << "[VoiceEditorPanel] globalSliders[" << i << "] onValueChange called before isInitialized, skipping" << std::endl;
+                    return;
+                }
                 auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
                 if (it != operatorSliderParamOffsets.end())
                     setDexedParam(it->second, (uint8_t)globalSliders[i].getValue());
@@ -167,20 +181,20 @@ VoiceEditorPanel::VoiceEditorPanel()
         voiceNameEditor.setInputRestrictions(10, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-_*<>()[]#'\"!?$%&,:;/\\");
         voiceNameEditor.setReadOnly(false);
         voiceNameEditor.onTextChange = [this]() {
+            std::cout << "[VoiceEditorPanel] voiceNameEditor.onTextChange, controller=" << controller << std::endl;
             juce::String newName = voiceNameEditor.getText().substring(0, 10);
             // Pad with spaces to 10 chars
             while (newName.length() < 10) newName += " ";
             // Write to Dexed engine immediately
-            if (controller) {
-                auto rack = controller->getRack();
-                if (rack) {
-                    const auto& modules = rack->getModules();
-                    if (!modules.empty() && moduleIndex >= 0 && moduleIndex < (int)modules.size()) {
-                        auto* dexed = modules[moduleIndex]->getDexedEngine();
-                        if (dexed) {
-                            for (int i = 0; i < 10; ++i) {
-                                dexed->setVoiceDataElement(145 + i, (uint8_t)newName[i]);
-                            }
+            if (!controller) return;
+            auto rack = controller->getRack();
+            if (rack) {
+                const auto& modules = rack->getModules();
+                if (!modules.empty() && moduleIndex >= 0 && moduleIndex < (int)modules.size()) {
+                    auto* dexed = modules[moduleIndex]->getDexedEngine();
+                    if (dexed) {
+                        for (int i = 0; i < 10; ++i) {
+                            dexed->setVoiceDataElement(145 + i, (uint8_t)newName[i]);
                         }
                     }
                 }
@@ -201,7 +215,20 @@ VoiceEditorPanel::~VoiceEditorPanel() {
     // unique_ptr automatically handles cleanup
 }
 
+void VoiceEditorPanel::initializeIfReady() {
+    if (controller && moduleIndex >= 0) {
+        if (!isInitialized) {
+            isInitialized = true;
+            std::cout << "[VoiceEditorPanel] isInitialized set to true" << std::endl;
+        }
+    }
+}
+
 void VoiceEditorPanel::paint(Graphics& g) {
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel::paint] called before isInitialized, skipping paint" << std::endl;
+        return;
+    }
     g.fillAll(Colour(0xff332b28));
     // Draw backgrounds for the two global parameter rows
     int helpPanelWidth = 280;
@@ -274,8 +301,14 @@ static void layoutGlobalSliderWithLabel(juce::Slider& slider, juce::Label& label
 }
 
 void VoiceEditorPanel::resized() {
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel::resized] called before isInitialized, skipping layout" << std::endl;
+        return;
+    }
     auto area = getLocalBounds();
-
+    int minPanelHeight = 600;
+    if (getHeight() < minPanelHeight)
+        setSize(getWidth(), minPanelHeight);
     // Top controls (algorithm, voice name, channel)
     auto topControls = area.removeFromTop(40).reduced(10, 0);
     int colW = 120, gap = 10;
@@ -285,95 +318,93 @@ void VoiceEditorPanel::resized() {
     voiceNameEditor.setBounds(topControls.getX() + colW + 60 + gap + colW, topControls.getY(), 180, 24);
     channelLabel.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap, topControls.getY(), colW, 24);
     channelSelector.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap + colW, topControls.getY(), 60, 24);
-
     // Place the request dump button at the top right, next to the help panel
     int buttonW = 140, buttonH = 28;
     int buttonX = area.getRight() - buttonW - 20; // 20px margin from right edge
     int buttonY = 10; // 10px from top
     requestDumpButton.setBounds(buttonX, buttonY, buttonW, buttonH);
-
     int helpPanelWidth = 280;
     int svgPanelWidth = 100;
     int margin = 10;
-
-    // SVG draw area: always at the left edge of the window, full height minus margins
     svgDrawArea = juce::Rectangle<float>(0, area.getY() + margin, svgPanelWidth, area.getHeight() - 2 * margin);
-
-    // Help panel on the right (restore to fixed width and margin)
-    helpPanel.setBounds(area.getRight() - helpPanelWidth + margin, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
-
-    // Reserve space for global controls and PEG envelope
-    int globalRowH = 48;
-    int pegEnvelopeH = 20 + 60 + 10; // label + widget + margin
-    int reservedBottom = globalRowH + 10 + pegEnvelopeH + 10; // global + gap + peg + gap
-
-    // Operator rows: span from after SVG area to help panel (leave space for help panel, but not extra margin)
+    // --- Operator rows ---
+    int opCount = 6;
+    int reservedGlobalRows = 3; // number of global rows
+    int reservedGlobalRowGap = 8; // gap between global rows
+    int reservedGlobalValueBoxH = 10;
+    int reservedGlobalLabelH = 10;
+    int opNumColW = 36;
+    // Calculate row height so that all rows (op + global) are the same
+    int totalRows = opCount + reservedGlobalRows;
+    int rowH = (area.getHeight() - 2 * margin - (reservedGlobalRows - 1) * reservedGlobalRowGap - reservedGlobalRows * (reservedGlobalValueBoxH + reservedGlobalLabelH)) / totalRows;
+    int opSliderW = 32;
+    int opSliderH = rowH;
+    // Operator area
     auto opArea = juce::Rectangle<int>(
         svgPanelWidth,
         area.getY() + margin,
         area.getWidth() - helpPanelWidth - svgPanelWidth,
-        area.getHeight() - 2 * margin - reservedBottom
+        opCount * rowH
     );
-
-    // Store operator row centers for SVG alignment
     operatorRowCenters.clear();
-    if (!operators.empty()) {
-        int opCount = 6;
-        int opH = (opArea.getHeight() - 10) / opCount;
-        int opNumColW = 36;
-        for (int i = 0; i < opCount; ++i) {
-            int opIdx = i;
-            float rowCenterY = opArea.getY() + i * opH + opH * 0.5f;
-            operatorRowCenters.push_back(rowCenterY);
-
-            // Operator number label: positioned in the SVG area (left part of full-width row)
-            juce::Rectangle<int> opNumBounds(
-                0, // always at the left edge
-                opArea.getY() + i * opH,
-                opNumColW,
-                opH - 2
-            );
-            if (operators[opIdx]) {
-                operators[opIdx]->label.setBounds(opNumBounds.reduced(0, 0));
-            }
-
-            // Operator controls: positioned after SVG area but still within full-width row
-            auto opBounds = juce::Rectangle<int>(
-                0,
-                opArea.getY() + i * opH,
-                opArea.getWidth(),  // Take remaining width
-                opH - 2
-            );
-            if (operators[opIdx]) {
-                operators[opIdx]->setBounds(opBounds);
-            }
+    for (int i = 0; i < opCount; ++i) {
+        int opIdx = i;
+        float rowCenterY = opArea.getY() + i * rowH + rowH * 0.5f;
+        operatorRowCenters.push_back(rowCenterY);
+        juce::Rectangle<int> opNumBounds(
+            0,
+            opArea.getY() + i * rowH,
+            opNumColW,
+            rowH - 2
+        );
+        if (operators[opIdx]) {
+            operators[opIdx]->label.setBounds(opNumBounds.reduced(0, 0));
         }
     }
-
-    // Layout global controls in 2 rows below operator rows
-    int globalRowY = opArea.getBottom() + 10;
-    int globalSliderW = 32, globalSliderH = opArea.getHeight() > 0 && !operators.empty() ? (opArea.getHeight() - 10) / 6 - 20 : 100;
-    int globalValueBoxH = 10;
-    int globalLabelH = 10;
+    for (int i = 0; i < opCount; ++i) {
+        auto opBounds = juce::Rectangle<int>(
+            0,
+            opArea.getY() + i * rowH,
+            opArea.getWidth(),
+            rowH - 2
+        );
+        if (operators[i]) {
+            operators[i]->setBounds(opBounds);
+        }
+    }
+    // --- Global rows ---
+    int globalRowY = opArea.getBottom();
+    int globalSliderW = opSliderW, globalSliderH = opSliderH;
+    int globalValueBoxH = reservedGlobalValueBoxH;
+    int globalLabelH = reservedGlobalLabelH;
     int globalGap = 8;
-    int numRows = 2;
+    int numRows = reservedGlobalRows;
     int slidersPerRow = (numGlobalSliders + numRows - 1) / numRows;
-    int gx[2] = {svgPanelWidth + 10, svgPanelWidth + 10};
-    int gy[2] = {globalRowY, globalRowY + globalSliderH + globalValueBoxH + globalLabelH + 8};
-    int rightOfSliders = gx[0] + slidersPerRow * (globalSliderW + globalGap);
+    int gx[3] = {svgPanelWidth + 10, svgPanelWidth + 10, svgPanelWidth + 10};
+    int gy[3] = {
+        globalRowY,
+        globalRowY + rowH + globalValueBoxH + globalLabelH + reservedGlobalRowGap,
+        globalRowY + 2 * (rowH + globalValueBoxH + globalLabelH + reservedGlobalRowGap)
+    };
+    int pegWidgetW = 128, pegWidgetH = globalSliderH;
     for (int row = 0; row < numRows; ++row) {
+        int sliderCount = 0;
         for (int i = 0; i < slidersPerRow; ++i) {
             int idx = row * slidersPerRow + i;
             if (idx >= numGlobalSliders) break;
             layoutGlobalSliderWithLabel(globalSliders[idx], globalSliderLabelsUI[idx], globalSliderLabelsUI[idx].getText(), gx[row], gy[row], globalSliderW, globalSliderH, globalGap);
+            globalSliders[idx].setEnabled(globalSliderLabelsUI[idx].getText().isNotEmpty());
+            ++sliderCount;
+        }
+        // Place PEG envelope widget in the first global row, after the last slider
+        if (row == 0) {
+            int pegX = gx[row];
+            int pegY = gy[row];
+            pegEnvelopeWidget.setBounds(pegX, pegY, pegWidgetW, pegWidgetH);
         }
     }
-    // Place PEG Envelope widget in the first row of global parameters, to the right of the last global slider
-    // Use the same size as operator envelope widgets
-    int pegWidgetW = 128, pegWidgetH = globalSliderH; // match operator env widget size
-    int pegX = gx[0]; // after last slider in row 0
-    int pegY = gy[0];
-    pegEnvelopeWidget.setBounds(pegX, pegY, pegWidgetW, pegWidgetH);
+    // Help panel on the right (restore to fixed width and margin)
+    helpPanel.setBounds(area.getRight() - helpPanelWidth + margin, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
 }
 
 void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
@@ -453,6 +484,37 @@ void VoiceEditorPanel::loadHelpJson() {
             helpTextByKey[keyStd] = hoverText.toStdString();
         }
     }
+    // --- Add TX816Perf global parameters ---
+    if (auto* perf = json["TX816Perf"].getArray()) {
+        for (auto& p : *perf) {
+            auto* obj = p.getDynamicObject();
+            if (obj && obj->hasProperty("key") && !obj->getProperty("parameter_number").isVoid()) {
+                auto key = obj->getProperty("key").toString();
+                uint8_t paramNum = (uint8_t)obj->getProperty("parameter_number").toString().getIntValue();
+                operatorSliderParamOffsets[key] = paramNum;
+                std::cout << "[VoiceEditorPanel] operatorSliderParamOffsets (TX816Perf): " << key << " -> " << (int)paramNum << std::endl;
+            }
+            auto keyStd = obj ? obj->getProperty("key").toString().toStdString() : std::string();
+            juce::String name = obj ? obj->getProperty("name").toString() : juce::String();
+            juce::String range = obj ? obj->getProperty("range").toString() : juce::String();
+            juce::String desc = obj ? obj->getProperty("long_description").toString() : juce::String();
+            if (desc.isEmpty() && obj) desc = obj->getProperty("description").toString();
+            juce::String shortDesc = obj ? obj->getProperty("description").toString() : juce::String();
+            juce::String reference = obj ? obj->getProperty("reference").toString() : juce::String();
+            juce::String hoverText;
+            hoverText << name;
+            if (!range.isEmpty())
+                hoverText << " (" << range << ")";
+            hoverText << "\n";
+            if (!shortDesc.isEmpty() && shortDesc != desc)
+                hoverText << shortDesc << "\n";
+            hoverText << "\n";
+            hoverText << desc << "\n";
+            if (!reference.isEmpty())
+                hoverText << "\nReference: " << reference << "\n";
+            helpTextByKey[keyStd] = hoverText.toStdString();
+        }
+    }
     // Log all loaded keys
     for (const auto& pair : helpTextByKey)
         std::cout << "[VoiceEditorPanel] Loaded help key: '" << pair.first << "'" << std::endl;
@@ -482,71 +544,72 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
     bool isDiscrete = false;
     std::vector<double> allowedValues;
     std::vector<juce::String> allowedLabels;
-    if (helpJson.isObject()) {
-        if (auto* params = helpJson["parameters"].getArray()) {
-            for (auto& p : *params) {
-                auto* obj = p.getDynamicObject();
-                if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(name)) {
-                    if (obj->hasProperty("min"))
-                        minValue = obj->getProperty("min").toString().getDoubleValue();
-                    else
-                        std::cout << "[VoiceEditorPanel] Warning: Slider '" << name << "' has no 'min' property." << std::endl;
-                    if (obj->hasProperty("max"))
-                        maxValue = obj->getProperty("max").toString().getDoubleValue();
-                    else
-                        std::cout << "[VoiceEditorPanel] Warning: Slider '" << name << "' has no 'max' property." << std::endl;
-                    if (obj->hasProperty("default"))
-                        defaultValue = obj->getProperty("default").toString().getDoubleValue();
-                    else
-                        defaultValue = minValue;
-                    if (obj->hasProperty("values")) {
-                        isDiscrete = true;
-                        step = 1.0;
-                        auto valuesVar = obj->getProperty("values");
-                        if (valuesVar.isObject()) {
-                            auto* valuesObj = valuesVar.getDynamicObject();
-                            auto& props = valuesObj->getProperties();
-                            for (int i = 0; i < props.size(); ++i) {
-                                auto keyStr = props.getName(i).toString();
-                                allowedValues.push_back(keyStr.getDoubleValue());
-                                allowedLabels.push_back(props.getValueAt(i).toString());
+    auto searchSetup = [&](const char* arrName) {
+        if (helpJson.isObject()) {
+            if (auto* params = helpJson[arrName].getArray()) {
+                for (auto& p : *params) {
+                    auto* obj = p.getDynamicObject();
+                    if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(name)) {
+                        if (obj->hasProperty("min"))
+                            minValue = obj->getProperty("min").toString().getDoubleValue();
+                        if (obj->hasProperty("max"))
+                            maxValue = obj->getProperty("max").toString().getDoubleValue();
+                        if (obj->hasProperty("default"))
+                            defaultValue = obj->getProperty("default").toString().getDoubleValue();
+                        if (obj->hasProperty("values")) {
+                            isDiscrete = true;
+                            step = 1.0;
+                            auto valuesVar = obj->getProperty("values");
+                            if (valuesVar.isObject()) {
+                                auto* valuesObj = valuesVar.getDynamicObject();
+                                auto& props = valuesObj->getProperties();
+                                for (int i = 0; i < props.size(); ++i) {
+                                    auto keyStr = props.getName(i).toString();
+                                    allowedValues.push_back(keyStr.getDoubleValue());
+                                    allowedLabels.push_back(props.getValueAt(i).toString());
+                                }
+                            } else if (valuesVar.isArray()) {
+                                auto* arr = valuesVar.getArray();
+                                for (auto& v : *arr) {
+                                    allowedValues.push_back((int)v);
+                                }
                             }
-                        } else if (valuesVar.isArray()) {
-                            auto* arr = valuesVar.getArray();
-                            for (auto& v : *arr) {
-                                allowedValues.push_back((int)v);
+                            std::sort(allowedValues.begin(), allowedValues.end());
+                            if (!allowedValues.empty()) {
+                                minValue = 0;
+                                maxValue = (double)(allowedValues.size() - 1);
+                                auto it = std::find(allowedValues.begin(), allowedValues.end(), (int)defaultValue);
+                                if (it != allowedValues.end())
+                                    defaultValue = std::distance(allowedValues.begin(), it);
+                                else
+                                    defaultValue = 0;
                             }
                         }
-                        std::sort(allowedValues.begin(), allowedValues.end());
-                        if (!allowedValues.empty()) {
-                            minValue = 0;
-                            maxValue = (double)(allowedValues.size() - 1);
-                            auto it = std::find(allowedValues.begin(), allowedValues.end(), (int)defaultValue);
-                            if (it != allowedValues.end())
-                                defaultValue = std::distance(allowedValues.begin(), it);
-                            else
-                                defaultValue = 0;
-                            // Log allowable values for this slider
-                            std::cout << "[VoiceEditorPanel] Slider '" << name << "' allowable values: ";
-                            for (size_t i = 0; i < allowedValues.size(); ++i) {
-                                std::cout << allowedValues[i];
-                                if (i != allowedValues.size() - 1) std::cout << ", ";
-                            }
-                            std::cout << std::endl;
-                        }
+                        break;
                     }
-                    // Log allowable range for all sliders with min/max
-                    if (obj->hasProperty("min") && obj->hasProperty("max")) {
-                        std::cout << "[VoiceEditorPanel] Slider '" << name << "' allowable range: "
-                                  << obj->getProperty("min").toString() << " to " << obj->getProperty("max").toString() << std::endl;
-                    }
-                    // Enforce min/max for all sliders
-                    minValue = obj->hasProperty("min") ? obj->getProperty("min").toString().getDoubleValue() : minValue;
-                    maxValue = obj->hasProperty("max") ? obj->getProperty("max").toString().getDoubleValue() : maxValue;
-                    break;
                 }
             }
         }
+    };
+    searchSetup("parameters");
+    searchSetup("TX816Perf");
+    slider.setRange(minValue, maxValue, step);
+    slider.setValue(defaultValue, juce::dontSendNotification);
+    if (isDiscrete && !allowedLabels.empty()) {
+        slider.setTextValueSuffix("");
+        slider.textFromValueFunction = [allowedLabels, allowedValues](double v) {
+            int idx = (int)v;
+            if (idx >= 0 && idx < (int)allowedLabels.size())
+                return allowedLabels[idx];
+            return juce::String((int)v);
+        };
+        slider.valueFromTextFunction = [allowedValues](const juce::String& text) {
+            for (size_t i = 0; i < allowedValues.size(); ++i) {
+                if (text == juce::String((int)allowedValues[i]))
+                    return (double)i;
+            }
+            return 0.0;
+        };
     }
 }
 
@@ -566,6 +629,10 @@ void VoiceEditorPanel::syncOperatorSliderWithDexed(Slider& slider, uint8_t param
 }
 
 void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel::syncAllOperatorSlidersWithDexed] called before isInitialized, skipping" << std::endl;
+        return;
+    }
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: syncing all operator sliders from Dexed engine" << std::endl;
     // --- Show voice name from current Dexed engine ---
     if (controller) {
@@ -781,7 +848,7 @@ void VoiceEditorPanel::OperatorSliders::resized() {
         int globalValueBoxH = 10;
         int globalLabelH = 10;
         int globalGap = 8;
-        int numRows = 2;
+        int numRows = 3;
         int slidersPerRow = (parent->numGlobalSliders + numRows - 1) / numRows;
         int gx0 = svgPanelWidth + 10;
         int pegX = gx0 + slidersPerRow * (globalSliderW + globalGap);
@@ -816,12 +883,17 @@ void VoiceEditorPanel::OperatorSliders::resized() {
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
             const juce::String sliderName = sliderNames[i];
             auto it = operatorSliderParamOffsets.find(sliderName);
-            if (it == operatorSliderParamOffsets.end()) continue;
+            if (it == operatorSliderParamOffsets.end()) {
+                std::cout << "[OperatorSliders] No param offset for slider '" << sliderName << "'\n";
+                continue;
+            }
             uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             parent->syncOperatorSliderWithDexed(sliders[i], paramAddress, sliderName.toRawUTF8());
             if (i == 0) {
                 sliders[i].setRange(0, 1, 1.0);
                 sliders[i].onValueChange = [parent]() {
+                    std::cout << "[OperatorSliders] OPE onValueChange, parent=" << parent << ", controller=" << parent->controller << std::endl;
+                    if (!parent->controller) return;
                     uint8_t bitmask = 0;
                     for (int op = 0; op < parent->operators.size(); ++op) {
                         int dexedOp = op;
@@ -833,6 +905,8 @@ void VoiceEditorPanel::OperatorSliders::resized() {
                 };
             } else {
                 sliders[i].onValueChange = [parent, paramAddress, i, this]() {
+                    std::cout << "[OperatorSliders] Slider[" << i << "] onValueChange, parent=" << parent << ", controller=" << parent->controller << std::endl;
+                    if (!parent->controller) return;
                     int value = static_cast<int>(sliders[i].getValue());
                     parent->setDexedParam(paramAddress, static_cast<uint8_t>(value));
                 };
@@ -920,6 +994,10 @@ void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
 
 // EnvelopeDisplay mouse hover
 uint8_t VoiceEditorPanel::getDexedParam(uint8_t address) const {
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel::getDexedParam] called before isInitialized, skipping" << std::endl;
+        return 0;
+    }
     std::cout << "[VoiceEditorPanel::getDexedParam] called with address=" << (int)address << ", moduleIndex=" << moduleIndex;
     if (!controller) { std::cout << " [VoiceEditorPanel] getDexedParam: controller is null" << std::endl; return 0; }
     auto rack = controller->getRack();
@@ -938,24 +1016,37 @@ uint8_t VoiceEditorPanel::getDexedParam(uint8_t address) const {
 std::pair<uint8_t, uint8_t> VoiceEditorPanel::getDexedRange(const char* sliderKey) const {
     const char* key = sliderKey;
     if (key && helpJson.isObject()) {
-        if (auto* params = helpJson["parameters"].getArray()) {
-            for (auto& p : *params) {
-                auto* obj = p.getDynamicObject();
-                if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(key)) {
-                    uint8_t minVal = obj->hasProperty("min") ? (uint8_t)obj->getProperty("min").toString().getIntValue() : 0;
-                    uint8_t maxVal = obj->hasProperty("max") ? (uint8_t)obj->getProperty("max").toString().getIntValue() : 99;
-                    return {minVal, maxVal};
+        auto searchRange = [&](const char* arrName) -> std::pair<uint8_t, uint8_t> {
+            if (auto* params = helpJson[arrName].getArray()) {
+                for (auto& p : *params) {
+                    auto* obj = p.getDynamicObject();
+                    if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(key)) {
+                        uint8_t minVal = obj->hasProperty("min") ? (uint8_t)obj->getProperty("min").toString().getIntValue() : 0;
+                        uint8_t maxVal = obj->hasProperty("max") ? (uint8_t)obj->getProperty("max").toString().getIntValue() : 99;
+                        return {minVal, maxVal};
+                    }
                 }
             }
-        }
+            return {0, 99};
+        };
+        auto r = searchRange("parameters");
+        if (r != std::pair<uint8_t, uint8_t>{0, 99}) return r;
+        r = searchRange("TX816Perf");
+        if (r != std::pair<uint8_t, uint8_t>{0, 99}) return r;
     }
-    // Fallback
     return {0, 99};
 }
 
 void VoiceEditorPanel::setController(FMRackController* controller_) {
     std::cout << "[VoiceEditorPanel::setController] called with controller_=" << controller_ << std::endl;
     controller = controller_;
+    initializeIfReady();
+}
+
+void VoiceEditorPanel::setModuleIndex(int idx) {
+    moduleIndex = idx;
+    std::cout << "[VoiceEditorPanel::setModuleIndex] moduleIndex set to " << idx << std::endl;
+    initializeIfReady();
 }
 
 void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& data) {
@@ -1036,6 +1127,10 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
 }
 
 void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel::setDexedParam] called before isInitialized, skipping" << std::endl;
+        return;
+    }
     std::cout << "[VoiceEditorPanel::setDexedParam] called, address=" << (int)address << ", value=" << (int)value << ", moduleIndex=" << moduleIndex << std::endl;
     if (controller) {
         auto rack = controller->getRack();

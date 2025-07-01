@@ -125,21 +125,20 @@ private:
     int moduleIndex = 0; // which module/part to edit
     juce::TextButton requestDumpButton;
     void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
+    bool isInitialized = false;
+    void initializeIfReady();
 
 public:
-    void setModuleIndex(int idx) { 
-        moduleIndex = idx;
-        std::cout << "[VoiceEditorPanel::setModuleIndex] moduleIndex set to " << idx << std::endl;
-    }
+    void setModuleIndex(int idx);
     int getModuleIndex() const { return moduleIndex; }
 
     // --- Global (non-per-operator) controls ---
-    static constexpr int numGlobalSliders = 14;
+    static constexpr int numGlobalSliders = 27;
     static constexpr const char* globalSliderKeys[numGlobalSliders] = {
-        "FB", "KSR", "LFS", "LFD", "PMD", "AMD", "LFW", "LFSN", "PMS", "TRN", "MPL", "PRT", "PBR", "OPL"
+        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP", "SRC", "PMO", "PBR", "PBS", "PRT", "PGL", "PMD", "MWS", "MWA", "FCS", "FCA", "ATS", "ATA", "BCS", "BCA", "ATT", "MTU"
     };
     static constexpr const char* globalSliderLabels[numGlobalSliders] = {
-        "Feedback", "Key Sync", "LFO Speed", "LFO Delay", "LFO PMD", "LFO AMD", "LFO Waveform", "LFO Sync", "Pitch Mod Sens", "Transpose", "Mono/Poly", "Portamento", "Pitch Bend Range", "Output Level"
+        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP", "SRC", "PMO", "PBR", "PBS", "PRT", "PGL", "PMD", "MWS", "MWA", "FCS", "FCA", "ATS", "ATA", "BCS", "BCA", "ATT", "MTU"    
     };
     std::array<juce::Slider, numGlobalSliders> globalSliders;
     std::array<juce::Label, numGlobalSliders> globalSliderLabelsUI;
