@@ -147,7 +147,7 @@ void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& messa
 
 void AudioPluginAudioProcessorEditor::numModulesChanged() {
     if (rackAccordion)
-        rackAccordion->setNumModulesVT((int)rackAccordion->numModulesSlider.getValue());
+        rackAccordion->setNumModulesVT(rackAccordion->getNumModulesVT());
 }
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()

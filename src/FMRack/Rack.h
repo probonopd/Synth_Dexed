@@ -56,7 +56,6 @@ public:
     // Add public getter for modules
     const std::vector<std::unique_ptr<Module>>& getModules() const { return modules_; }
 
-    void setNumModules(int num);
     int getNumModules() const;
 
 private:
@@ -84,8 +83,6 @@ private:
     
     // Mutex for thread-safe access to modules_
     std::mutex modulesMutex;
-
-    int numModules_ = 1;
 
     // Helper methods
     void createModulesFromPerformance();

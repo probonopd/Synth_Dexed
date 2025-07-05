@@ -29,8 +29,6 @@ Rack::Rack(float sampleRate) : initialized(false), sampleRate_(sampleRate) {
     
     std::cout << "Rack initialized with sample rate: " << sampleRate << " Hz\n";
     initialized = true;
-
-    numModules_ = 1;
 }
 
 bool Rack::loadPerformance(const std::string& filename) {
@@ -48,6 +46,10 @@ bool Rack::loadPerformance(const std::string& filename) {
         return true;
     }
     return false;
+}
+
+int Rack::getNumModules() const {
+    return modules_.size();
 }
 
 void Rack::setDefaultPerformance() {
@@ -481,15 +483,6 @@ void Rack::setupModulesFromVoices(const std::vector<std::vector<uint8_t>>& voice
     }
     std::cout << "Total active modules: " << modules_.size() << "\n";
     std::cout << "=== Module creation complete ===\n\n";
-}
-
-void Rack::setNumModules(int num) {
-    numModules_ = num;
-    createModulesFromPerformance();
-}
-
-int Rack::getNumModules() const {
-    return numModules_;
 }
 
 } // namespace FMRack

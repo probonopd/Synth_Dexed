@@ -24,6 +24,7 @@ Performance::~Performance() {
 }
 
 bool Performance::loadFromFile(const std::string& filename) {
+    setDefaults(0, 1); // Reset all parts to an inactive default state before loading
     std::cout << "Attempting to load performance file: " << filename << std::endl;
     std::ifstream file(filename);
     if (!file.is_open()) {

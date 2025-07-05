@@ -57,28 +57,48 @@ RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* proces
     : processor(processorPtr)
 {
     try {
-        addAndMakeVisible(numModulesLabel);
-        addAndMakeVisible(numModulesSlider);
-        addAndMakeVisible(tabs);
-        numModulesLabel.setText("Modules", juce::dontSendNotification);
-        numModulesSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        numModulesSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
-        numModulesSlider.setRange(1, 8, 1);
-        // Initialize ValueTree for UI sync
-        valueTree = juce::ValueTree("RackUI");
-        int initialModules = processor && processor->getController() ? processor->getController()->getNumModules() : 1;
-        valueTree.setProperty("numModules", initialModules, nullptr);
-        valueTree.addListener(this);
-        numModulesSlider.setValue(getNumModulesVT());
-        numModulesSlider.onValueChange = [this] {
-            try {
-                setNumModulesVT((int)numModulesSlider.getValue());
-            } catch (const std::exception& e) {
-                juce::Logger::writeToLog("[RackAccordionComponent] Exception in numModulesSlider.onValueChange: " + juce::String(e.what()));
-            } catch (...) {
-                juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in numModulesSlider.onValueChange");
+        // Remove slider and label
+        // addAndMakeVisible(numModulesLabel);
+        // addAndMakeVisible(numModulesSlider);
+        addAndMakeVisible(tabs);        // Add + and - buttons
+        addAndMakeVisible(addModuleButton);
+        addAndMakeVisible(removeModuleButton);
+        addModuleButton.onClick = [this] {
+            juce::Logger::writeToLog("[RackAccordionComponent] '+' button clicked");
+            
+            int num = getNumModulesVT();
+            juce::Logger::writeToLog("[RackAccordionComponent] '+' button: current ValueTree numModules=" + juce::String(num));
+            
+            if (num < 16) {
+                juce::Logger::writeToLog("[RackAccordionComponent] '+' button: adding module, new count=" + juce::String(num + 1));
+                setNumModulesVT(num + 1);
+            } else {
+                juce::Logger::writeToLog("[RackAccordionComponent] '+' button: already at maximum modules");
             }
         };
+        removeModuleButton.onClick = [this] {
+            int num = getNumModulesVT();
+            if (num > 1) {
+                juce::Logger::writeToLog("[RackAccordionComponent] '-' button pressed, removing last module. Current numModules=" + juce::String(num));
+                setNumModulesVT(num - 1);
+            } else {
+                juce::Logger::writeToLog("[RackAccordionComponent] '-' button pressed, but only one module left. No action.");
+            }
+        };        // Initialize ValueTree for UI sync
+        valueTree = juce::ValueTree("RackUI");
+        int initialModules = 1; // Start with default, will sync in updatePanels()
+        if (processor && processor->getController()) {
+            int rackModules = processor->getController()->getNumModules();
+            juce::Logger::writeToLog("[RackAccordionComponent] Constructor: Rack reports " + juce::String(rackModules) + " modules");
+            if (rackModules >= 1 && rackModules <= 16) {
+                initialModules = rackModules;
+            }
+        }
+        juce::Logger::writeToLog("[RackAccordionComponent] Constructor: Setting initial ValueTree to " + juce::String(initialModules) + " modules");
+        valueTree.setProperty("numModules", initialModules, nullptr);
+        valueTree.addListener(this);
+        // numModulesSlider.setValue(getNumModulesVT());
+        // numModulesSlider.onValueChange = ...
         editor = nullptr; // must be set by the parent (PluginEditor)
         // Register UI update callback
         if (processor && processor->getController()) {
@@ -96,9 +116,16 @@ RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* proces
             };
         } else {
             juce::Logger::writeToLog("[RackAccordionComponent] Warning: processor or controller is null, cannot register callback");
-        }
-        juce::Logger::writeToLog("[RackAccordionComponent] Calling initial updatePanels()");
+        }        juce::Logger::writeToLog("[RackAccordionComponent] Calling initial updatePanels()");
         updatePanels();
+        
+        // Schedule a single delayed update to ensure sync after constructor completes
+        juce::Timer::callAfterDelay(100, [this]() {
+            juce::MessageManager::callAsync([this] {
+                juce::Logger::writeToLog("[RackAccordionComponent] Delayed sync check");
+                updatePanels();
+            });
+        });
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[RackAccordionComponent] Exception in constructor: " + juce::String(e.what()));
     } catch (...) {
@@ -112,78 +139,54 @@ void RackAccordionComponent::setNumModulesVT(int num) {
         return;
     }
     juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT called with num=" + juce::String(num));
-    auto* controller = processor ? processor->getController() : nullptr;
-    if (controller && controller->getPerformance()) {
-        // Check if MIDI channels are already set (not all zero)
-        bool allZero = true;
-        for (int i = 0; i < 16; ++i) {
-            if (controller->getPerformance()->parts[i].midiChannel != 0) {
-                allZero = false;
-                break;
-            }
-        }
-        if (!allZero) {
-            juce::Logger::writeToLog("[RackAccordionComponent] WARNING: setNumModulesVT called when MIDI channels are not all zero! This should only happen on user action.");
-            jassertfalse; // This should only be called in direct response to user action
-        }
+    // Clamp num to [1, 16]
+    if (num < 1) num = 1;
+    if (num > 16) num = 16;
+    if (getNumModulesVT() != num) {
+        valueTree.setProperty("numModules", num, nullptr);
     }
-    try {
-        if (num < 1) num = 1;
-        if (num > 8) num = 8;
-        if (getNumModulesVT() != num) {
-            valueTree.setProperty("numModules", num, nullptr);
-        }
-        auto* controller = processor ? processor->getController() : nullptr;
-        if (controller) {
-            auto* perf = controller->getPerformance();
-            if (perf) {
-                // Log MIDI channels before change
-                juce::String midiChannelsBefore;
-                for (int i = 0; i < 8; ++i) midiChannelsBefore += juce::String(perf->parts[i].midiChannel) + " ";
-                juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels before: " + midiChannelsBefore);
-                // Create a new performance with the correct number of parts
-                FMRack::Performance newPerf;
-                // Copy existing parts up to the minimum of current and target size
-                int minSize = std::min((int)perf->parts.size(), num);
-                for (int i = 0; i < minSize; ++i) {
-                    newPerf.parts[i] = perf->parts[i];
-                }
-                // Initialize any additional parts if expanding
-                for (int i = minSize; i < num && i < 16; ++i) {
-                    newPerf.parts[i] = FMRack::Performance::PartConfig();
-                    // Only assign a MIDI channel if it is zero (unassigned)
-                    if (newPerf.parts[i].midiChannel == 0) {
-                        // Find the lowest unused MIDI channel (1-16)
-                        std::set<uint8_t> usedChannels;
-                        for (int j = 0; j < num; ++j) {
-                            if (j != i) usedChannels.insert(newPerf.parts[j].midiChannel);
-                        }
-                        uint8_t assignChannel = 1;
-                        while (usedChannels.count(assignChannel) && assignChannel <= 16) ++assignChannel;
-                        newPerf.parts[i].midiChannel = assignChannel <= 16 ? assignChannel : 0;
-                    }
-                }
-                // Copy effects settings
-                newPerf.effects = perf->effects;
-                // Log MIDI channels after change
-                juce::String midiChannelsAfter;
-                for (int i = 0; i < 8; ++i) midiChannelsAfter += juce::String(newPerf.parts[i].midiChannel) + " ";
-                juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels after: " + midiChannelsAfter);
-                controller->setPerformance(newPerf);
+    auto* controller = processor ? processor->getController() : nullptr;
+    if (controller) {
+        auto* perf = controller->getPerformance();
+        if (perf) {
+            // Log MIDI channels before change
+            juce::String midiChannelsBefore;
+            for (int i = 0; i < 16; ++i) midiChannelsBefore += juce::String(perf->parts[i].midiChannel) + " ";
+            juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels before: " + midiChannelsBefore);
+            // Create a new performance with the correct number of parts
+            FMRack::Performance newPerf;
+            int minSize = std::min((int)perf->parts.size(), num);
+            for (int i = 0; i < minSize; ++i) {
+                newPerf.parts[i] = perf->parts[i];
             }
-            updatePanels();
-            // Ensure slider matches the number of tabs (modules)
-            numModulesSlider.setValue(controller->getNumModules(), juce::dontSendNotification);
+            // Initialize any additional parts if expanding
+            for (int i = minSize; i < num && i < 16; ++i) {
+                newPerf.parts[i] = FMRack::Performance::PartConfig();
+                // Assign channel 1 by default
+                newPerf.parts[i].midiChannel = 1;
+            }
+            // Zero out any extra parts if reducing
+            for (int i = num; i < 16; ++i) {
+                newPerf.parts[i] = FMRack::Performance::PartConfig();
+                newPerf.parts[i].midiChannel = 0;
+            }
+            // Copy effects settings
+            newPerf.effects = perf->effects;
+            // Log MIDI channels after change
+            juce::String midiChannelsAfter;
+            for (int i = 0; i < 16; ++i) midiChannelsAfter += juce::String(newPerf.parts[i].midiChannel) + " ";            juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels after: " + midiChannelsAfter);
+            controller->setPerformance(newPerf);
         }
-    } catch (const std::exception& e) {
-        juce::Logger::writeToLog("[RackAccordionComponent] Exception in setNumModulesVT: " + juce::String(e.what()));
-    } catch (...) {
-        juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in setNumModulesVT");
     }
 }
 
 int RackAccordionComponent::getNumModulesVT() const {
     return valueTree.getProperty("numModules", 1);
+}
+
+void RackAccordionComponent::forceSync() {
+    juce::Logger::writeToLog("[RackAccordionComponent] forceSync() called - forcing immediate sync");
+    updatePanels();
 }
 
 void RackAccordionComponent::valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property)
@@ -192,9 +195,9 @@ void RackAccordionComponent::valueTreePropertyChanged(juce::ValueTree& tree, con
     {
         suppressSetNumModulesVT = true;
         int newNumModules = tree.getProperty("numModules", 1);
-        if ((int)numModulesSlider.getValue() != newNumModules) {
-            numModulesSlider.setValue(newNumModules, juce::dontSendNotification);
-        }
+        // if ((int)numModulesSlider.getValue() != newNumModules) {
+        //     numModulesSlider.setValue(newNumModules, juce::dontSendNotification);
+        // }
         suppressSetNumModulesVT = false;
         updatePanels();
     }
@@ -206,9 +209,9 @@ void RackAccordionComponent::syncNumModulesSliderWithRack()
     auto* controller = processor ? processor->getController() : nullptr;
     if (controller) {
         int rackNum = controller->getNumModules();
-        if ((int)numModulesSlider.getValue() != rackNum) {
-            numModulesSlider.setValue(rackNum, juce::dontSendNotification);
-        }
+        // if ((int)numModulesSlider.getValue() != rackNum) {
+        //     numModulesSlider.setValue(rackNum, juce::dontSendNotification);
+        // }
         if (getNumModulesVT() != rackNum) {
             valueTree.setProperty("numModules", rackNum, nullptr);
         }
@@ -218,75 +221,102 @@ void RackAccordionComponent::syncNumModulesSliderWithRack()
 
 void RackAccordionComponent::updatePanels()
 {
+    // Prevent recursive calls
+    if (updatingPanels.exchange(true)) {
+        juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() called recursively - skipping to prevent infinite loop");
+        return;
+    }
+    
     try {
         juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() called");
+        
+        auto* controller = processor ? processor->getController() : nullptr;
+        if (!controller) {
+            juce::Logger::writeToLog("[RackAccordionComponent] No controller available!");
+            updatingPanels = false;
+            return;
+        }
+        
         // Save the currently selected tab index
-        int selectedTabIndex = tabs.getCurrentTabIndex();
-        if (tabs.getNumTabs() > 0) {
+        int selectedTabIndex = tabs.getCurrentTabIndex();        if (tabs.getNumTabs() > 0) {
             // Check if any ModuleTabComponent has an open file dialog
             for (const auto& tab : moduleTabs) {
                 if (tab && tab->isFileDialogOpen()) {
                     juce::Logger::writeToLog("[WARNING] updatePanels() called while a Load Voice file dialog is open! This can cause a crash. Skipping updatePanels.");
+                    updatingPanels = false;
                     return; // Prevent crash by not updating panels while dialog is open
                 }
             }
+        }tabs.clearTabs();
+        moduleTabs.clear();        // Check if we need to sync ValueTree with actual rack modules
+        int rackModules = controller->getNumModules();
+        int vtModules = getNumModulesVT();
+        
+        juce::Logger::writeToLog("[RackAccordionComponent] Rack has " + juce::String(rackModules) + " modules, ValueTree has " + juce::String(vtModules));
+        
+        // ALWAYS use rack modules count as the source of truth
+        int numModules = rackModules;
+        
+        // Update ValueTree to match rack if they differ
+        if (rackModules != vtModules && rackModules >= 1 && rackModules <= 16) {
+            juce::Logger::writeToLog("[RackAccordionComponent] SYNCING ValueTree from " + juce::String(vtModules) + " to " + juce::String(rackModules));
+            suppressSetNumModulesVT = true;
+            valueTree.setProperty("numModules", rackModules, nullptr);
+            suppressSetNumModulesVT = false;
         }
-        tabs.clearTabs();
-        moduleTabs.clear();
-        auto* controller = processor ? processor->getController() : nullptr;
-        if (!controller) {
-            juce::Logger::writeToLog("[RackAccordionComponent] No controller available!");
-            return;
-        }
-        const auto& modules = controller->getModules();
-        int numModules = (int)modules.size();
-        juce::Logger::writeToLog("[RackAccordionComponent] Number of modules: " + juce::String(numModules));
-        for (int i = 0; i < numModules; ++i)
+        
+        // Clamp to safe range
+        if (numModules < 1) numModules = 1;
+        if (numModules > 16) numModules = 16;
+        
+        juce::Logger::writeToLog("[RackAccordionComponent] Creating " + juce::String(numModules) + " tabs");for (int i = 0; i < numModules; ++i)
         {
             juce::Logger::writeToLog("[RackAccordionComponent] Creating tab " + juce::String(i));
-            auto tab = std::make_unique<ModuleTabComponent>(i, this);
-            tab->updateFromModule(); // Always sync controls to module state
-            // NEW: Force all per-tab controls to match processor/controller's performance
-            auto* perf = controller->getPerformance();
-            if (perf) {
-                // Only set controls for members that exist in PartConfig
-                tab->unisonVoicesSlider.setValue(perf->parts[i].unisonVoices, juce::dontSendNotification);
-                tab->unisonDetuneSlider.setValue(perf->parts[i].unisonDetune, juce::dontSendNotification);
-                // tab->unisonPanSlider.setValue(perf->parts[i].unisonPan, juce::dontSendNotification); // Removed: not a member
+            
+            try {
+                auto tab = std::make_unique<ModuleTabComponent>(i, this);
+                tabs.addTab(juce::String(i + 1), juce::Colours::darkgrey, tab.get(), false);
+                moduleTabs.push_back(std::move(tab));
+                
+            } catch (const std::exception& e) {
+                juce::Logger::writeToLog("[RackAccordionComponent] Exception creating tab " + juce::String(i) + ": " + juce::String(e.what()));
+                break; // Stop creating tabs if one fails
             }
-            tabs.addTab(juce::String(i + 1), juce::Colours::darkgrey, tab.get(), false);
-            moduleTabs.push_back(std::move(tab));
         }
         tabs.resized(); // Ensure child tabs get resized after adding
         resized();
         syncNumModulesSliderWithRack(); // Always sync slider at the end
         // After updating tabs, ensure slider matches the number of tabs
-        numModulesSlider.setValue(tabs.getNumTabs(), juce::dontSendNotification);
+        // numModulesSlider.setValue(tabs.getNumTabs(), juce::dontSendNotification);
         // Restore the previously selected tab index if possible
         if (selectedTabIndex >= 0 && selectedTabIndex < tabs.getNumTabs()) {
             tabs.setCurrentTabIndex(selectedTabIndex);
-        }
-        juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() completed successfully with " + juce::String(tabs.getNumTabs()) + " tabs");
+        }        juce::Logger::writeToLog("[RackAccordionComponent] updatePanels() completed successfully with " + juce::String(tabs.getNumTabs()) + " tabs");
+        
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[RackAccordionComponent] Exception in updatePanels: " + juce::String(e.what()));
     } catch (...) {
         juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in updatePanels");
     }
+    
+    // Always reset the flag
+    updatingPanels = false;
 }
 
 void RackAccordionComponent::resized()
 {
-    int x = 10, y = 10, w = 120, h = 24, gap = 6;
-    numModulesLabel.setBounds(x, y, w, h);
-    numModulesSlider.setBounds(x + w + 4, y, 80, h);
-    y += h + gap;
-    int tabY = y;
+    int x = 10, y = 10, buttonW = 32, buttonH = 28, gap = 6;
+    // Place + and - buttons horizontally at the top left
+    addModuleButton.setBounds(x, y, buttonW, buttonH);
+    removeModuleButton.setBounds(x + buttonW + gap, y, buttonW, buttonH);
+    int tabY = y + buttonH + gap;
     tabs.setBounds(0, tabY, getWidth(), getHeight() - tabY);
 }
 
 void RackAccordionComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::darkgrey);
+    // Use the same background color as VoiceEditorPanel
+    g.fillAll(juce::Colour(0xff23272e)); // dark gray-blue, adjust as needed to match VoiceEditorPanel
 }
 
 // ================= ModuleTabComponent =================
@@ -296,7 +326,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     // Remove setSize() calls from all sliders, as their size is set in resized().
     unisonVoicesLabel.setText("Unison Voices", juce::dontSendNotification);
     addAndMakeVisible(unisonVoicesLabel);
-    unisonVoicesSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    unisonVoicesSlider.setSliderStyle(juce::Slider::LinearVertical);
     unisonVoicesSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
     unisonVoicesSlider.setRange(1, 4, 1);
     unisonVoicesSlider.setValue(1);
@@ -304,7 +334,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
 
     unisonDetuneLabel.setText("Unison Detune", juce::dontSendNotification);
     addAndMakeVisible(unisonDetuneLabel);
-    unisonDetuneSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    unisonDetuneSlider.setSliderStyle(juce::Slider::LinearVertical);
     unisonDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
     unisonDetuneSlider.setRange(0.0, 50.0, 0.1);
     unisonDetuneSlider.setValue(7.0);
@@ -312,7 +342,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
 
     unisonPanLabel.setText("Unison Pan", juce::dontSendNotification);
     addAndMakeVisible(unisonPanLabel);
-    unisonPanSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    unisonPanSlider.setSliderStyle(juce::Slider::LinearVertical);
     unisonPanSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
     unisonPanSlider.setRange(0.0, 1.0, 0.01);
     unisonPanSlider.setValue(0.5);
@@ -320,7 +350,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
 
     midiChannelLabel.setText("MIDI Channel", juce::dontSendNotification);
     addAndMakeVisible(midiChannelLabel);
-    midiChannelSlider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+    midiChannelSlider.setSliderStyle(juce::Slider::LinearVertical);
     midiChannelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
     midiChannelSlider.setRange(1, 16, 1);
     midiChannelSlider.setValue(idx + 1); // Default to 1-based index
@@ -438,6 +468,8 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             preL = preR = 0.0f;
         }
     };
+
+    updateFromModule(); // Initial sync
 }
 
 void ModuleTabComponent::updateFromModule()
@@ -483,6 +515,8 @@ void ModuleTabComponent::resized()
     int meterY = 20;
     if (volumeMeter)
         volumeMeter->setBounds(meterX, meterY, meterW, meterH);
+
+    updateFromModule(); // Initial sync
 }
 
 void ModuleTabComponent::loadVoiceFile(const juce::File& file)

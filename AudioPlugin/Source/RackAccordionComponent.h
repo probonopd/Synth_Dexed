@@ -14,13 +14,13 @@ class RackAccordionComponent : public juce::Component, public juce::ValueTree::L
 public:
     RackAccordionComponent(AudioPluginAudioProcessor* processorPtr);
     void resized() override;
-    void paint(juce::Graphics&) override;
-    void updatePanels();
+    void paint(juce::Graphics&) override;    void updatePanels();
+    void forceSync(); // Force sync between rack modules and UI tabs
     void valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property) override;
 
     // Controls to move from PluginEditor
-    juce::Slider numModulesSlider;
-    juce::Label numModulesLabel;
+    juce::TextButton addModuleButton { "+" };
+    juce::TextButton removeModuleButton { "-" };
 
     // ValueTree for UI sync (AudioPlugin only)
     juce::ValueTree valueTree { "RackUI" };
@@ -40,10 +40,10 @@ private:
     AudioPluginAudioProcessor* processor;
     juce::TabbedComponent tabs { juce::TabbedButtonBar::TabsAtTop };
     std::vector<std::unique_ptr<ModuleTabComponent>> moduleTabs;
-    AudioPluginAudioProcessorEditor* editor = nullptr;
-
-    // Suppress setNumModulesVT during state/UI sync
+    AudioPluginAudioProcessorEditor* editor = nullptr;    // Suppress setNumModulesVT during state/UI sync
     bool suppressSetNumModulesVT = false;
+    // Prevent recursive updatePanels calls
+    std::atomic<bool> updatingPanels = false;
 };
 
 class ModuleTabComponent : public juce::Component {
