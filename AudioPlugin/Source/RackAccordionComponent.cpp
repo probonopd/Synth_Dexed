@@ -61,69 +61,6 @@ RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* proces
         // addAndMakeVisible(numModulesLabel);
         // addAndMakeVisible(numModulesSlider);
         addAndMakeVisible(tabs);        // Add + and - buttons
-        addAndMakeVisible(addModuleButton);
-        addAndMakeVisible(removeModuleButton);
-        addModuleButton.onClick = [this] {
-            juce::Logger::writeToLog("[RackAccordionComponent] '+' button clicked");
-            int num = getNumModulesVT();
-            juce::Logger::writeToLog("[RackAccordionComponent] '+' button: current ValueTree numModules=" + juce::String(num));
-            if (num < 16) {
-                // ONLY update the ValueTree. The property listener will handle the rest.
-                valueTree.setProperty("numModules", num + 1, nullptr);
-            } else {
-                juce::Logger::writeToLog("[RackAccordionComponent] '+' button pressed, but already at 16 modules. No action.");
-            }
-        };
-        removeModuleButton.onClick = [this] {
-            int num = getNumModulesVT();
-            if (num > 1) {
-                // ONLY update the ValueTree. The property listener will handle the rest.
-                valueTree.setProperty("numModules", num - 1, nullptr);
-            } else {
-                juce::Logger::writeToLog("[RackAccordionComponent] '-' button pressed, but only one module left. No action.");
-            }
-        };        // Initialize ValueTree for UI sync
-        valueTree = juce::ValueTree("RackUI");
-        int initialModules = 1; // Start with default, will sync in updatePanels()
-        if (processor && processor->getController()) {
-            int rackModules = processor->getController()->getNumModules();
-            juce::Logger::writeToLog("[RackAccordionComponent] Constructor: Rack reports " + juce::String(rackModules) + " modules");
-            if (rackModules >= 1 && rackModules <= 16) {
-                initialModules = rackModules;
-            }
-        }
-        juce::Logger::writeToLog("[RackAccordionComponent] Constructor: Setting initial ValueTree to " + juce::String(initialModules) + " modules");
-        valueTree.setProperty("numModules", initialModules, nullptr);
-        valueTree.addListener(this);
-        // numModulesSlider.setValue(getNumModulesVT());
-        // numModulesSlider.onValueChange = ...
-        editor = nullptr; // must be set by the parent (PluginEditor)
-        // Register UI update callback
-        if (processor && processor->getController()) {
-            juce::Logger::writeToLog("[RackAccordionComponent] Registering onModulesChanged callback");
-            processor->getController()->onModulesChanged = [this]() {
-                juce::MessageManager::callAsync([this] {
-                    try {
-                        updatePanels();
-                    } catch (const std::exception& e) {
-                        juce::Logger::writeToLog("[RackAccordionComponent] Exception in onModulesChanged callback: " + juce::String(e.what()));
-                    } catch (...) {
-                        juce::Logger::writeToLog("[RackAccordionComponent] Unknown exception in onModulesChanged callback");
-                    }
-                });
-            };
-        } else {
-            juce::Logger::writeToLog("[RackAccordionComponent] Warning: processor or controller is null, cannot register callback");
-        }        juce::Logger::writeToLog("[RackAccordionComponent] Calling initial updatePanels()");
-        updatePanels();
-        
-        // Schedule a single delayed update to ensure sync after constructor completes
-        juce::Timer::callAfterDelay(100, [this]() {
-            juce::MessageManager::callAsync([this] {
-                juce::Logger::writeToLog("[RackAccordionComponent] Delayed sync check");
-                updatePanels();
-            });
-        });
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[RackAccordionComponent] Exception in constructor: " + juce::String(e.what()));
     } catch (...) {
@@ -313,12 +250,7 @@ void RackAccordionComponent::updatePanels()
 
 void RackAccordionComponent::resized()
 {
-    int x = 10, y = 10, buttonW = 32, buttonH = 28, gap = 6;
-    // Place + and - buttons horizontally at the top left
-    addModuleButton.setBounds(x, y, buttonW, buttonH);
-    removeModuleButton.setBounds(x + buttonW + gap, y, buttonW, buttonH);
-    int tabY = y + buttonH + gap;
-    tabs.setBounds(0, tabY, getWidth(), getHeight() - tabY);
+    tabs.setBounds(0, 0, getWidth(), getHeight());
 }
 
 void RackAccordionComponent::paint(juce::Graphics& g)
@@ -329,8 +261,24 @@ void RackAccordionComponent::paint(juce::Graphics& g)
 
 // ================= ModuleTabComponent =================
 ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
-    : moduleIndex(idx), parentAccordion(parent)
+    : moduleIndex(idx), parentAccordion(parent),
+      voiceGroup("voiceGroup", "Voice"),
+      unisonGroup("unisonGroup", "Unison"),
+      midiPitchGroup("midiPitchGroup", "MIDI & Pitch"),
+      noteRangeGroup("noteRangeGroup", "Note Range"),
+      portaMonoGroup("portaMonoGroup", "Portamento & Mono"),
+      filterGroup("filterGroup", "Filter"),
+      mainPartGroup("mainPartGroup", "Main") // NEW
 {
+    // Add and make visible all group components
+    addAndMakeVisible(voiceGroup);
+    addAndMakeVisible(unisonGroup);
+    addAndMakeVisible(midiPitchGroup);
+    addAndMakeVisible(noteRangeGroup);
+    addAndMakeVisible(portaMonoGroup);
+    addAndMakeVisible(filterGroup);
+    addAndMakeVisible(mainPartGroup); // NEW
+
     // Remove setSize() calls from all sliders, as their size is set in resized().
     unisonVoicesLabel.setText("Unison Voices", juce::dontSendNotification);
     addAndMakeVisible(unisonVoicesLabel);
@@ -340,7 +288,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     unisonVoicesSlider.setValue(1);
     addAndMakeVisible(unisonVoicesSlider);
 
-    unisonDetuneLabel.setText("Unison Detune", juce::dontSendNotification);
+    unisonDetuneLabel.setText("Detune", juce::dontSendNotification);
     addAndMakeVisible(unisonDetuneLabel);
     unisonDetuneSlider.setSliderStyle(juce::Slider::LinearVertical);
     unisonDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
@@ -356,13 +304,125 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     unisonPanSlider.setValue(0.5);
     addAndMakeVisible(unisonPanSlider);
 
-    midiChannelLabel.setText("MIDI Channel", juce::dontSendNotification);
+    midiChannelLabel.setText("Channel", juce::dontSendNotification);
     addAndMakeVisible(midiChannelLabel);
     midiChannelSlider.setSliderStyle(juce::Slider::LinearVertical);
     midiChannelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
     midiChannelSlider.setRange(1, 16, 1);
     midiChannelSlider.setValue(idx + 1); // Default to 1-based index
     addAndMakeVisible(midiChannelSlider);
+
+    reverbSendLabel.setText("Reverb Send", juce::dontSendNotification);
+    addAndMakeVisible(reverbSendLabel);
+    reverbSendSlider.setSliderStyle(juce::Slider::LinearVertical);
+    reverbSendSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    reverbSendSlider.setRange(0, 99, 1);
+    addAndMakeVisible(reverbSendSlider);
+
+    volumeLabel.setText("Volume", juce::dontSendNotification);
+    addAndMakeVisible(volumeLabel);
+    volumeSlider.setSliderStyle(juce::Slider::LinearVertical);
+    volumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    volumeSlider.setRange(0, 127, 1);
+    addAndMakeVisible(volumeSlider);
+
+    panLabel.setText("Pan", juce::dontSendNotification);
+    addAndMakeVisible(panLabel);
+    panSlider.setSliderStyle(juce::Slider::LinearVertical);
+    panSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    panSlider.setRange(0, 127, 1);
+    addAndMakeVisible(panSlider);
+
+    detuneLabel.setText("Detune", juce::dontSendNotification);
+    addAndMakeVisible(detuneLabel);
+    detuneSlider.setSliderStyle(juce::Slider::LinearVertical);
+    detuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    detuneSlider.setRange(-99, 99, 1);
+    addAndMakeVisible(detuneSlider);
+
+    // Note Range controls
+    noteLimitLowLabel.setText("Low", juce::dontSendNotification);
+    addAndMakeVisible(noteLimitLowLabel);
+    noteLimitLowSlider.setSliderStyle(juce::Slider::LinearVertical);
+    noteLimitLowSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    noteLimitLowSlider.setRange(0, 127, 1);
+    addAndMakeVisible(noteLimitLowSlider);
+
+    noteLimitHighLabel.setText("High", juce::dontSendNotification);
+    addAndMakeVisible(noteLimitHighLabel);
+    noteLimitHighSlider.setSliderStyle(juce::Slider::LinearVertical);
+    noteLimitHighSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    noteLimitHighSlider.setRange(0, 127, 1);
+    addAndMakeVisible(noteLimitHighSlider);
+
+    noteShiftLabel.setText("Shift", juce::dontSendNotification);
+    addAndMakeVisible(noteShiftLabel);
+    noteShiftSlider.setSliderStyle(juce::Slider::LinearVertical);
+    noteShiftSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    noteShiftSlider.setRange(-24, 24, 1);
+    addAndMakeVisible(noteShiftSlider);
+
+    // Pitch Bend
+    pitchBendRangeLabel.setText("PB Range", juce::dontSendNotification);
+    addAndMakeVisible(pitchBendRangeLabel);
+    pitchBendRangeSlider.setSliderStyle(juce::Slider::LinearVertical);
+    pitchBendRangeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    pitchBendRangeSlider.setRange(0, 12, 1);
+    addAndMakeVisible(pitchBendRangeSlider);
+
+    // Portamento
+    portamentoModeLabel.setText("Portamento", juce::dontSendNotification);
+    addAndMakeVisible(portamentoModeLabel);
+    portamentoModeButton.setButtonText("On");
+    addAndMakeVisible(portamentoModeButton);
+
+    portamentoTimeLabel.setText("Time", juce::dontSendNotification);
+    addAndMakeVisible(portamentoTimeLabel);
+    portamentoTimeSlider.setSliderStyle(juce::Slider::LinearVertical);
+    portamentoTimeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    portamentoTimeSlider.setRange(0, 99, 1);
+    addAndMakeVisible(portamentoTimeSlider);
+
+    // Mono Mode
+    monoModeLabel.setText("Mono Mode", juce::dontSendNotification);
+    addAndMakeVisible(monoModeLabel);
+    monoModeButton.setButtonText("On");
+    addAndMakeVisible(monoModeButton);
+
+    // Misc
+    velocityScaleLabel.setText("Velocity", juce::dontSendNotification);
+    addAndMakeVisible(velocityScaleLabel);
+    velocityScaleSlider.setSliderStyle(juce::Slider::LinearVertical);
+    velocityScaleSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    velocityScaleSlider.setRange(0, 127, 1);
+    addAndMakeVisible(velocityScaleSlider);
+
+    masterTuneLabel.setText("Tune", juce::dontSendNotification);
+    addAndMakeVisible(masterTuneLabel);
+    masterTuneSlider.setSliderStyle(juce::Slider::LinearVertical);
+    masterTuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    masterTuneSlider.setRange(-100, 100, 1);
+    addAndMakeVisible(masterTuneSlider);
+
+    // Filter
+    filterEnabledLabel.setText("Filter", juce::dontSendNotification);
+    addAndMakeVisible(filterEnabledLabel);
+    filterEnabledButton.setButtonText("On");
+    addAndMakeVisible(filterEnabledButton);
+
+    filterCutoffLabel.setText("Cutoff", juce::dontSendNotification);
+    addAndMakeVisible(filterCutoffLabel);
+    filterCutoffSlider.setSliderStyle(juce::Slider::LinearVertical);
+    filterCutoffSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    filterCutoffSlider.setRange(0, 127, 1);
+    addAndMakeVisible(filterCutoffSlider);
+
+    filterResonanceLabel.setText("Resonance", juce::dontSendNotification);
+    addAndMakeVisible(filterResonanceLabel);
+    filterResonanceSlider.setSliderStyle(juce::Slider::LinearVertical);
+    filterResonanceSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+    filterResonanceSlider.setRange(0, 127, 1);
+    addAndMakeVisible(filterResonanceSlider);
 
     // Wire up controls to update Performance, not module directly
     unisonVoicesSlider.onValueChange = [this] {
@@ -421,10 +481,191 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             }
         }
     };
+
+    reverbSendSlider.onValueChange = [this] {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        auto* processor = editor ? editor->getProcessor() : nullptr;
+        auto* controller = processor ? processor->getController() : nullptr;
+        auto* perf = controller ? controller->getPerformance() : nullptr;
+        if (perf) {
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            uint8_t newValue = (uint8_t)reverbSendSlider.getValue();
+            if (part.reverbSend != newValue) {
+                part.reverbSend = newValue;
+                controller->setPerformance(*perf);
+            }
+        }
+    };
+
+    volumeSlider.onValueChange = [this] {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        auto* processor = editor ? editor->getProcessor() : nullptr;
+        auto* controller = processor ? processor->getController() : nullptr;
+        auto* perf = controller ? controller->getPerformance() : nullptr;
+        if (perf) {
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            uint8_t newValue = (uint8_t)volumeSlider.getValue();
+            if (part.volume != newValue) {
+                part.volume = newValue;
+                controller->setPerformance(*perf);
+            }
+        }
+    };
+
+    panSlider.onValueChange = [this] {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        auto* processor = editor ? editor->getProcessor() : nullptr;
+        auto* controller = processor ? processor->getController() : nullptr;
+        auto* perf = controller ? controller->getPerformance() : nullptr;
+        if (perf) {
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            uint8_t newValue = (uint8_t)panSlider.getValue();
+            if (part.pan != newValue) {
+                part.pan = newValue;
+                controller->setPerformance(*perf);
+            }
+        }
+    };
+
+    detuneSlider.onValueChange = [this] {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        auto* processor = editor ? editor->getProcessor() : nullptr;
+        auto* controller = processor ? processor->getController() : nullptr;
+        auto* perf = controller ? controller->getPerformance() : nullptr;
+        if (perf) {
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            int8_t newValue = (int8_t)detuneSlider.getValue();
+            if (part.detune != newValue) {
+                part.detune = newValue;
+                controller->setPerformance(*perf);
+            }
+        }
+    };
+
+    // Note Range handlers
+    noteLimitLowSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)noteLimitLowSlider.getValue();
+        if (part.noteLimitLow != newValue) {
+            part.noteLimitLow = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+    noteLimitHighSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)noteLimitHighSlider.getValue();
+        if (part.noteLimitHigh != newValue) {
+            part.noteLimitHigh = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+    noteShiftSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        int8_t newValue = (int8_t)noteShiftSlider.getValue();
+        if (part.noteShift != newValue) {
+            part.noteShift = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+
+    // Pitch Bend handler
+    pitchBendRangeSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)pitchBendRangeSlider.getValue();
+        if (part.pitchBendRange != newValue) {
+            part.pitchBendRange = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+
+    // Portamento handlers
+    portamentoModeButton.onClick = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        bool newValue = portamentoModeButton.getToggleState();
+        if (part.portamentoMode != newValue) {
+            part.portamentoMode = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+    portamentoTimeSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)portamentoTimeSlider.getValue();
+        if (part.portamentoTime != newValue) {
+            part.portamentoTime = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+
+    // Mono Mode handler
+    monoModeButton.onClick = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        bool newValue = monoModeButton.getToggleState();
+        if (part.monoMode != newValue) {
+            part.monoMode = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+
+    // Misc handlers
+    velocityScaleSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)velocityScaleSlider.getValue();
+        if (part.velocityScale != newValue) {
+            part.velocityScale = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+    masterTuneSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        int16_t newValue = (int16_t)masterTuneSlider.getValue();
+        if (part.masterTune != newValue) {
+            part.masterTune = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+
+    // Filter handlers
+    filterEnabledButton.onClick = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        bool newValue = filterEnabledButton.getToggleState();
+        if (part.filterEnabled != newValue) {
+            part.filterEnabled = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+    filterCutoffSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)filterCutoffSlider.getValue();
+        if (part.filterCutoff != newValue) {
+            part.filterCutoff = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+    filterResonanceSlider.onValueChange = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)filterResonanceSlider.getValue();
+        if (part.filterResonance != newValue) {
+            part.filterResonance = newValue;
+            getController()->setPerformance(*perf);
+        }
+    };
+
     // File dialog state flag
     fileDialogOpen = false;
     // Load Voice button
-    loadVoiceButton.setButtonText("Load Voice");
+    loadVoiceButton.setButtonText("Load");
     loadVoiceButton.onClick = [this] {
         if (fileDialogOpen) {
             juce::Logger::writeToLog("[ModuleTabComponent] File dialog already open, ignoring.");
@@ -447,9 +688,11 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             });
         dialog.release();
     };
+    loadVoiceButton.setButtonText("Open");
     addAndMakeVisible(loadVoiceButton);
 
     // Use the member variable, don't redeclare it
+    openVoiceEditorButton.setButtonText("Edit");
     addAndMakeVisible(openVoiceEditorButton);
     openVoiceEditorButton.onClick = [this] {
         auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
@@ -463,6 +706,21 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     unisonDetuneSlider.setLookAndFeel(&operatorSliderLookAndFeel);
     unisonPanSlider.setLookAndFeel(&operatorSliderLookAndFeel);
     midiChannelSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    reverbSendSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    volumeSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    panSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    detuneSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+
+    // Apply custom look and feel to new sliders
+    noteLimitLowSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    noteLimitHighSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    noteShiftSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    pitchBendRangeSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    portamentoTimeSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    velocityScaleSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    masterTuneSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    filterCutoffSlider.setLookAndFeel(&operatorSliderLookAndFeel);
+    filterResonanceSlider.setLookAndFeel(&operatorSliderLookAndFeel);
 
     volumeMeter = std::make_unique<StereoVolumeMeter>();
     addAndMakeVisible(*volumeMeter);
@@ -492,37 +750,155 @@ void ModuleTabComponent::updateFromModule()
         unisonDetuneSlider.setValue(part.unisonDetune, juce::dontSendNotification);
         unisonPanSlider.setValue(part.unisonSpread, juce::dontSendNotification);
         midiChannelSlider.setValue(part.midiChannel, juce::dontSendNotification); // Sync MIDI channel
+        reverbSendSlider.setValue(part.reverbSend, juce::dontSendNotification);
+        volumeSlider.setValue(part.volume, juce::dontSendNotification);
+        panSlider.setValue(part.pan, juce::dontSendNotification);
+        detuneSlider.setValue(part.detune, juce::dontSendNotification);
+
+        // Update new controls
+        noteLimitLowSlider.setValue(part.noteLimitLow, juce::dontSendNotification);
+        noteLimitHighSlider.setValue(part.noteLimitHigh, juce::dontSendNotification);
+        noteShiftSlider.setValue(part.noteShift, juce::dontSendNotification);
+        pitchBendRangeSlider.setValue(part.pitchBendRange, juce::dontSendNotification);
+        portamentoModeButton.setToggleState(part.portamentoMode, juce::dontSendNotification);
+        portamentoTimeSlider.setValue(part.portamentoTime, juce::dontSendNotification);
+        monoModeButton.setToggleState(part.monoMode, juce::dontSendNotification);
+        velocityScaleSlider.setValue(part.velocityScale, juce::dontSendNotification);
+        masterTuneSlider.setValue(part.masterTune, juce::dontSendNotification);
+        filterEnabledButton.setToggleState(part.filterEnabled, juce::dontSendNotification);
+        filterCutoffSlider.setValue(part.filterCutoff, juce::dontSendNotification);
+        filterResonanceSlider.setValue(part.filterResonance, juce::dontSendNotification);
     }
 }
 
 void ModuleTabComponent::resized()
 {
-    int x = 20, y = 20, sliderW = 60, sliderH = 120, gap = 24;
-    // Arrange labels above each slider, sliders horizontally
-    unisonVoicesLabel.setBounds(x, y, sliderW, 20);
-    unisonVoicesSlider.setBounds(x, y + 22, sliderW, sliderH);
-    x += sliderW + gap;
-    unisonDetuneLabel.setBounds(x, y, sliderW, 20);
-    unisonDetuneSlider.setBounds(x, y + 22, sliderW, sliderH);
-    x += sliderW + gap;
-    unisonPanLabel.setBounds(x, y, sliderW, 20);
-    unisonPanSlider.setBounds(x, y + 22, sliderW, sliderH);
-    x += sliderW + gap;
-    midiChannelLabel.setBounds(x, y, sliderW, 20);
-    midiChannelSlider.setBounds(x, y + 22, sliderW, sliderH);
-    // Place buttons below the sliders
-    int buttonY = y + sliderH + 32;
-    x = 20;
-    loadVoiceButton.setBounds(x, buttonY, 120, 28);
-    openVoiceEditorButton.setBounds(x + 140, buttonY, 140, 28);
-    // Place volume meter to the right of sliders, 1/5 of tab height
+    // Define layout constants
+    const int margin = 10;
+    const int groupGap = 8;
+    const int controlGap = 10;
+    const int sliderW = 55;
+    const int sliderH = 100;
+    const int labelH = 20;
+    const int labelGap = 4;
+    const int buttonH = 24;
+
+    juce::Rectangle<int> area = getLocalBounds().reduced(margin);
+
+    // Volume Meter (far right)
     int meterW = 32;
-    int tabH = getHeight();
-    int meterH = std::max(24, tabH / 5);
-    int meterX = getWidth() - meterW - 20;
-    int meterY = 20;
+    int meterX = area.getRight() - meterW;
+    int meterY = area.getY();
+    int meterH = area.getHeight();
     if (volumeMeter)
         volumeMeter->setBounds(meterX, meterY, meterW, meterH);
+
+    // Main content area (excluding meter)
+    juce::Rectangle<int> mainArea = area.withRight(meterX - groupGap);
+
+    // Column 1
+    int col1X = mainArea.getX();
+    int col1W = 200;
+
+    // Part Group
+    voiceGroup.setBounds(col1X, mainArea.getY(), col1W, 80);
+    auto partArea = voiceGroup.getBounds().reduced(margin, 20);
+    loadVoiceButton.setBounds(partArea.getX(), partArea.getCentreY() - buttonH / 2, 80, buttonH);
+    openVoiceEditorButton.setBounds(partArea.getRight() - 90, partArea.getCentreY() - buttonH / 2, 90, buttonH);
+
+    // Unison Group
+    unisonGroup.setBounds(col1X, voiceGroup.getBottom() + groupGap, col1W, 160);
+    auto unisonArea = unisonGroup.getBounds().reduced(margin, 20);
+    int sliderX = unisonArea.getX();
+    unisonVoicesSlider.setBounds(sliderX, unisonArea.getY(), sliderW, sliderH);
+    unisonVoicesLabel.setBounds(sliderX, unisonArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    unisonDetuneSlider.setBounds(sliderX, unisonArea.getY(), sliderW, sliderH);
+    unisonDetuneLabel.setBounds(sliderX, unisonArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    unisonPanSlider.setBounds(sliderX, unisonArea.getY(), sliderW, sliderH);
+    unisonPanLabel.setBounds(sliderX, unisonArea.getY() + sliderH + labelGap, sliderW, labelH);
+
+    // MIDI & Pitch Group
+    midiPitchGroup.setBounds(col1X, unisonGroup.getBottom() + groupGap, col1W, 160);
+    auto midiPitchArea = midiPitchGroup.getBounds().reduced(margin, 20);
+    sliderX = midiPitchArea.getX();
+    midiChannelSlider.setBounds(sliderX, midiPitchArea.getY(), sliderW, sliderH);
+    midiChannelLabel.setBounds(sliderX, midiPitchArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    pitchBendRangeSlider.setBounds(sliderX, midiPitchArea.getY(), sliderW, sliderH);
+    pitchBendRangeLabel.setBounds(sliderX, midiPitchArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    masterTuneSlider.setBounds(sliderX, midiPitchArea.getY(), sliderW, sliderH);
+    masterTuneLabel.setBounds(sliderX, midiPitchArea.getY() + sliderH + labelGap, sliderW, labelH);
+
+    // Column 2
+    int col2X = col1X + col1W + groupGap;
+    int col2W = 340;
+
+    // Main Part Group
+    mainPartGroup.setBounds(col2X, mainArea.getY(), col2W, 160);
+    auto mainPartArea = mainPartGroup.getBounds().reduced(margin, 20);
+    sliderX = mainPartArea.getX();
+    volumeSlider.setBounds(sliderX, mainPartArea.getY(), sliderW, sliderH);
+    volumeLabel.setBounds(sliderX, mainPartArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    panSlider.setBounds(sliderX, mainPartArea.getY(), sliderW, sliderH);
+    panLabel.setBounds(sliderX, mainPartArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    detuneSlider.setBounds(sliderX, mainPartArea.getY(), sliderW, sliderH);
+    detuneLabel.setBounds(sliderX, mainPartArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    reverbSendSlider.setBounds(sliderX, mainPartArea.getY(), sliderW, sliderH);
+    reverbSendLabel.setBounds(sliderX, mainPartArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    velocityScaleSlider.setBounds(sliderX, mainPartArea.getY(), sliderW, sliderH);
+    velocityScaleLabel.setBounds(sliderX, mainPartArea.getY() + sliderH + labelGap, sliderW, labelH);
+
+    // Note Range Group
+    noteRangeGroup.setBounds(col2X, mainPartGroup.getBottom() + groupGap, col2W, 160);
+    auto noteRangeArea = noteRangeGroup.getBounds().reduced(margin, 20);
+    sliderX = noteRangeArea.getX();
+    noteLimitLowSlider.setBounds(sliderX, noteRangeArea.getY(), sliderW, sliderH);
+    noteLimitLowLabel.setBounds(sliderX, noteRangeArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    noteLimitHighSlider.setBounds(sliderX, noteRangeArea.getY(), sliderW, sliderH);
+    noteLimitHighLabel.setBounds(sliderX, noteRangeArea.getY() + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    noteShiftSlider.setBounds(sliderX, noteRangeArea.getY(), sliderW, sliderH);
+    noteShiftLabel.setBounds(sliderX, noteRangeArea.getY() + sliderH + labelGap, sliderW, labelH);
+
+    // Column 3
+    int col3X = col2X + col2W + groupGap;
+    int col3W = 220;
+
+    // Filter Group
+    filterGroup.setBounds(col3X, mainArea.getY(), col3W, 180);
+    auto filterArea = filterGroup.getBounds().reduced(margin, 20);
+    filterEnabledButton.setBounds(filterArea.getX(), filterArea.getY(), 60, buttonH);
+    int sliderY = filterArea.getY() + buttonH + controlGap;
+    sliderX = filterArea.getX();
+    filterCutoffSlider.setBounds(sliderX, sliderY, sliderW, sliderH);
+    filterCutoffLabel.setBounds(sliderX, sliderY + sliderH + labelGap, sliderW, labelH);
+    sliderX += sliderW + controlGap;
+    filterResonanceSlider.setBounds(sliderX, sliderY, sliderW, sliderH);
+    filterResonanceLabel.setBounds(sliderX, sliderY + sliderH + labelGap, sliderW, labelH);
+
+    // Porta & Mono Group
+    portaMonoGroup.setBounds(col3X, filterGroup.getBottom() + groupGap, col3W, 200);
+    auto portaMonoArea = portaMonoGroup.getBounds().reduced(margin, 20);
+    int controlX = portaMonoArea.getX();
+    int controlY = portaMonoArea.getY();
+    portamentoModeLabel.setBounds(controlX, controlY, 80, buttonH);
+    portamentoModeButton.setBounds(controlX + 80 + controlGap, controlY, 60, buttonH);
+    controlY += buttonH + labelGap;
+    portamentoTimeSlider.setBounds(controlX, controlY, sliderW, sliderH);
+    portamentoTimeLabel.setBounds(controlX, controlY + sliderH + labelGap, sliderW, labelH);
+
+    controlY += sliderH + labelGap + labelH + groupGap; // Add space between porta and mono
+
+    monoModeLabel.setBounds(controlX, controlY, 80, buttonH);
+    monoModeButton.setBounds(controlX + 80 + controlGap, controlY, 60, buttonH);
 
     updateFromModule(); // Initial sync
 }
@@ -594,4 +970,15 @@ void ModuleTabComponent::closeFileDialog() {
         }
     }
     fileDialogOpen = false;
+}
+
+FMRackController* ModuleTabComponent::getController() {
+    auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+    auto* processor = editor ? editor->getProcessor() : nullptr;
+    return processor ? processor->getController() : nullptr;
+}
+
+FMRack::Performance* ModuleTabComponent::getPerformance() {
+    auto* controller = getController();
+    return controller ? controller->getPerformance() : nullptr;
 }

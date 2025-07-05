@@ -11,7 +11,7 @@
 #include "FMRackController.h" // Include the FMRackController header
 
 //==============================================================================
-class AudioPluginAudioProcessor final : public juce::AudioProcessor
+class AudioPluginAudioProcessor final : public juce::AudioProcessor, public juce::AudioProcessorValueTreeState::Listener
 {
 public:
     //==============================================================================
@@ -54,6 +54,8 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
 
     juce::AudioProcessorValueTreeState treeState; // Changed from valueTreeState
 

@@ -17,11 +17,67 @@ juce::AudioProcessorValueTreeState::ParameterLayout AudioPluginAudioProcessor::c
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    // TODO: Add your plugin parameters here. For example:
-    // params.push_back (std::make_unique<juce::AudioParameterFloat> (juce::ParameterID { "gain", 1 }, "Gain", 0.0f, 1.0f, 0.5f));
-    // params.push_back (std::make_unique<juce::AudioParameterChoice> (juce::ParameterID { "mode", 1 }, "Mode", juce::StringArray { "Option1", "Option2" }, 0));
+    // Add numModules parameter
+    params.push_back(std::make_unique<juce::AudioParameterInt>("numModules", "Number of Modules", 1, 32, 1));
+
+    // Global Effects Parameters
+    params.push_back(std::make_unique<juce::AudioParameterBool>("compressorEnable", "Compressor Enable", false));
+    params.push_back(std::make_unique<juce::AudioParameterBool>("reverbEnable", "Reverb Enable", true));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("reverbSize", "Size", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("reverbHighDamp", "High Damp", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("reverbLowDamp", "Low Damp", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("reverbLowPass", "Low Pass", 0.0f, 1.0f, 1.0f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("reverbDiffusion", "Diffusion", 0.0f, 1.0f, 0.5f));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("reverbLevel", "Level", 0.0f, 1.0f, 0.25f));
 
     return { params.begin(), params.end() };
+}
+
+void AudioPluginAudioProcessor::parameterChanged(const juce::String& parameterID, float newValue)
+{
+    if (parameterID == "numModules")
+    {
+        if (editorPtr)
+        {
+            editorPtr->numModulesChanged();
+        }
+        return;
+    }
+
+    if (controller && controller->getPerformance()) {
+        auto& effects = controller->getPerformance()->effects;
+        bool performanceChanged = false;
+
+        if (parameterID == "compressorEnable") {
+            effects.compressorEnable = newValue > 0.5f;
+            performanceChanged = true;
+        } else if (parameterID == "reverbEnable") {
+            effects.reverbEnable = newValue > 0.5f;
+            performanceChanged = true;
+        } else if (parameterID == "reverbSize") {
+            effects.reverbSize = static_cast<uint8_t>(newValue * 127.0f);
+            performanceChanged = true;
+        } else if (parameterID == "reverbHighDamp") {
+            effects.reverbHighDamp = static_cast<uint8_t>(newValue * 127.0f);
+            performanceChanged = true;
+        } else if (parameterID == "reverbLowDamp") {
+            effects.reverbLowDamp = static_cast<uint8_t>(newValue * 127.0f);
+            performanceChanged = true;
+        } else if (parameterID == "reverbLowPass") {
+            effects.reverbLowPass = static_cast<uint8_t>(newValue * 127.0f);
+            performanceChanged = true;
+        } else if (parameterID == "reverbDiffusion") {
+            effects.reverbDiffusion = static_cast<uint8_t>(newValue * 127.0f);
+            performanceChanged = true;
+        } else if (parameterID == "reverbLevel") {
+            effects.reverbLevel = static_cast<uint8_t>(newValue * 127.0f);
+            performanceChanged = true;
+        }
+
+        if (performanceChanged) {
+            controller->setPerformance(*controller->getPerformance());
+        }
+    }
 }
 
 AudioPluginAudioProcessor::AudioPluginAudioProcessor()
@@ -35,6 +91,16 @@ AudioPluginAudioProcessor::AudioPluginAudioProcessor()
           ),
       treeState (*this, nullptr, juce::Identifier ("PluginParameters"), createParameterLayout())
 {
+    treeState.addParameterListener("numModules", this);
+    treeState.addParameterListener("compressorEnable", this);
+    treeState.addParameterListener("reverbEnable", this);
+    treeState.addParameterListener("reverbSize", this);
+    treeState.addParameterListener("reverbHighDamp", this);
+    treeState.addParameterListener("reverbLowDamp", this);
+    treeState.addParameterListener("reverbLowPass", this);
+    treeState.addParameterListener("reverbDiffusion", this);
+    treeState.addParameterListener("reverbLevel", this);
+
     try {
         // Initialize FileLogger - logs to a file in the User's Documents directory
         auto documentsDir = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);

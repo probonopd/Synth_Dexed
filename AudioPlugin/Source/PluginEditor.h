@@ -26,6 +26,8 @@ public:
     VoiceEditorPanel* getVoiceEditorPanel() const { return voiceEditorPanel.get(); } // Added getter for voiceEditorPanel
     RackAccordionComponent* getRackAccordion() const { return rackAccordion.get(); } // Added getter for rackAccordion
 
+    void numModulesChanged();
+
 private:
     // This reference is provided as a quick way for your editor to
     // access the processor object that created it.
@@ -47,12 +49,14 @@ private:
 
     juce::TextEditor logTextBox; // For displaying log messages
 
-    juce::TextButton loadPerformanceButton { "Load Performance .ini" };
-    juce::TextButton savePerformanceButton { "Save Performance .ini" }; // NEW: Save button
+    juce::TextButton loadPerformanceButton{ "Load Performance..." };
+    juce::TextButton savePerformanceButton{ "Save Performance As..." };
+    juce::TextButton addModuleButton{ "+" };
+    juce::TextButton removeModuleButton{ "-" };
+
     void loadPerformanceButtonClicked();
     void savePerformanceButtonClicked(); // NEW: Save handler
     
-    void numModulesChanged();
     void unisonVoicesChanged();
     void unisonDetuneChanged();
     void unisonPanChanged();
@@ -61,6 +65,45 @@ private:
 
     std::unique_ptr<VoiceEditorPanel> voiceEditorPanel; // Added to manage the new panel
     std::unique_ptr<VoiceEditorWindow> voiceEditorWindow; // Added for the voice editor window
+
+    juce::GroupComponent effectsGroup;
+    juce::ToggleButton compressorEnableButton{ "Compressor" };
+    juce::ToggleButton reverbEnableButton{ "Reverb" };
+    juce::Slider reverbSizeSlider;
+    juce::Label reverbSizeLabel;
+    juce::Slider reverbHighDampSlider;
+    juce::Label reverbHighDampLabel;
+    juce::Slider reverbLowDampSlider;
+    juce::Label reverbLowDampLabel;
+    juce::Slider reverbLowPassSlider;
+    juce::Label reverbLowPassLabel;
+    juce::Slider reverbDiffusionSlider;
+    juce::Label reverbDiffusionLabel;
+    juce::Slider reverbLevelSlider;
+    juce::Label reverbLevelLabel;
+
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorEnableAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> reverbEnableAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> reverbSizeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> reverbHighDampAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> reverbLowDampAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> reverbLowPassAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> reverbDiffusionAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> reverbLevelAttachment;
+
+    juce::ResizableCornerComponent resizer;
+    juce::ComponentBoundsConstrainer constrainer;
+
+    void setupSlider(juce::Slider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment)
+    {
+        addAndMakeVisible(slider);
+        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
+        addAndMakeVisible(label);
+        label.setText(labelText, juce::dontSendNotification);
+        label.attachToComponent(&slider, true);
+        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.treeState, paramID, slider);
+    }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessorEditor)
 };

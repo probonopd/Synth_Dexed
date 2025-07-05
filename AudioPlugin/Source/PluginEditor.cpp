@@ -6,7 +6,7 @@
 
 //==============================================================================
 AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor& p)
-    : AudioProcessorEditor (&p), processorRef (p)
+    : AudioProcessorEditor (&p), processorRef (p), resizer(this, &constrainer)
 {
     try {
         // Use JUCE logging system for VST3 compatibility
@@ -14,6 +14,13 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         processorRef.setEditorPointer(this); // Register this editor with the processor
 
         juce::ignoreUnused (processorRef);
+
+        // Make the editor resizable
+        setResizable(true, true);
+        constrainer.setMinimumSize(800, 500);
+        constrainer.setMaximumSize(1600, 1200);
+        addAndMakeVisible(resizer);
+
         setSize (1000, 600);
 
         // Set up log text box
@@ -54,19 +61,76 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
                 logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in loadPerformanceButtonClicked\n");
             }
         };
-        addAndMakeVisible(savePerformanceButton); // NEW
-        savePerformanceButton.onClick = [this]() {
-            try {
-                savePerformanceButtonClicked();
-            } catch (const std::exception& e) {
-                juce::Logger::writeToLog("[PluginEditor] Exception in savePerformanceButtonClicked: " + juce::String(e.what()));
-                logTextBox.insertTextAtCaret("[PluginEditor] Exception: " + juce::String(e.what()) + "\n");
-            } catch (...) {
-                juce::Logger::writeToLog("[PluginEditor] Unknown exception in savePerformanceButtonClicked");
-                logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in savePerformanceButtonClicked\n");
+        addAndMakeVisible(savePerformanceButton);
+        savePerformanceButton.onClick = [this] { savePerformanceButtonClicked(); };
+
+        addAndMakeVisible(addModuleButton);
+        addModuleButton.onClick = [this]
+        {
+            int currentVal = 0;
+            int minVal = 1;
+            int maxVal = 16;
+            if (rackAccordion)
+                currentVal = rackAccordion->getNumModulesVT();
+            else if (auto* param = processorRef.treeState.getParameter("numModules"))
+                currentVal = static_cast<int>(param->getValue() * (param->getNormalisableRange().end - param->getNormalisableRange().start) + param->getNormalisableRange().start);
+            if (auto* param = processorRef.treeState.getParameter("numModules"))
+            {
+                minVal = static_cast<int>(param->getNormalisableRange().start);
+                maxVal = static_cast<int>(param->getNormalisableRange().end);
+                if (currentVal < maxVal)
+                {
+                    param->setValueNotifyingHost(param->convertTo0to1(currentVal + 1));
+                    numModulesChanged();
+                }
             }
         };
-        juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(loadPerformanceButton)");
+
+        addAndMakeVisible(removeModuleButton);
+        removeModuleButton.onClick = [this]
+        {
+            int currentVal = 0;
+            int minVal = 1;
+            if (rackAccordion)
+                currentVal = rackAccordion->getNumModulesVT();
+            else if (auto* param = processorRef.treeState.getParameter("numModules"))
+                currentVal = static_cast<int>(param->getValue() * (param->getNormalisableRange().end - param->getNormalisableRange().start) + param->getNormalisableRange().start);
+            if (auto* param = processorRef.treeState.getParameter("numModules"))
+            {
+                minVal = static_cast<int>(param->getNormalisableRange().start);
+                if (currentVal > minVal)
+                {
+                    param->setValueNotifyingHost(param->convertTo0to1(currentVal - 1));
+                    numModulesChanged();
+                }
+            }
+        };
+
+        addAndMakeVisible(effectsGroup);
+        effectsGroup.setText("Global Effects");
+
+        addAndMakeVisible(compressorEnableButton);
+        compressorEnableAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.treeState, "compressorEnable", compressorEnableButton);
+
+        addAndMakeVisible(reverbEnableButton);
+        reverbEnableAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.treeState, "reverbEnable", reverbEnableButton);
+
+        auto setupSlider = [this](juce::Slider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment) {
+            addAndMakeVisible(slider);
+            slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+            slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
+            addAndMakeVisible(label);
+            label.setText(labelText, juce::dontSendNotification);
+            label.attachToComponent(&slider, true);
+            attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.treeState, paramID, slider);
+        };
+
+        setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", reverbSizeAttachment);
+        setupSlider(reverbHighDampSlider, reverbHighDampLabel, "High Damp", "reverbHighDamp", reverbHighDampAttachment);
+        setupSlider(reverbLowDampSlider, reverbLowDampLabel, "Low Damp", "reverbLowDamp", reverbLowDampAttachment);
+        setupSlider(reverbLowPassSlider, reverbLowPassLabel, "Low Pass", "reverbLowPass", reverbLowPassAttachment);
+        setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diffusion", "reverbDiffusion", reverbDiffusionAttachment);
+        setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", reverbLevelAttachment);
 
         resized(); // Force layout after construction
         juce::Logger::writeToLog("[PluginEditor] End of constructor");
@@ -120,21 +184,78 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 
 void AudioPluginAudioProcessorEditor::resized()
 {
-    juce::Logger::writeToLog("[PluginEditor] resized() called. this=" + juce::String::toHexString((juce::pointer_sized_int)this) + " size=" + juce::String(getWidth()) + "x" + juce::String(getHeight()));
-    logTextBox.insertTextAtCaret("[PluginEditor] resized() called. size=" + juce::String(getWidth()) + "x" + juce::String(getHeight()) + "\n");
-    
-    int y = 10, h = 24, gap = 6;
-    loadPerformanceButton.setBounds(10, y, 180, h);
-    savePerformanceButton.setBounds(200, y, 180, h); // NEW: Place next to load button
-    y += h + gap;
-    int accordionHeight = getHeight() - y - 140;
-    if (accordionHeight < 100) accordionHeight = 100; // Ensure minimum height
-    if (rackAccordion) {
-        rackAccordion->setBounds(10, y, getWidth() - 20, accordionHeight);
-        juce::Logger::writeToLog("[PluginEditor] rackAccordion bounds set to: x=10, y=" + juce::String(y) + ", width=" + juce::String(getWidth() - 20) + ", height=" + juce::String(accordionHeight));
-        logTextBox.insertTextAtCaret("[PluginEditor] rackAccordion bounds: " + juce::String(getWidth() - 20) + "x" + juce::String(accordionHeight) + "\n");
+    juce::Logger::writeToLog("[PluginEditor] resized() called");
+    auto bounds = getLocalBounds();
+    resizer.setBounds (bounds.getRight() - 16, bounds.getBottom() - 16, 16, 16);
+
+    auto topArea = bounds.removeFromTop(40);
+    loadPerformanceButton.setBounds(topArea.removeFromLeft(150).reduced(5));
+    savePerformanceButton.setBounds(topArea.removeFromLeft(150).reduced(5));
+    removeModuleButton.setBounds(topArea.removeFromRight(30).reduced(2));
+    addModuleButton.setBounds(topArea.removeFromRight(30).reduced(2));
+
+    auto rackWidth = bounds.getWidth() * 2 / 3;
+    auto effectsWidth = bounds.getWidth() - rackWidth;
+
+    if (rackAccordion)
+        rackAccordion->setBounds(bounds.removeFromLeft(rackWidth));
+
+    effectsGroup.setBounds(bounds.reduced(5));
+    auto effectsArea = effectsGroup.getBounds().reduced(15);
+    effectsArea.removeFromTop(10); // Space for group title
+
+    // Arrange compressor and reverb enable buttons in a row
+    auto buttonRow = effectsArea.removeFromTop(30);
+    compressorEnableButton.setBounds(buttonRow.removeFromLeft(100).reduced(5));
+    reverbEnableButton.setBounds(buttonRow.removeFromLeft(100).reduced(5));
+
+    // Arrange the effect sliders in two rows, three per row, matching the style of the other sliders
+    int sliderW = 55;
+    int sliderH = 100;
+    int labelH = 20;
+    int labelGap = 4;
+    int sliderSpacingX = 20;
+    int sliderSpacingY = 10;
+    int startX = effectsArea.getX() + 10;
+    int startY = effectsArea.getY();
+
+    // Use setupSlider for all global effect sliders (ensures consistent style)
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> dummy;
+    setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", dummy);
+    setupSlider(reverbHighDampSlider, reverbHighDampLabel, "High Damp", "reverbHighDamp", dummy);
+    setupSlider(reverbLowDampSlider, reverbLowDampLabel, "Low Damp", "reverbLowDamp", dummy);
+    setupSlider(reverbLowPassSlider, reverbLowPassLabel, "Low Pass", "reverbLowPass", dummy);
+    setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diffusion", "reverbDiffusion", dummy);
+    setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", dummy);
+
+    // First row
+    int x = startX;
+    int y = startY;
+    reverbSizeSlider.setBounds(x, y, sliderW, sliderH);
+    reverbSizeLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+    x += sliderW + sliderSpacingX;
+    reverbHighDampSlider.setBounds(x, y, sliderW, sliderH);
+    reverbHighDampLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+    x += sliderW + sliderSpacingX;
+    reverbLowDampSlider.setBounds(x, y, sliderW, sliderH);
+    reverbLowDampLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+
+    // Second row
+    x = startX;
+    y += sliderH + labelH + sliderSpacingY + labelGap;
+    reverbLowPassSlider.setBounds(x, y, sliderW, sliderH);
+    reverbLowPassLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+    x += sliderW + sliderSpacingX;
+    reverbDiffusionSlider.setBounds(x, y, sliderW, sliderH);
+    reverbDiffusionLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+    x += sliderW + sliderSpacingX;
+    reverbLevelSlider.setBounds(x, y, sliderW, sliderH);
+    reverbLevelLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+
+    if (voiceEditorWindow)
+    {
+        voiceEditorWindow->setBounds(100, 100, 800, 600);
     }
-    logTextBox.setBounds(10, getHeight() - 130, getWidth() - 20, 120);
 
     juce::Logger::writeToLog("[PluginEditor] resized() end");
 }
@@ -147,7 +268,14 @@ void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& messa
 
 void AudioPluginAudioProcessorEditor::numModulesChanged() {
     if (rackAccordion)
-        rackAccordion->setNumModulesVT(rackAccordion->getNumModulesVT());
+    {
+        if (auto* param = processorRef.treeState.getParameter("numModules"))
+        {
+            int numModules = static_cast<int>(param->getValue() * (param->getNormalisableRange().end - param->getNormalisableRange().start) + param->getNormalisableRange().start);
+            rackAccordion->setNumModulesVT(numModules);
+            rackAccordion->updatePanels(); // Ensure UI updates to reflect the new number of modules/tabs
+        }
+    }
 }
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()

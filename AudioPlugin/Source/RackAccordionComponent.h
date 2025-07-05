@@ -8,6 +8,7 @@
 // Forward declaration
 class AudioPluginAudioProcessorEditor;
 class ModuleTabComponent;
+class StereoVolumeMeter; // Forward-declare StereoVolumeMeter
 
 class RackAccordionComponent : public juce::Component, public juce::ValueTree::Listener
 {
@@ -17,10 +18,6 @@ public:
     void paint(juce::Graphics&) override;    void updatePanels();
     void forceSync(); // Force sync between rack modules and UI tabs
     void valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property) override;
-
-    // Controls to move from PluginEditor
-    juce::TextButton addModuleButton { "+" };
-    juce::TextButton removeModuleButton { "-" };
 
     // ValueTree for UI sync (AudioPlugin only)
     juce::ValueTree valueTree { "RackUI" };
@@ -60,10 +57,67 @@ public:
     juce::Label unisonDetuneLabel;
     juce::Slider unisonPanSlider;
     juce::Label unisonPanLabel;
-    juce::TextButton loadVoiceButton;
     juce::Slider midiChannelSlider;
     juce::Label midiChannelLabel;
-    juce::TextButton openVoiceEditorButton { "Edit Voice" };
+
+    juce::Slider reverbSendSlider;
+    juce::Label reverbSendLabel;
+    juce::Slider volumeSlider;
+    juce::Label volumeLabel;
+    juce::Slider panSlider;
+    juce::Label panLabel;
+    juce::Slider detuneSlider;
+    juce::Label detuneLabel;
+
+    // Note Range
+    juce::Slider noteLimitLowSlider;
+    juce::Label noteLimitLowLabel;
+    juce::Slider noteLimitHighSlider;
+    juce::Label noteLimitHighLabel;
+    juce::Slider noteShiftSlider;
+    juce::Label noteShiftLabel;
+
+    // Pitch Bend
+    juce::Slider pitchBendRangeSlider;
+    juce::Label pitchBendRangeLabel;
+
+    // Portamento
+    juce::ToggleButton portamentoModeButton;
+    juce::Label portamentoModeLabel;
+    juce::Slider portamentoTimeSlider;
+    juce::Label portamentoTimeLabel;
+
+    // Mono Mode
+    juce::ToggleButton monoModeButton;
+    juce::Label monoModeLabel;
+
+    // Misc
+    juce::Slider velocityScaleSlider;
+    juce::Label velocityScaleLabel;
+    juce::Slider masterTuneSlider;
+    juce::Label masterTuneLabel;
+
+    // Filter
+    juce::ToggleButton filterEnabledButton;
+    juce::Label filterEnabledLabel;
+    juce::Slider filterCutoffSlider;
+    juce::Label filterCutoffLabel;
+    juce::Slider filterResonanceSlider;
+    juce::Label filterResonanceLabel;
+
+    juce::TextButton loadVoiceButton;
+    juce::TextButton openVoiceEditorButton;
+
+    std::unique_ptr<StereoVolumeMeter> volumeMeter;
+
+    // Group components for layout
+    juce::GroupComponent voiceGroup;
+    juce::GroupComponent unisonGroup;
+    juce::GroupComponent midiPitchGroup;
+    juce::GroupComponent noteRangeGroup;
+    juce::GroupComponent portaMonoGroup;
+    juce::GroupComponent filterGroup;
+    juce::GroupComponent mainPartGroup; // NEW
 
     bool isFileDialogOpen() const;
     void closeFileDialog();
@@ -72,7 +126,10 @@ private:
     int moduleIndex;
     RackAccordionComponent* parentAccordion;
     std::atomic<bool> fileDialogOpen { false };
-    std::unique_ptr<class StereoVolumeMeter> volumeMeter;
 
     void loadVoiceFile(const juce::File& file);
+
+    // Helper methods to get controller and performance
+    FMRackController* getController();
+    FMRack::Performance* getPerformance();
 };
