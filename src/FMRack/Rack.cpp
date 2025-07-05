@@ -49,7 +49,7 @@ bool Rack::loadPerformance(const std::string& filename) {
 }
 
 int Rack::getNumModules() const {
-    return modules_.size();
+    return static_cast<int>(modules_.size());
 }
 
 void Rack::setDefaultPerformance() {
@@ -467,7 +467,7 @@ void Rack::setupModulesFromVoices(const std::vector<std::vector<uint8_t>>& voice
         config.voiceData = {0};
         std::copy_n(voices[i].begin(), 156, config.voiceData.begin());
         config.midiChannel = 1; // Always use MIDI channel 1 for all modules loaded via --voice
-        config.unisonVoices = unisonVoices;
+        config.unisonVoices = static_cast<uint8_t>(unisonVoices);
         config.unisonDetune = unisonDetune;
         config.unisonSpread = unisonSpread;
         config.volume = 100;

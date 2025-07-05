@@ -139,32 +139,13 @@ void FMRackController::setDefaultPerformance()
     }
 }
 
-void FMRackController::setPerformance(const FMRack::Performance& perf)
-{
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        // Only update the performance, do not change MIDI channels or module count here!
-        *performance = perf;
-        std::cout << "[FMRackController::setPerformance] About to call rack->setPerformance(*performance)" << std::endl;
-        rack->setPerformance(*performance);
-        std::cout << "[FMRackController::setPerformance] rack->setPerformance(*performance) completed" << std::endl;
-        // Register single voice dump handler for each module
-        auto& modules = rack->getModules();
-        std::cout << "[FMRackController::setPerformance] modules.size()=" << modules.size() << std::endl;
-        for (size_t i = 0; i < modules.size(); ++i) {
-            auto& module = modules[i];
-            std::cout << "[FMRackController::setPerformance] Registering handler for module " << i << ", module.get()=" << module.get() << std::endl;
-            if (module) {
-                std::cout << "[FMRackController::setPerformance] Handler registered for module " << i << std::endl;
-            } else {
-                std::cout << "[FMRackController::setPerformance] module " << i << " is nullptr" << std::endl;
-            }
-        }
-        if (onModulesChanged) onModulesChanged();
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in setPerformance: " << e.what() << std::endl;
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in setPerformance" << std::endl;
+void FMRackController::setPerformance(const FMRack::Performance& newPerformance) {
+    *performance = newPerformance;
+    if (rack) {
+        rack->setPerformance(newPerformance);
+    }
+    if (onModulesChanged) {
+        onModulesChanged();
     }
 }
 

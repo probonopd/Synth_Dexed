@@ -65,22 +65,20 @@ RackAccordionComponent::RackAccordionComponent(AudioPluginAudioProcessor* proces
         addAndMakeVisible(removeModuleButton);
         addModuleButton.onClick = [this] {
             juce::Logger::writeToLog("[RackAccordionComponent] '+' button clicked");
-            
             int num = getNumModulesVT();
             juce::Logger::writeToLog("[RackAccordionComponent] '+' button: current ValueTree numModules=" + juce::String(num));
-            
             if (num < 16) {
-                juce::Logger::writeToLog("[RackAccordionComponent] '+' button: adding module, new count=" + juce::String(num + 1));
-                setNumModulesVT(num + 1);
+                // ONLY update the ValueTree. The property listener will handle the rest.
+                valueTree.setProperty("numModules", num + 1, nullptr);
             } else {
-                juce::Logger::writeToLog("[RackAccordionComponent] '+' button: already at maximum modules");
+                juce::Logger::writeToLog("[RackAccordionComponent] '+' button pressed, but already at 16 modules. No action.");
             }
         };
         removeModuleButton.onClick = [this] {
             int num = getNumModulesVT();
             if (num > 1) {
-                juce::Logger::writeToLog("[RackAccordionComponent] '-' button pressed, removing last module. Current numModules=" + juce::String(num));
-                setNumModulesVT(num - 1);
+                // ONLY update the ValueTree. The property listener will handle the rest.
+                valueTree.setProperty("numModules", num - 1, nullptr);
             } else {
                 juce::Logger::writeToLog("[RackAccordionComponent] '-' button pressed, but only one module left. No action.");
             }
@@ -148,33 +146,38 @@ void RackAccordionComponent::setNumModulesVT(int num) {
     auto* controller = processor ? processor->getController() : nullptr;
     if (controller) {
         auto* perf = controller->getPerformance();
-        if (perf) {
+        if (perf)
+        {
             // Log MIDI channels before change
             juce::String midiChannelsBefore;
             for (int i = 0; i < 16; ++i) midiChannelsBefore += juce::String(perf->parts[i].midiChannel) + " ";
             juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels before: " + midiChannelsBefore);
-            // Create a new performance with the correct number of parts
-            FMRack::Performance newPerf;
-            int minSize = std::min((int)perf->parts.size(), num);
-            for (int i = 0; i < minSize; ++i) {
-                newPerf.parts[i] = perf->parts[i];
+
+            FMRack::Performance newPerf = *perf; // Make a copy
+
+            // Enable parts up to 'num', disable parts after 'num'
+            for (int i = 0; i < 16; ++i)
+            {
+                if (i < num)
+                {
+                    // This part should be active. If it's currently off, turn it on.
+                    if (newPerf.parts[i].midiChannel == 0)
+                    {
+                        newPerf.parts[i] = FMRack::Performance::PartConfig(); // Reset to default
+                        newPerf.parts[i].midiChannel = i + 1;                   // Assign a unique MIDI channel
+                    }
+                }
+                else
+                {
+                    // This part should be inactive.
+                    newPerf.parts[i].midiChannel = 0;
+                }
             }
-            // Initialize any additional parts if expanding
-            for (int i = minSize; i < num && i < 16; ++i) {
-                newPerf.parts[i] = FMRack::Performance::PartConfig();
-                // Assign channel 1 by default
-                newPerf.parts[i].midiChannel = 1;
-            }
-            // Zero out any extra parts if reducing
-            for (int i = num; i < 16; ++i) {
-                newPerf.parts[i] = FMRack::Performance::PartConfig();
-                newPerf.parts[i].midiChannel = 0;
-            }
-            // Copy effects settings
-            newPerf.effects = perf->effects;
+
             // Log MIDI channels after change
             juce::String midiChannelsAfter;
-            for (int i = 0; i < 16; ++i) midiChannelsAfter += juce::String(newPerf.parts[i].midiChannel) + " ";            juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels after: " + midiChannelsAfter);
+            for (int i = 0; i < 16; ++i) midiChannelsAfter += juce::String(newPerf.parts[i].midiChannel) + " ";
+            juce::Logger::writeToLog("[RackAccordionComponent] setNumModulesVT: MIDI channels after: " + midiChannelsAfter);
             controller->setPerformance(newPerf);
         }
     }
@@ -193,12 +196,15 @@ void RackAccordionComponent::valueTreePropertyChanged(juce::ValueTree& tree, con
 {
     if (property == juce::Identifier("numModules") && tree == valueTree)
     {
-        suppressSetNumModulesVT = true;
         int newNumModules = tree.getProperty("numModules", 1);
-        // if ((int)numModulesSlider.getValue() != newNumModules) {
-        //     numModulesSlider.setValue(newNumModules, juce::dontSendNotification);
-        // }
-        suppressSetNumModulesVT = false;
+        juce::Logger::writeToLog("[RackAccordionComponent] valueTreePropertyChanged: numModules changed to " + juce::String(newNumModules));
+
+        // The ValueTree is the source of truth.
+        // 1. Update the backend.
+        setNumModulesVT(newNumModules);
+
+        // 2. Update the UI panels.
+        // This is now safe because the backend has been updated based on our ValueTree.
         updatePanels();
     }
 }
@@ -254,15 +260,17 @@ void RackAccordionComponent::updatePanels()
         
         juce::Logger::writeToLog("[RackAccordionComponent] Rack has " + juce::String(rackModules) + " modules, ValueTree has " + juce::String(vtModules));
         
-        // ALWAYS use rack modules count as the source of truth
+        // If the rack and VT disagree, the rack is the source of truth during initialization/sync.
         int numModules = rackModules;
         
-        // Update ValueTree to match rack if they differ
+        // Update ValueTree to match rack if they differ. This should only happen on initial load
+        // or if an external change (like loading a preset) happens.
         if (rackModules != vtModules && rackModules >= 1 && rackModules <= 16) {
             juce::Logger::writeToLog("[RackAccordionComponent] SYNCING ValueTree from " + juce::String(vtModules) + " to " + juce::String(rackModules));
-            suppressSetNumModulesVT = true;
+            // Don't trigger the property listener here, as we are already in an update cycle.
+            // Just set the property directly.
             valueTree.setProperty("numModules", rackModules, nullptr);
-            suppressSetNumModulesVT = false;
+            numModules = rackModules; // Make sure we use the synced value
         }
         
         // Clamp to safe range
