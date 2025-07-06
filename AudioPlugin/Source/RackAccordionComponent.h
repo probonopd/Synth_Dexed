@@ -107,6 +107,7 @@ public:
 
     juce::TextButton loadVoiceButton;
     juce::TextButton openVoiceEditorButton;
+    juce::TextButton browsePatchesButton;
 
     std::unique_ptr<StereoVolumeMeter> volumeMeter;
 

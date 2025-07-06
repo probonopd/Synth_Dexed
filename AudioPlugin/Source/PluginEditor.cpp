@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "VoiceEditorPanel.h"
 #include "VoiceEditorWindow.h"
+#include "VoiceBrowserComponent.h"
 #include <iostream> // For logging
 
 //==============================================================================
@@ -60,8 +61,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
                 juce::Logger::writeToLog("[PluginEditor] Unknown exception in loadPerformanceButtonClicked");
                 logTextBox.insertTextAtCaret("[PluginEditor] Unknown exception in loadPerformanceButtonClicked\n");
             }
-        };
-        addAndMakeVisible(savePerformanceButton);
+        };        addAndMakeVisible(savePerformanceButton);
         savePerformanceButton.onClick = [this] { savePerformanceButtonClicked(); };
 
         addAndMakeVisible(addModuleButton);
@@ -186,9 +186,7 @@ void AudioPluginAudioProcessorEditor::resized()
 {
     juce::Logger::writeToLog("[PluginEditor] resized() called");
     auto bounds = getLocalBounds();
-    resizer.setBounds (bounds.getRight() - 16, bounds.getBottom() - 16, 16, 16);
-
-    auto topArea = bounds.removeFromTop(40);
+    resizer.setBounds (bounds.getRight() - 16, bounds.getBottom() - 16, 16, 16);    auto topArea = bounds.removeFromTop(40);
     loadPerformanceButton.setBounds(topArea.removeFromLeft(150).reduced(5));
     savePerformanceButton.setBounds(topArea.removeFromLeft(150).reduced(5));
     removeModuleButton.setBounds(topArea.removeFromRight(30).reduced(2));
@@ -407,5 +405,49 @@ void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
             // Cancel callback - nothing needed
         });
     dialog.release();
+}
+
+void AudioPluginAudioProcessorEditor::showVoiceBrowser(int moduleIndex)
+{
+    if (!voiceBrowser)
+        voiceBrowser = std::make_unique<VoiceBrowserComponent>();
+    
+    // Show as a dialog window (non-modal) with escape key support
+    auto* dialog = new juce::DialogWindow("DX7 Voice Browser", juce::Colours::lightgrey, true, true);
+    
+    // Set up close callback for ESC key and window X button
+    voiceBrowser->onClose = [dialog]() {
+        dialog->setVisible(false);
+        delete dialog;
+    };
+    
+    // Set up voice loading callback using the same method as the "Open" button
+    voiceBrowser->onVoiceLoaded = [this, moduleIndex](const std::vector<uint8_t>& voiceData) {
+        // Use the existing voice loading mechanism from ModuleTabComponent::loadVoiceFile
+        auto* controller = processorRef.getController();
+        if (controller && moduleIndex >= 0 && moduleIndex < 16) {
+            // Load the voice data into the specified module using the existing method
+            controller->setPartVoiceData(moduleIndex, voiceData);
+            juce::String voiceName = VoiceData::extractDX7VoiceName(voiceData);
+            appendLogMessage("Voice loaded from browser: " + voiceName);
+            
+            // Update the voice editor panel if it's open for this module
+            if (auto* voiceEditor = getVoiceEditorPanel()) {
+                if (voiceEditor->getModuleIndex() == moduleIndex) {
+                    // Refresh the voice editor to show the new voice data
+                    showVoiceEditorPanel(moduleIndex);
+                }
+            }
+        } else {
+            appendLogMessage("Failed to load voice: invalid module index or controller");
+        }
+    };
+      // Make ESC key work and allow window X button to close
+    dialog->setUsingNativeTitleBar(true);
+    
+    // Don't release ownership - keep the voiceBrowser so we can reuse it
+    dialog->setContentNonOwned(voiceBrowser.get(), true);
+    dialog->centreWithSize(600, 400);
+    dialog->setVisible(true);
 }
 

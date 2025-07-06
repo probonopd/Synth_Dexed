@@ -701,6 +701,15 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         }
     };
 
+    // Add Browse button for voice browser
+    browsePatchesButton.setButtonText("Browse");
+    addAndMakeVisible(browsePatchesButton);    browsePatchesButton.onClick = [this] {
+        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+        if (editor) {
+            editor->showVoiceBrowser(moduleIndex);
+        }
+    };
+
     // Apply custom look and feel to sliders
     unisonVoicesSlider.setLookAndFeel(&operatorSliderLookAndFeel);
     unisonDetuneSlider.setLookAndFeel(&operatorSliderLookAndFeel);
@@ -798,13 +807,19 @@ void ModuleTabComponent::resized()
 
     // Column 1
     int col1X = mainArea.getX();
-    int col1W = 200;
-
-    // Part Group
+    int col1W = 200;    // Part Group
     voiceGroup.setBounds(col1X, mainArea.getY(), col1W, 80);
     auto partArea = voiceGroup.getBounds().reduced(margin, 20);
-    loadVoiceButton.setBounds(partArea.getX(), partArea.getCentreY() - buttonH / 2, 80, buttonH);
-    openVoiceEditorButton.setBounds(partArea.getRight() - 90, partArea.getCentreY() - buttonH / 2, 90, buttonH);
+    
+    // Three buttons: Open, Browse, Edit
+    int buttonW = 50; // Make buttons smaller to fit all three
+    int buttonSpacing = 5;
+    int totalButtonWidth = 3 * buttonW + 2 * buttonSpacing;
+    int startX = partArea.getX() + (partArea.getWidth() - totalButtonWidth) / 2; // Center the buttons
+    
+    loadVoiceButton.setBounds(startX, partArea.getCentreY() - buttonH / 2, buttonW, buttonH);
+    browsePatchesButton.setBounds(startX + buttonW + buttonSpacing, partArea.getCentreY() - buttonH / 2, buttonW, buttonH);
+    openVoiceEditorButton.setBounds(startX + 2 * (buttonW + buttonSpacing), partArea.getCentreY() - buttonH / 2, buttonW, buttonH);
 
     // Unison Group
     unisonGroup.setBounds(col1X, voiceGroup.getBottom() + groupGap, col1W, 160);

@@ -5,6 +5,7 @@
 #include "FileBrowserDialog.h"
 #include "VoiceEditorPanel.h" // Added to include the VoiceEditorPanel
 #include "VoiceEditorWindow.h" // Include the custom VoiceEditorWindow class
+#include "VoiceBrowserComponent.h"
 #include <juce_gui_basics/juce_gui_basics.h> // Added for GUI elements
 #include <memory> // Added for std::unique_ptr
 
@@ -13,9 +14,7 @@ class AudioPluginAudioProcessorEditor final : public juce::AudioProcessorEditor
 {
 public:
     explicit AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor&);
-    ~AudioPluginAudioProcessorEditor() override;
-
-    //==============================================================================
+    ~AudioPluginAudioProcessorEditor() override;    //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
 
@@ -25,6 +24,7 @@ public:
     void showVoiceEditorPanel(int moduleIndex); // Accepts module index
     VoiceEditorPanel* getVoiceEditorPanel() const { return voiceEditorPanel.get(); } // Added getter for voiceEditorPanel
     RackAccordionComponent* getRackAccordion() const { return rackAccordion.get(); } // Added getter for rackAccordion
+    void showVoiceBrowser(int moduleIndex);
 
     void numModulesChanged();
 
@@ -50,7 +50,7 @@ private:
     juce::TextEditor logTextBox; // For displaying log messages
 
     juce::TextButton loadPerformanceButton{ "Load Performance..." };
-    juce::TextButton savePerformanceButton{ "Save Performance As..." };
+    juce::TextButton savePerformanceButton{ "Save As..." };
     juce::TextButton addModuleButton{ "+" };
     juce::TextButton removeModuleButton{ "-" };
 
@@ -65,6 +65,7 @@ private:
 
     std::unique_ptr<VoiceEditorPanel> voiceEditorPanel; // Added to manage the new panel
     std::unique_ptr<VoiceEditorWindow> voiceEditorWindow; // Added for the voice editor window
+    std::unique_ptr<VoiceBrowserComponent> voiceBrowser;
 
     juce::GroupComponent effectsGroup;
     juce::ToggleButton compressorEnableButton{ "Compressor" };

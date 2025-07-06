@@ -95,5 +95,7 @@ public:
         else l = r = lPre = rPre = 0.0f;
     }
 
+    void syncParametersFromPerformance(); // NEW: Declare the helper function
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
 };

@@ -28,6 +28,16 @@ CPMAddPackage(
     GIT_TAG 8.0.7
 )
 
+# Add nlohmann/json for fast JSON parsing
+CPMAddPackage(
+    NAME nlohmann_json
+    VERSION 3.11.3
+    GITHUB_REPOSITORY nlohmann/json
+    OPTIONS
+        "JSON_BuildTests OFF"
+        "JSON_Install OFF"
+)
+
 juce_add_plugin(${PROJECT_NAME}
     COMPANY_NAME probonopd
     IS_SYNTH TRUE
@@ -58,6 +68,7 @@ set(SourceFiles
     Source/KeyboardScalingDisplay.cpp
     Source/FMRackController.cpp
     Source/OperatorSliderLookAndFeel.cpp
+    Source/VoiceBrowserComponent.cpp
 
     ../src/dexed.cpp
     ../src/dx7note.cpp
@@ -106,6 +117,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     juce::juce_recommended_config_flags
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
+    nlohmann_json::nlohmann_json
     BinaryData
 )
 

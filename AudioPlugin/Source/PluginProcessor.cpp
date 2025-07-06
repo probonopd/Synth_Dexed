@@ -491,6 +491,8 @@ void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeI
             editorPtr->getRackAccordion()->updatePanels();
             editorPtr->getRackAccordion()->suppressNumModulesSync(false);
         }
+        // Sync parameters from loaded performance
+        syncParametersFromPerformance();
     }
 }
 
@@ -504,7 +506,11 @@ juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 bool AudioPluginAudioProcessor::loadPerformanceFile(const juce::String& path)
 {
     if (controller)
-        return controller->loadPerformanceFile(path);
+    {
+        bool ok = controller->loadPerformanceFile(path);
+        if (ok) syncParametersFromPerformance();
+        return ok;
+    }
     return false;
 }
 
@@ -571,4 +577,27 @@ FMRack::Rack* AudioPluginAudioProcessor::getRack() const {
 
 FMRack::Performance* AudioPluginAudioProcessor::getPerformance() const {
     return controller ? controller->getPerformance() : nullptr;
+}
+
+// Helper: Sync ValueTreeState parameters from the current performance's effects
+void AudioPluginAudioProcessor::syncParametersFromPerformance()
+{
+    if (!controller || !controller->getPerformance()) return;
+    const auto& effects = controller->getPerformance()->effects;
+    auto setBool = [this](const char* param, bool value) {
+        if (auto* p = treeState.getParameter(param))
+            p->setValueNotifyingHost(value ? 1.0f : 0.0f);
+    };
+    auto setFloat = [this](const char* param, uint8_t value) {
+        if (auto* p = treeState.getParameter(param))
+            p->setValueNotifyingHost((float)value / 127.0f);
+    };
+    setBool("compressorEnable", effects.compressorEnable);
+    setBool("reverbEnable", effects.reverbEnable);
+    setFloat("reverbSize", effects.reverbSize);
+    setFloat("reverbHighDamp", effects.reverbHighDamp);
+    setFloat("reverbLowDamp", effects.reverbLowDamp);
+    setFloat("reverbLowPass", effects.reverbLowPass);
+    setFloat("reverbDiffusion", effects.reverbDiffusion);
+    setFloat("reverbLevel", effects.reverbLevel);
 }
