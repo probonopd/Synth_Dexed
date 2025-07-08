@@ -21,36 +21,6 @@
 #include <arm_math.h> //ARM DSP extensions.  https://www.keil.com/pack/doc/CMSIS/DSP/html/index.html
 #include "synth.h"
 
-/*
-static const float zeroblock_f32[] = {
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#if AUDIO_BLOCK_SAMPLES > 16
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 32
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 48
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 64
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 80
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 96
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 112
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-#endif
-#if AUDIO_BLOCK_SAMPLES > 128
-#error AUDIO_BLOCK_SAMPLES > 128 is a problem for this class
-#endif
-};
-*/
-
 #define MAX_LEN 2048
 
 class Compressor
@@ -96,16 +66,10 @@ class Compressor
 
       //calculate the level of the audio (ie, calculate a smoothed version of the signal power)
       float audio_level_dB_block[MAX_LEN];
-
-      //arm_copy_f32(zeroblock_f32,audio_level_dB_block,len);
-
       calcAudioLevel_dB(audio_block, audio_level_dB_block, len); //returns through audio_level_dB_block
 
       //compute the desired gain based on the observed audio level
       float gain_block[MAX_LEN];
-
-      //arm_copy_f32(zeroblock_f32,gain_block,len);
-
       calcGain(audio_level_dB_block, gain_block, len);  //returns through gain_block
 
       //apply the desired gain...store the processed audio back into audio_block
@@ -119,9 +83,6 @@ class Compressor
     	
       // calculate the instantaneous signal power (square the signal)
       float wav_pow_block[MAX_LEN];
-
-      //arm_copy_f32(zeroblock_f32,wav_pow_block,len);
-
       arm_mult_f32(wav_block, wav_block, wav_pow_block, len);
 
       // low-pass filter and convert to dB
@@ -152,14 +113,10 @@ class Compressor
     
       //first, calculate the instantaneous target gain based on the compression ratio
       float inst_targ_gain_dB_block[MAX_LEN];
-      //arm_copy_f32(zeroblock_f32,inst_targ_gain_dB_block,len);
-
       calcInstantaneousTargetGain(audio_level_dB_block, inst_targ_gain_dB_block,len);
     
       //second, smooth in time (attack and release) by stepping through each sample
       float gain_dB_block[MAX_LEN];
-      //arm_copy_f32(zeroblock_f32,gain_dB_block,len);
-
       calcSmoothedGain_dB(inst_targ_gain_dB_block,gain_dB_block, len);
 
       //finally, convert from dB to linear gain: gain = 10^(gain_dB/20);  (ie this takes care of the sqrt, too!)
@@ -175,8 +132,6 @@ class Compressor
       
       // how much are we above the compression threshold?
       float above_thresh_dB_block[MAX_LEN];
-
-      //arm_copy_f32(zeroblock_f32,above_thresh_dB_block,len);
 
       arm_offset_f32(audio_level_dB_block,  //CMSIS DSP for "add a constant value to all elements"
         -thresh_dBFS,                         //this is the value to be added
