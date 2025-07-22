@@ -391,16 +391,35 @@ void audioThread() {
 }
 
 void midiThread() {
-    // FreeBSD MIDI support using /dev/midi devices
-    std::string midiDevice = "/dev/midi" + std::to_string(midiDev);
+    // FreeBSD MIDI support using /dev/umidi devices
+    int udev = midiDev / 8;
+    int subdev = midiDev % 8;
+    std::string midiDevice = "/dev/umidi" + std::to_string(udev) + "." + std::to_string(subdev);
     std::cout << "[MIDI] FreeBSD MIDI thread started, trying " << midiDevice << "..." << std::endl;
     
     int midi_fd = open(midiDevice.c_str(), O_RDONLY | O_NONBLOCK);
     if (midi_fd < 0) {
         std::cerr << "[MIDI] Could not open " << midiDevice << ": " << strerror(errno) << std::endl;
-        std::cout << "[MIDI] MIDI input disabled (no hardware MIDI devices found)" << std::endl;
-        while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
-        return;
+        
+        // Try first available umidi device
+        bool found = false;
+        for (int i = 0; i < 8 && !found; ++i) {
+            for (int j = 0; j < 8 && !found; ++j) {
+                std::string altDevice = "/dev/umidi" + std::to_string(i) + "." + std::to_string(j);
+                midi_fd = open(altDevice.c_str(), O_RDONLY | O_NONBLOCK);
+                if (midi_fd >= 0) {
+                    midiDevice = altDevice;
+                    found = true;
+                    std::cout << "[MIDI] Automatically using " << altDevice << " instead" << std::endl;
+                }
+            }
+        }
+        
+        if (!found) {
+            std::cout << "[MIDI] MIDI input disabled (no hardware MIDI devices found)" << std::endl;
+            while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
+            return;
+        }
     }
     
     std::cout << "[MIDI] Successfully opened " << midiDevice << std::endl;
@@ -884,15 +903,19 @@ int main(int argc, char* argv[]) {
     // List MIDI devices
     std::cout << "Available MIDI input devices:\n";
     for (int i = 0; i < 8; ++i) {
-        std::string device = "/dev/midi" + std::to_string(i);
-        int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK);
-        if (fd >= 0) {
-            std::cout << "  " << i << ": " << device << "\n";
-            close(fd);
+        for (int j = 0; j < 8; ++j) {
+            std::string device = "/dev/umidi" + std::to_string(i) + "." + std::to_string(j);
+            int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK);
+            if (fd >= 0) {
+                std::cout << "  " << (i * 8 + j) << ": " << device << "\n";
+                close(fd);
+            }
         }
     }
     if (midiDev >= 0) {
-        std::string selectedMidiDevice = "/dev/midi" + std::to_string(midiDev);
+        int udev = midiDev / 8;
+        int subdev = midiDev % 8;
+        std::string selectedMidiDevice = "/dev/umidi" + std::to_string(udev) + "." + std::to_string(subdev);
         std::cout << "[MIDI] Using device " << midiDev << ": " << selectedMidiDevice << "\n";
     } else {
         std::cout << "[MIDI] Using device " << midiDev << ": (no MIDI devices found)\n";
