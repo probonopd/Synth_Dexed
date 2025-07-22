@@ -22,13 +22,23 @@
 #include <cstring>
 #include <sstream>
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
 #include <unistd.h>
 #include <fcntl.h>
+#ifdef __linux__
 #include <alsa/asoundlib.h>
 #include <alsa/seq.h>
 // Forward declaration for connect_all_midi_inputs
 void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port);
+#endif
+#ifdef __FreeBSD__
+#include <sys/soundcard.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <errno.h>
+#include <cstring>
+#endif
 #endif
 
 // Define M_PI if not available (common on Windows)
@@ -315,6 +325,180 @@ void connect_all_midi_inputs(snd_seq_t* seq_handle, int fm_port) {
     }
 }
 bool initializeAudioMidi() { return true; }
+#elif __FreeBSD__
+// FreeBSD-specific implementation using OSS
+static int g_dsp_fd = -1;
+
+void audioThread() {
+    struct sched_param sch_params; 
+    sch_params.sched_priority = 20;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &sch_params);
+    
+    if (g_dsp_fd < 0) {
+        std::cerr << "Audio device not initialized" << std::endl;
+        return;
+    }
+    
+    std::vector<float> leftBuffer(BUFFER_FRAMES), rightBuffer(BUFFER_FRAMES);
+    std::vector<int16_t> interleavedBuffer(BUFFER_FRAMES * 2);
+    float outputGain = 1.0f;
+    
+    while (g_running) {
+        // Fill audio buffers with synthesized audio or sine wave
+        std::fill(leftBuffer.begin(), leftBuffer.end(), 0.0f);
+        std::fill(rightBuffer.begin(), rightBuffer.end(), 0.0f);
+        
+        if (useSine) {
+            // Generate test sine wave
+            static double phase = 0.0, freq = 440.0, phaseInc = 2.0 * M_PI * freq / SAMPLE_RATE;
+            for (size_t i = 0; i < BUFFER_FRAMES; ++i) {
+                float s = static_cast<float>(std::sin(phase) * 0.5);
+                leftBuffer[i] = rightBuffer[i] = s;
+                phase += phaseInc;
+                if (phase > 2.0 * M_PI) phase -= 2.0 * M_PI;
+            }
+        } else if (g_rack) {
+            g_rack->processAudio(leftBuffer.data(), rightBuffer.data(), BUFFER_FRAMES);
+        }
+        
+        // Convert float samples to 16-bit integers and interleave
+        for (size_t i = 0; i < BUFFER_FRAMES; ++i) {
+            int16_t l = static_cast<int16_t>(std::clamp(leftBuffer[i] * outputGain * 32767.0f, -32768.0f, 32767.0f));
+            int16_t r = static_cast<int16_t>(std::clamp(rightBuffer[i] * outputGain * 32767.0f, -32768.0f, 32767.0f));
+            interleavedBuffer[i * 2] = l;
+            interleavedBuffer[i * 2 + 1] = r;
+        }
+        
+        // Write to OSS device
+        ssize_t written = write(g_dsp_fd, interleavedBuffer.data(), BUFFER_FRAMES * 2 * sizeof(int16_t));
+        if (written < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // Buffer full, wait a bit
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            } else {
+                std::cerr << "OSS write error: " << strerror(errno) << std::endl;
+                break;
+            }
+        } else if (written != (ssize_t)(BUFFER_FRAMES * 2 * sizeof(int16_t))) {
+            std::cerr << "OSS partial write: " << written << " of " << (BUFFER_FRAMES * 2 * sizeof(int16_t)) << " bytes" << std::endl;
+        }
+    }
+    
+    if (g_dsp_fd >= 0) {
+        close(g_dsp_fd);
+        g_dsp_fd = -1;
+    }
+}
+
+void midiThread() {
+    // FreeBSD MIDI support using /dev/midi devices
+    std::string midiDevice = "/dev/midi" + std::to_string(midiDev);
+    std::cout << "[MIDI] FreeBSD MIDI thread started, trying " << midiDevice << "..." << std::endl;
+    
+    int midi_fd = open(midiDevice.c_str(), O_RDONLY | O_NONBLOCK);
+    if (midi_fd < 0) {
+        std::cerr << "[MIDI] Could not open " << midiDevice << ": " << strerror(errno) << std::endl;
+        std::cout << "[MIDI] MIDI input disabled (no hardware MIDI devices found)" << std::endl;
+        while (g_running) std::this_thread::sleep_for(std::chrono::seconds(1));
+        return;
+    }
+    
+    std::cout << "[MIDI] Successfully opened " << midiDevice << std::endl;
+    uint8_t midi_bytes[3];
+    int midi_state = 0;
+    
+    while (g_running) {
+        ssize_t n = read(midi_fd, &midi_bytes[midi_state], 1);
+        if (n == 1) {
+            // Simple state machine for 3-byte MIDI messages
+            if (midi_state == 0 && (midi_bytes[0] & 0x80)) {
+                midi_state = 1;
+            } else if (midi_state == 1) {
+                midi_state = 2;
+            } else if (midi_state == 2) {
+                // Got a full message
+                handleMidiMessage(midi_bytes[0], midi_bytes[1], midi_bytes[2]);
+                midi_state = 0;
+            }
+        } else {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+    }
+    close(midi_fd);
+}
+
+bool initializeAudioMidi() {
+    std::cout << "Initializing FreeBSD OSS audio..." << std::endl;
+    
+    // Open OSS device - support device selection
+    std::string device = (audioDev == 0) ? "/dev/dsp" : "/dev/dsp" + std::to_string(audioDev);
+    g_dsp_fd = open(device.c_str(), O_WRONLY);
+    if (g_dsp_fd < 0) {
+        std::cerr << "Failed to open " << device << ": " << strerror(errno) << std::endl;
+        // Try default device
+        if (audioDev != 0) {
+            std::cout << "Trying default device /dev/dsp..." << std::endl;
+            g_dsp_fd = open("/dev/dsp", O_WRONLY);
+            if (g_dsp_fd < 0) {
+                std::cerr << "Failed to open /dev/dsp: " << strerror(errno) << std::endl;
+                return false;
+            }
+            device = "/dev/dsp";
+        } else {
+            return false;
+        }
+    }
+    
+    // Configure OSS device
+    int format = AFMT_S16_LE;  // 16-bit little-endian
+    if (ioctl(g_dsp_fd, SNDCTL_DSP_SETFMT, &format) == -1) {
+        std::cerr << "Failed to set audio format: " << strerror(errno) << std::endl;
+        close(g_dsp_fd);
+        g_dsp_fd = -1;
+        return false;
+    }
+    
+    int channels = 2;  // Stereo
+    if (ioctl(g_dsp_fd, SNDCTL_DSP_CHANNELS, &channels) == -1) {
+        std::cerr << "Failed to set channel count: " << strerror(errno) << std::endl;
+        close(g_dsp_fd);
+        g_dsp_fd = -1;
+        return false;
+    }
+    
+    int rate = SAMPLE_RATE;
+    if (ioctl(g_dsp_fd, SNDCTL_DSP_SPEED, &rate) == -1) {
+        std::cerr << "Failed to set sample rate: " << strerror(errno) << std::endl;
+        close(g_dsp_fd);
+        g_dsp_fd = -1;
+        return false;
+    }
+    
+    // Set fragment size for better real-time performance
+    // Fragment size: 2^12 = 4096 bytes, 4 fragments
+    int fragment = 0x0004000C;  
+    if (ioctl(g_dsp_fd, SNDCTL_DSP_SETFRAGMENT, &fragment) == -1) {
+        std::cerr << "Warning: Failed to set fragment size: " << strerror(errno) << std::endl;
+        // Not fatal, continue
+    }
+    
+    // Get actual buffer information
+    audio_buf_info info;
+    if (ioctl(g_dsp_fd, SNDCTL_DSP_GETOSPACE, &info) == 0) {
+        std::cout << "OSS buffer info:" << std::endl;
+        std::cout << "  Fragment size: " << info.fragsize << " bytes" << std::endl;
+        std::cout << "  Fragments: " << info.fragments << " (total), " << info.fragstotal << " (available)" << std::endl;
+        std::cout << "  Bytes available: " << info.bytes << std::endl;
+    }
+    
+    std::cout << "OSS audio initialized successfully:" << std::endl;
+    std::cout << "  Device: " << device << std::endl;
+    std::cout << "  Format: 16-bit stereo" << std::endl;
+    std::cout << "  Sample Rate: " << rate << " Hz" << std::endl;
+    std::cout << "  Buffer Frames: " << BUFFER_FRAMES << std::endl;
+    
+    return true;
+}
 #endif
 
 // =====================
@@ -681,6 +865,38 @@ int main(int argc, char* argv[]) {
     } else {
         std::cout << "[MIDI] Using device " << midiDev << ": (unknown)\n";
     }
+#elif __FreeBSD__
+    // List audio devices (OSS)
+    std::cout << "Available audio output devices:\n";
+    for (int i = 0; i < 8; ++i) {
+        std::string device = "/dev/dsp" + std::to_string(i);
+        int fd = open(device.c_str(), O_WRONLY | O_NONBLOCK);
+        if (fd >= 0) {
+            std::cout << "  " << i << ": " << device << "\n";
+            close(fd);
+        }
+    }
+    
+    // Print which audio device is being used
+    std::string selectedAudioDevice = "/dev/dsp" + (audioDev == 0 ? std::string("") : std::to_string(audioDev));
+    std::cout << "[AUDIO] Using device " << audioDev << ": " << selectedAudioDevice << "\n";
+    
+    // List MIDI devices
+    std::cout << "Available MIDI input devices:\n";
+    for (int i = 0; i < 8; ++i) {
+        std::string device = "/dev/midi" + std::to_string(i);
+        int fd = open(device.c_str(), O_RDONLY | O_NONBLOCK);
+        if (fd >= 0) {
+            std::cout << "  " << i << ": " << device << "\n";
+            close(fd);
+        }
+    }
+    if (midiDev >= 0) {
+        std::string selectedMidiDevice = "/dev/midi" + std::to_string(midiDev);
+        std::cout << "[MIDI] Using device " << midiDev << ": " << selectedMidiDevice << "\n";
+    } else {
+        std::cout << "[MIDI] Using device " << midiDev << ": (no MIDI devices found)\n";
+    }
 #endif
 
     // Track performance directory if set
@@ -767,9 +983,9 @@ int main(int argc, char* argv[]) {
         return 1;
     }
         
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__FreeBSD__)
         std::thread audio_thread(audioThread);
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
         std::thread midi_thread(midiThread);
 #endif
 #endif
@@ -864,19 +1080,19 @@ int main(int argc, char* argv[]) {
             if (debugEnabled) std::cout << "[MAIN THREAD] UDP server stopped." << std::endl;
         }
 
-#if defined(_WIN32) || defined(__linux__)
+#if defined(_WIN32) || defined(__linux__) || defined(__FreeBSD__)
         if (debugEnabled) std::cout << "[MAIN THREAD] Attempting to join audio thread..." << std::endl;
         if (audio_thread.joinable()) {
             g_running = false; // Ensure the audio thread sees the shutdown flag
             audio_thread.join(); // Wait for the audio thread to exit cleanly
         }
-#ifdef __linux__
+#if defined(__linux__) || defined(__FreeBSD__)
         if (debugEnabled) std::cout << "[MAIN THREAD] Attempting to join MIDI thread..." << std::endl;
         if (midi_thread.joinable()) {
             midi_thread.detach(); // Detach instead of join for abrupt exit
         }
-#endif // __linux__
-#endif // defined(_WIN32) || defined(__linux__)
+#endif // defined(__linux__) || defined(__FreeBSD__)
+#endif // defined(_WIN32) || defined(__linux__) || defined(__FreeBSD__)
 
 #ifdef _WIN32
         // Reset the audio device to unblock any waiting waveOutWrite calls

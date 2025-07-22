@@ -61,38 +61,47 @@ elseif(APPLE)
     find_library(COREFDN_FRAMEWORK CoreFoundation)
     find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
     target_link_libraries(FMRack ${COREAUDIO_FRAMEWORK} ${COREMIDI_FRAMEWORK} ${AUDIOUNIT_FRAMEWORK} ${COREFDN_FRAMEWORK} ${AUDIOTOOLBOX_FRAMEWORK})
-elseif(UNIX)
-    find_package(PkgConfig REQUIRED)
-    
-    if(BUILD_STATIC)
-        # Configure for static building
-        set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
+elseif(UNIX AND NOT APPLE)
+    # Check if we're on FreeBSD
+    if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+        # FreeBSD-specific configuration
+        message(STATUS "Configuring for FreeBSD")
+        target_link_libraries(FMRack pthread)
+        # FreeBSD uses OSS for audio, no additional libraries needed typically
+    else()
+        # Linux and other UNIX systems
+        find_package(PkgConfig REQUIRED)
         
-        # For Alpine Linux, we need to handle musl libc differently
-        if(EXISTS "/etc/alpine-release")
-            # Alpine-specific static linking
-            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
-            target_link_libraries(FMRack -Wl,--whole-archive -lpthread -Wl,--no-whole-archive)
+        if(BUILD_STATIC)
+            # Configure for static building
+            set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static")
             
-            # Find static ALSA for Alpine
-            find_library(ALSA_LIB NAMES libasound.a)
-            if(ALSA_LIB)
-                target_link_libraries(FMRack ${ALSA_LIB})
+            # For Alpine Linux, we need to handle musl libc differently
+            if(EXISTS "/etc/alpine-release")
+                # Alpine-specific static linking
+                set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+                target_link_libraries(FMRack -Wl,--whole-archive -lpthread -Wl,--no-whole-archive)
+                
+                # Find static ALSA for Alpine
+                find_library(ALSA_LIB NAMES libasound.a)
+                if(ALSA_LIB)
+                    target_link_libraries(FMRack ${ALSA_LIB})
+                else()
+                    message(FATAL_ERROR "Static ALSA library not found. Install alsa-lib-static package.")
+                endif()
             else()
-                message(FATAL_ERROR "Static ALSA library not found. Install alsa-lib-static package.")
+                # Regular Linux static linking
+                pkg_check_modules(ALSA REQUIRED alsa)
+                target_link_libraries(FMRack ${ALSA_LIBRARIES} -pthread)
+                target_include_directories(FMRack PRIVATE ${ALSA_INCLUDE_DIRS})
             endif()
         else()
-            # Regular Linux static linking
+            # Regular dynamic linking
             pkg_check_modules(ALSA REQUIRED alsa)
-            target_link_libraries(FMRack ${ALSA_LIBRARIES} -pthread)
+            target_link_libraries(FMRack ${ALSA_LIBRARIES} pthread)
             target_include_directories(FMRack PRIVATE ${ALSA_INCLUDE_DIRS})
         endif()
-    else()
-        # Regular dynamic linking
-        pkg_check_modules(ALSA REQUIRED alsa)
-        target_link_libraries(FMRack ${ALSA_LIBRARIES} pthread)
-        target_include_directories(FMRack PRIVATE ${ALSA_INCLUDE_DIRS})
     endif()
 endif()
 
