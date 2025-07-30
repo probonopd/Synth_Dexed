@@ -67,6 +67,8 @@ class PluginFx {
     float Reso;
     float Gain;
 
+    float aGain;
+
     void init(FRAC_NUM sampleRate);
     void process(float *work, uint16_t sampleSize);
     float getGain(void);
