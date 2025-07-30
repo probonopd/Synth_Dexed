@@ -60,8 +60,8 @@ class Compressor
       if (use_HP_prefilter)
         arm_biquad_cascade_df1_f32(&hp_filt_struct, audio_block, audio_block, len);
       
-      //apply the pre-gain...a negative gain value will disable
-      if (pre_gain > 0.0f)
+      //apply the pre-gain...a negative or unity gain value will disable
+      if (pre_gain > 0.0f && pre_gain != 1.0f)
         arm_scale_f32(audio_block, pre_gain, audio_block, len); //use ARM DSP for speed!
 
       //calculate the level of the audio (ie, calculate a smoothed version of the signal power)
