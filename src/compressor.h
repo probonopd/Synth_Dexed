@@ -39,7 +39,8 @@ class Compressor
       setCompressionRatio(5.0f);  //set the default copression ratio
       setAttack_sec(0.005f, sample_rate_Hz);  //default to this value
       setRelease_sec(0.200f, sample_rate_Hz); //default to this value
-      setHPFilterCoeff();  enableHPFilter(true);  //enable the HP filter to remove any DC offset from the audio
+      setHPFilterCoeff(sample_rate_Hz); 
+      enableHPFilter(true);  //enable the HP filter to remove any DC offset from the audio
     }
 
 
@@ -231,11 +232,11 @@ class Compressor
     float getCurrentLevel_dBFS(void) { return 10.0* log10f_approx(prev_level_lp_pow); }
     float getCurrentGain_dB(void) { return prev_gain_dB; }
 
-    void setHPFilterCoeff_N2IIR_Matlab(float b[], float a[]){
+    void setHPFilterCoeff_N2IIR_Matlab(float b0, float b1, float b2, float a1, float a2){
       //https://www.keil.com/pack/doc/CMSIS/DSP/html/group__BiquadCascadeDF1.html#ga8e73b69a788e681a61bccc8959d823c5
       //Use matlab to compute the coeff for HP at 20Hz: [b,a]=butter(2,20/(44100/2),'high'); %assumes fs_Hz = 44100
-      hp_coeff[0] = b[0];   hp_coeff[1] = b[1];  hp_coeff[2] = b[2]; //here are the matlab "b" coefficients
-      hp_coeff[3] = -a[1];  hp_coeff[4] = -a[2];  //the DSP needs the "a" terms to have opposite sign vs Matlab    	
+      hp_coeff[0] = b0;   hp_coeff[1] = b1;  hp_coeff[2] = b2; //here are the matlab "b" coefficients
+      hp_coeff[3] = -a1;  hp_coeff[4] = -a2;  //the DSP needs the "a" terms to have opposite sign vs Matlab    	
     }
     
   private:
@@ -249,14 +250,56 @@ class Compressor
     static const uint8_t hp_nstages = 1;
     float hp_coeff[5 * hp_nstages] = {1.0, 0.0, 0.0, 0.0, 0.0}; //no filtering. actual filter coeff set later
     float hp_state[4 * hp_nstages];
-    void setHPFilterCoeff(void) {
+    void setHPFilterCoeff(uint32_t fs_Hz) {
       //https://www.keil.com/pack/doc/CMSIS/DSP/html/group__BiquadCascadeDF1.html#ga8e73b69a788e681a61bccc8959d823c5
-      //Use matlab to compute the coeff for HP at 20Hz: [b,a]=butter(2,20/(44100/2),'high'); %assumes fs_Hz = 44100
-      float b[] = {9.979871156751189e-01,    -1.995974231350238e+00, 9.979871156751189e-01};  //from Matlab
-      float a[] = { 1.000000000000000e+00,    -1.995970179642828e+00,    9.959782830576472e-01};  //from Matlab
-      setHPFilterCoeff_N2IIR_Matlab(b, a);
-      //hp_coeff[0] = b[0];   hp_coeff[1] = b[1];  hp_coeff[2] = b[2]; //here are the matlab "b" coefficients
-      //hp_coeff[3] = -a[1];  hp_coeff[4] = -a[2];  //the DSP needs the "a" terms to have opposite sign vs Matlab
+      //Use matlab or octave to compute the coeff for HP at 20Hz: [b,a]=butter(2,20/(44100/2),'high'); %assumes fs_Hz = 44100
+
+      switch (fs_Hz)
+      {
+        case 22050:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.959782830249141e-01, -1.991956566049828e+00, 9.959782830249141e-01,
+            -1.991940391776998e+00, 9.919727403226575e-01);
+          break;
+        case 24000:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.963044429693491e-01, -1.992608885938698e+00, 9.963044429693491e-01,
+            -1.992595228750302e+00, 9.926225431270951e-01);
+          break;
+        case 44100:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.979871156751189e-01, -1.995974231350238e+00, 9.979871156751189e-01,
+            -1.995970179642828e+00, 9.959782830576472e-01);
+          break;
+        case 48000:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.981505111904518e-01, -1.996301022380904e+00, 9.981505111904518e-01,
+            -1.996297601769122e+00, 9.963044429926857e-01);
+          break;
+        case 88200:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.989930508651776e-01, -1.997986101730355e+00, 9.989930508651776e-01,
+            -1.997985087783538e+00, 9.979871156771721e-01);
+          break;
+        case 96000:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.990748276239033e-01, -1.998149655247807e+00, 9.990748276239033e-01,
+            -1.998148799303698e+00, 9.981505111919150e-0);
+          break;
+        case 192000:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.995373067694786e-01, -1.999074613538957e+00, 9.995373067694786e-01,
+            -1.999074399453921e+00, 9.990748276239949e-01);
+          break;
+        case 384000:
+          setHPFilterCoeff_N2IIR_Matlab(
+            9.997686266179210e-01, -1.999537253235842e+00, 9.997686266179210e-01,
+            -1.999537199702199e+00, 9.995373067694845e-01);
+          break;
+        default:
+          printf("Synth_Dexed: compressor: unable to enable high-pass filter (samplerate %d Hz is not supported)", fs_Hz);
+      }
+
     }
 
 
