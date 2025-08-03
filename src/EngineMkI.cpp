@@ -24,7 +24,7 @@
 #include "EngineMkI.h"
 
 #define _USE_MATH_DEFINES
-#include <cmath>
+#include <math.h>
 #include <cstdlib>
 
 #include "sin.h"
