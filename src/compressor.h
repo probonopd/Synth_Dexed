@@ -18,6 +18,7 @@
 #ifndef TEENSYDUINO
 
 #include <algorithm>
+#include <inttypes.h>
 #include <arm_math.h> //ARM DSP extensions.  https://www.keil.com/pack/doc/CMSIS/DSP/html/index.html
 #include "synth.h"
 
@@ -297,7 +298,7 @@ class Compressor
             -1.999537199702199e+00, 9.995373067694845e-01);
           break;
         default:
-          printf("Synth_Dexed: compressor: unable to enable high-pass filter (samplerate %d Hz is not supported)", fs_Hz);
+          printf("Synth_Dexed: compressor: unable to enable high-pass filter (samplerate %" PRIu32 " Hz is not supported)", fs_Hz);
       }
 
     }
