@@ -202,11 +202,13 @@ class Dexed
     void setCompressor(bool comp);
     bool getCompressor(void);
     void setCompressorPreGain_dB(float pre_gain);
+    void setCompressorMakeupGain_dB(float makeup_gain);
     void setCompressorAttack_sec(float attack_sec);
     void setCompressorRelease_sec(float release_sec);
     void setCompressorThresh_dBFS(float thresh_dBFS);
     void setCompressionRatio(float comp_ratio);
     float getCompressorPreGain_dB(void);
+    float getCompressorMakeupGain_dB(void);
     float getCompressorAttack_sec(void);
     float getCompressorRelease_sec(void);
     float getCompressorThresh_dBFS(void);

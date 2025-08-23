@@ -1856,6 +1856,11 @@ void Dexed::setCompressorPreGain_dB(float pre_gain)
   compressor->setPreGain_dB(pre_gain);
 }
 
+void Dexed::setCompressorMakeupGain_dB(float makeup_gain)
+{
+  compressor->setMakeupGain_dB(makeup_gain);
+}
+
 void Dexed::setCompressorAttack_sec(float attack_sec)
 {
   compressor->setAttack_sec(attack_sec, samplerate);
@@ -1879,6 +1884,11 @@ void Dexed::setCompressionRatio(float comp_ratio)
 float Dexed::getCompressorPreGain_dB(void)
 {
   return (compressor->getPreGain_dB());
+}
+
+float Dexed::getCompressorMakeupGain_dB(void)
+{
+  return (compressor->getMakeupGain_dB());
 }
 
 float Dexed::getCompressorAttack_sec(void)
