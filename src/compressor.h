@@ -123,7 +123,13 @@ class Compressor
 
       //finally, convert from dB to linear gain: gain = 10^(gain_dB/20);  (ie this takes care of the sqrt, too!)
       arm_scale_f32(gain_dB_block, 1.0f/20.0f, gain_dB_block, len);  //divide by 20 
-      for (uint16_t i = 0; i < len; i++) gain_block[i] = pow10f(gain_dB_block[i]); //do the 10^(x)
+
+      //do the 10^(x)
+      bool has_makeup_gain = makeup_gain != 1.0f;
+      for (uint16_t i = 0; i < len; i++)
+        gain_block[i] = has_makeup_gain ?
+          pow10f(gain_dB_block[i]) * makeup_gain:
+          pow10f(gain_dB_block[i]);
 
       return;  //output is passed through gain_block
     }
@@ -194,6 +200,8 @@ class Compressor
     }
     void setPreGain(float g) {  pre_gain = g;  }
     void setPreGain_dB(float gain_dB) { setPreGain(pow(10.0, gain_dB / 20.0));  }
+    void setMakeupGain(float g) { makeup_gain = g; }
+    void setMakeupGain_dB(float gain_dB) { setMakeupGain(pow(10.0, gain_dB / 20)); }
     void setCompressionRatio(float cr) {
       comp_ratio = std::max(0.001f, cr); //limit to positive values
       updateThresholdAndCompRatioConstants();
@@ -225,6 +233,7 @@ class Compressor
 
     //methods to return information about this module
     float getPreGain_dB(void) { return 20.0 * log10f_approx(pre_gain);  }
+    float getMakeupGain_dB(void) { return 20.0 * log10f_approx(makeup_gain); }
     float getAttack_sec(void) {  return attack_sec; }
     float getRelease_sec(void) {  return release_sec; }
     float getLevelTimeConst_sec(void) { return level_lp_sec; }
@@ -322,6 +331,7 @@ class Compressor
     }
     float comp_ratio = 1.0;  //compression ratio
     float pre_gain = -1.0;  //gain to apply before the compression.  negative value disables
+    float makeup_gain = 1.0f; //gain to apply after the compression. 1.0f has no effect
     boolean use_HP_prefilter;
     
     
