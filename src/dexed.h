@@ -228,6 +228,7 @@ class Dexed
     void panic(void);
     void notesOff(void);
     void resetControllers(void);
+    void resetFxState(void);
     void setMasterTune(int8_t mastertune);
     int8_t getMasterTune(void);
     void setPortamento(uint8_t portamento_mode, uint8_t portamento_glissando, uint8_t portamento_time);

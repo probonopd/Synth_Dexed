@@ -572,6 +572,11 @@ void Dexed::resetControllers(void)
   controllers.refresh();
 }
 
+void Dexed::resetFxState(void)
+{
+  fx.resetState();
+}
+
 void Dexed::notesOff(void) {
   for (uint8_t i = 0; i < max_notes; i++) {
     if (voices[i].live == true) {

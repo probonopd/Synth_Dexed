@@ -250,3 +250,9 @@ float PluginFx::getGain(void)
 {
   return (Gain);
 }
+
+void PluginFx::resetState()
+{
+  dc_id = dc_od = 0;
+  s1 = s2 = s3 = s4 = c = d = 0;
+}
