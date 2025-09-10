@@ -59,6 +59,8 @@ class PluginFx {
     float dc_od;
     float dc_r;
 
+    float ramp_dt;
+
   public:
     PluginFx();
 
