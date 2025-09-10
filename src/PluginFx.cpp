@@ -29,9 +29,6 @@
 
 const float dc = 1e-18;
 
-const float ramp_dt = 1.0 / 254;
-const float ramp_eps = 1.0 / 127;
-
 inline static float tptpc(float& state, float inp, float cutoff) {
   float v = (inp - state) * cutoff / (1 + cutoff);
   float res = v + state;
@@ -93,6 +90,8 @@ void PluginFx::init(FRAC_NUM sr) {
   dc_r = 1.0 - (126.0 / sr);
   dc_id = 0;
   dc_od = 0;
+
+  ramp_dt = 10.0f / sampleRate; // 100 ms
 }
 
 inline float PluginFx::NR24(float sample, float g, float lpc) {
@@ -121,15 +120,16 @@ void PluginFx::process(float *work, uint16_t sampleSize) {
 
   dc_od = work[sampleSize - 1];
 
-  // Gain ramp and zero cross detection
+  // Gain ramp
   if (Gain != aGain)
   {
     for (uint16_t i = 0; i < sampleSize; i++ )
     {
-      if (i != 0 && aGain != Gain && (work[i] >= 0 && work[i-1] <= 0 || work[i] <= 0 && work[i-1] >= 0))
+      if (aGain != Gain)
       {
-        aGain += Gain > aGain ? ramp_dt : -ramp_dt;
-        if (fabs(aGain - Gain) < ramp_eps) aGain = Gain;
+        aGain = Gain > aGain ?
+          fmin(Gain, aGain + ramp_dt):
+          fmax(Gain, aGain - ramp_dt);
       }
       work[i] *= aGain;
     }
