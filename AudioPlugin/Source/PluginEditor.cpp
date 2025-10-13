@@ -412,10 +412,25 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int moduleIndex)
     if (!voiceBrowser)
         voiceBrowser = std::make_unique<VoiceBrowserComponent>();
     
-    // Show as a dialog window (non-modal) with escape key support
-    auto* dialog = new juce::DialogWindow("DX7 Voice Browser", juce::Colours::lightgrey, true, true);
+    // Create a custom dialog window that properly handles close events
+    class VoiceBrowserDialog : public juce::DialogWindow
+    {
+    public:
+        VoiceBrowserDialog(const juce::String& name, juce::Colour backgroundColour, bool escapeKeyTriggersCloseButton, bool addToDesktop)
+            : juce::DialogWindow(name, backgroundColour, escapeKeyTriggersCloseButton, addToDesktop)
+        {
+        }
+        
+        void closeButtonPressed() override
+        {
+            setVisible(false);
+            delete this;
+        }
+    };
     
-    // Set up close callback for ESC key and window X button
+    auto* dialog = new VoiceBrowserDialog("DX7 Voice Browser", juce::Colours::lightgrey, true, true);
+    
+    // Set up close callback for ESC key
     voiceBrowser->onClose = [dialog]() {
         dialog->setVisible(false);
         delete dialog;
@@ -442,7 +457,8 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int moduleIndex)
             appendLogMessage("Failed to load voice: invalid module index or controller");
         }
     };
-      // Make ESC key work and allow window X button to close
+    
+    // Make ESC key work and allow window X button to close
     dialog->setUsingNativeTitleBar(true);
     
     // Don't release ownership - keep the voiceBrowser so we can reuse it

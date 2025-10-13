@@ -33,22 +33,7 @@ VoiceBrowserComponent::VoiceBrowserComponent() {
     channelCombo.setColour(juce::ComboBox::backgroundColourId, juce::Colours::black);
     for (int i = 1; i <= 16; ++i) channelCombo.addItem("MIDI " + juce::String(i), i);
     channelCombo.addItem("Omni", 17);
-    channelCombo.setSelectedId(1);    addAndMakeVisible(editButton);
-    addAndMakeVisible(sendButton);
-    editButton.setEnabled(false);
-    sendButton.setEnabled(false);
-    
-    editButton.setButtonText("Edit");
-    sendButton.setButtonText("Load");
-    
-    editButton.onClick = [this] {
-        int idx = voiceListBox.getSelectedRow();
-        if (idx >= 0 && idx < filteredVoices.size()) downloadVoiceSyx(idx);
-    };
-    sendButton.onClick = [this] {
-        int idx = voiceListBox.getSelectedRow();
-        if (idx >= 0 && idx < filteredVoices.size()) downloadVoiceSyx(idx);
-    };
+    channelCombo.setSelectedId(1);    // Buttons removed - voices are loaded automatically when clicked
 
     addAndMakeVisible(statusLabel);
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -72,13 +57,12 @@ void VoiceBrowserComponent::resized() {
     voiceListBox.setBounds(area.removeFromTop(200));
     auto row = area.removeFromTop(24);
     channelCombo.setBounds(row.removeFromLeft(100));
-    editButton.setBounds(row.removeFromLeft(60));
-    sendButton.setBounds(row.removeFromLeft(60));
+    // Buttons removed - voices are loaded automatically when clicked
     statusLabel.setBounds(area.removeFromTop(20));
     bankLabel.setBounds(area.removeFromTop(20));
 }
 
-bool VoiceBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) {
+bool VoiceBrowserComponent::keyPressed(const juce::KeyPress& key, juce::Component* /*originatingComponent*/) {
     if (key == juce::KeyPress::escapeKey) {
         if (onClose) onClose();
         return true;
@@ -102,6 +86,11 @@ void VoiceBrowserComponent::paintListBoxItem(int row, juce::Graphics& g, int wid
 
 void VoiceBrowserComponent::listBoxItemClicked(int row, const juce::MouseEvent&) {
     voiceListBox.selectRow(row);
+    
+    // Automatically load the voice when clicked (without requiring button press)
+    if (row >= 0 && row < filteredVoices.size()) {
+        downloadVoiceSyx(row);
+    }
 }
 
 void VoiceBrowserComponent::setStatus(const juce::String& msg, bool error) {
@@ -295,81 +284,149 @@ void VoiceBrowserComponent::filterVoices() {
 }
 
 void VoiceBrowserComponent::downloadVoiceSyx(int index) {
-    if (index < 0 || index >= filteredVoices.size()) return;
-    auto v = filteredVoices[index];
-    juce::String sig = v["signature"].toString();
-    if (sig.isEmpty()) { setStatus("No signature for voice", true); return; }
-    juce::String url = "https://patches.fm/patches/single-voice/dx7/" + sig.substring(0,2) + "/" + sig + ".syx";
-    auto cacheFile = getVoiceSyxCacheFile(url);
-    if (cacheFile.existsAsFile()) {
-        juce::MemoryBlock syx;
-        cacheFile.loadFileAsData(syx);
-        setStatus("Loaded syx from cache: " + v["name"].toString() + " (" + juce::String(syx.getSize()) + " bytes)");
-        int midiChannel = channelCombo.getSelectedId();
-        sendVoiceSyx(syx, midiChannel);
+    // Enhanced error checking to prevent crashes
+    if (index < 0 || index >= filteredVoices.size()) {
+        setStatus("Invalid voice selection", true);
         return;
     }
-    juce::URL juceUrl(url);
-    std::unique_ptr<juce::InputStream> stream(juceUrl.createInputStream(false));
-    if (stream != nullptr) {
-        juce::MemoryBlock syx;
-        stream->readIntoMemoryBlock(syx);
-        cacheFile.create();
-        cacheFile.replaceWithData(syx.getData(), syx.getSize());
-        setStatus("Downloaded syx: " + v["name"].toString() + " (" + juce::String(syx.getSize()) + " bytes)");
-        int midiChannel = channelCombo.getSelectedId();
-        sendVoiceSyx(syx, midiChannel);
-    } else {
-        setStatus("Failed to download syx", true);
+    
+    auto v = filteredVoices[index];
+    if (!v.isObject()) {
+        setStatus("Invalid voice data", true);
+        return;
+    }
+    
+    juce::String sig = v["signature"].toString();
+    if (sig.isEmpty()) { 
+        setStatus("No signature for voice", true); 
+        return; 
+    }
+    
+    juce::String voiceName = v["name"].toString();
+    if (voiceName.isEmpty()) {
+        voiceName = "Unknown Voice";
+    }
+    
+    try {
+        juce::String url = "https://patches.fm/patches/single-voice/dx7/" + sig.substring(0,2) + "/" + sig + ".syx";
+        auto cacheFile = getVoiceSyxCacheFile(url);
+        
+        if (cacheFile.existsAsFile()) {
+            juce::MemoryBlock syx;
+            if (cacheFile.loadFileAsData(syx) && syx.getSize() > 0) {
+                setStatus("Loaded from cache: " + voiceName + " (" + juce::String(syx.getSize()) + " bytes)");
+                int midiChannel = channelCombo.getSelectedId();
+                sendVoiceSyx(syx, midiChannel);
+                return;
+            } else {
+                // Cache file exists but is corrupted, delete it
+                cacheFile.deleteFile();
+            }
+        }
+        
+        // Download with timeout protection
+        juce::URL juceUrl(url);
+        std::unique_ptr<juce::InputStream> stream(juceUrl.createInputStream(false, nullptr, nullptr, 
+            juce::String(), 10000)); // 10 second timeout
+        
+        if (stream != nullptr) {
+            juce::MemoryBlock syx;
+            stream->readIntoMemoryBlock(syx);
+            
+            if (syx.getSize() > 0 && syx.getSize() < 10000) { // Reasonable size check
+                // Ensure cache directory exists
+                cacheFile.getParentDirectory().createDirectory();
+                cacheFile.create();
+                cacheFile.replaceWithData(syx.getData(), syx.getSize());
+                setStatus("Downloaded: " + voiceName + " (" + juce::String(syx.getSize()) + " bytes)");
+                int midiChannel = channelCombo.getSelectedId();
+                sendVoiceSyx(syx, midiChannel);
+            } else {
+                setStatus("Downloaded invalid data for " + voiceName, true);
+            }
+        } else {
+            setStatus("Failed to download " + voiceName, true);
+        }
+    } catch (const std::exception& e) {
+        setStatus("Error loading " + voiceName + ": " + juce::String(e.what()), true);
+    } catch (...) {
+        setStatus("Unknown error loading " + voiceName, true);
     }
 }
 
-void VoiceBrowserComponent::sendVoiceSyx(const juce::MemoryBlock& syx, int midiChannel) {
-    // Convert the .syx file data to DX7 voice format if needed
-    std::vector<uint8_t> dx7Voice;
-    
-    if (syx.getSize() == 155) {
-        // Raw voice data (155 bytes) - copy directly
-        dx7Voice.assign(static_cast<const uint8_t*>(syx.getData()), 
-                       static_cast<const uint8_t*>(syx.getData()) + 155);
-    } else if (syx.getSize() == 163) {
-        // DX7 single voice SysEx format: F0 43 00 00 01 1B ... 155 bytes ... checksum F7
-        // Extract the 155 bytes of voice data (skip header and checksum)
-        if (static_cast<const uint8_t*>(syx.getData())[0] == 0xF0 && 
-            static_cast<const uint8_t*>(syx.getData())[1] == 0x43 &&
-            static_cast<const uint8_t*>(syx.getData())[5] == 0x1B) {
-            dx7Voice.assign(static_cast<const uint8_t*>(syx.getData()) + 6, 
-                           static_cast<const uint8_t*>(syx.getData()) + 6 + 155);
-        } else {
-            setStatus("Invalid SysEx format", true);
+void VoiceBrowserComponent::sendVoiceSyx(const juce::MemoryBlock& syx, int /*midiChannel*/) {
+    try {
+        if (syx.getSize() == 0 || syx.getData() == nullptr) {
+            setStatus("Empty voice data received", true);
             return;
         }
-    } else {
-        setStatus("Unsupported voice data format (size: " + juce::String((int)syx.getSize()) + " bytes)", true);
-        return;
-    }
-    
-    // Convert to Dexed format (156 bytes) if needed
-    std::vector<uint8_t> dexedVoice;
-    if (dx7Voice.size() == 155) {
-        // Already in Dexed format
-        dexedVoice = dx7Voice;
-        dexedVoice.resize(156, 0); // Ensure 156 bytes
-    } else if (dx7Voice.size() == 128) {
-        // Convert from DX7 packed format to Dexed format
-        dexedVoice = VoiceData::convertDX7ToDexed(dx7Voice);
-    } else {
-        setStatus("Invalid voice data size: " + juce::String((int)dx7Voice.size()), true);
-        return;
-    }
-    
-    // Load the voice using the same method as the "Open" button
-    if (onVoiceLoaded) {
-        onVoiceLoaded(dexedVoice);
-        juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
-        setStatus("Voice loaded: " + voiceName);
-    } else {
-        setStatus("No voice loading callback available", true);
+        
+        // Convert the .syx file data to DX7 voice format if needed
+        std::vector<uint8_t> dx7Voice;
+        
+        if (syx.getSize() == 155) {
+            // Raw voice data (155 bytes) - copy directly
+            dx7Voice.assign(static_cast<const uint8_t*>(syx.getData()), 
+                           static_cast<const uint8_t*>(syx.getData()) + 155);
+        } else if (syx.getSize() == 163) {
+            // DX7 single voice SysEx format: F0 43 00 00 01 1B ... 155 bytes ... checksum F7
+            // Extract the 155 bytes of voice data (skip header and checksum)
+            const uint8_t* data = static_cast<const uint8_t*>(syx.getData());
+            if (data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
+                dx7Voice.assign(data + 6, data + 6 + 155);
+            } else {
+                setStatus("Invalid SysEx format", true);
+                return;
+            }
+        } else if (syx.getSize() == 156) {
+            // Already in Dexed format (156 bytes)
+            dx7Voice.assign(static_cast<const uint8_t*>(syx.getData()), 
+                           static_cast<const uint8_t*>(syx.getData()) + 156);
+        } else {
+            setStatus("Unsupported voice data format (size: " + juce::String((int)syx.getSize()) + " bytes)", true);
+            return;
+        }
+        
+        // Convert to Dexed format (156 bytes) if needed
+        std::vector<uint8_t> dexedVoice;
+        if (dx7Voice.size() == 155) {
+            // Convert to Dexed format
+            dexedVoice = dx7Voice;
+            dexedVoice.resize(156, 0); // Ensure 156 bytes
+        } else if (dx7Voice.size() == 156) {
+            // Already correct size
+            dexedVoice = dx7Voice;
+        } else if (dx7Voice.size() == 128) {
+            // Convert from DX7 packed format to Dexed format
+            try {
+                dexedVoice = VoiceData::convertDX7ToDexed(dx7Voice);
+            } catch (...) {
+                setStatus("Failed to convert DX7 voice format", true);
+                return;
+            }
+        } else {
+            setStatus("Invalid voice data size: " + juce::String((int)dx7Voice.size()), true);
+            return;
+        }
+        
+        // Validate voice data before loading
+        if (dexedVoice.size() < 155) {
+            setStatus("Voice data too small: " + juce::String((int)dexedVoice.size()) + " bytes", true);
+            return;
+        }
+        
+        // Load the voice using the callback
+        if (onVoiceLoaded) {
+            onVoiceLoaded(dexedVoice);
+            juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
+            setStatus("Voice loaded: " + voiceName);
+        } else {
+            setStatus("No voice loading callback available", true);
+        }
+    } catch (const std::exception& e) {
+        setStatus("Error processing voice data: " + juce::String(e.what()), true);
+    } catch (...) {
+        setStatus("Unknown error processing voice data", true);
     }
 }
 
@@ -407,9 +464,8 @@ void VoiceBrowserComponent::downloadBankInfo(int index) {
     }
 }
 
-void VoiceBrowserComponent::selectedRowsChanged(int lastRowSelected) {
+void VoiceBrowserComponent::selectedRowsChanged(int /*lastRowSelected*/) {
     bool hasSel = voiceListBox.getSelectedRow() >= 0;
-    editButton.setEnabled(hasSel);
-    sendButton.setEnabled(hasSel);
+    // Buttons removed - voices are loaded automatically when clicked
     if (hasSel) downloadBankInfo(voiceListBox.getSelectedRow());
 }

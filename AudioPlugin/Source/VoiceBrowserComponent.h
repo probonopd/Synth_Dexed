@@ -35,8 +35,7 @@ private:
     juce::TextEditor searchBox;
     juce::ListBox voiceListBox;
     juce::ComboBox channelCombo;
-    juce::TextButton editButton{"Edit"};
-    juce::TextButton sendButton{"Send"};
+    // Buttons removed - voices are loaded automatically when clicked
     juce::Label statusLabel;
     juce::Label bankLabel;
     juce::Array<juce::var> voices;
