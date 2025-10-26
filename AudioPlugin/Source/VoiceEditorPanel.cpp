@@ -32,7 +32,6 @@ namespace
     constexpr int kSliderLabelHeight = 16;
     constexpr int kSliderTextBoxHeight = 18;
     constexpr int kMinSliderWidth = 28;
-    constexpr int kMaxSliderWidth = 44;
 
     void layoutSliderWithLabel(juce::Slider& slider,
                                juce::Label& label,
@@ -379,9 +378,11 @@ void VoiceEditorPanel::resized() {
 
     const int sliderAreaWidth = layoutBounds.getWidth() - kOperatorLabelWidth - kColumnGap - kWidgetColumnWidth - 2 * kRowHorizontalPadding;
     int perSlider = kMinSliderWidth;
-    if (sliderAreaWidth > 0)
-        perSlider = (sliderAreaWidth - (OperatorSliders::NumSliders - 1) * kSliderGap) / OperatorSliders::NumSliders;
-    computedSliderWidth = juce::jlimit(kMinSliderWidth, kMaxSliderWidth, perSlider);
+    if (sliderAreaWidth > 0) {
+        const int usable = sliderAreaWidth - (OperatorSliders::NumSliders - 1) * kSliderGap;
+        perSlider = usable > 0 ? usable / OperatorSliders::NumSliders : kMinSliderWidth;
+    }
+    computedSliderWidth = juce::jmax(kMinSliderWidth, perSlider);
 
     operatorRowCenters.clear();
     operatorRowCenters.reserve(opCount);
@@ -888,11 +889,11 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent());
 
     int sliderAreaWidth = bounds.getWidth();
-    int sliderWidth = juce::jlimit(kMinSliderWidth, kMaxSliderWidth, 36);
+    int sliderWidth = juce::jmax(kMinSliderWidth, 36);
     int sliderHeight = juce::jmax(40, bounds.getHeight() - kSliderLabelHeight);
 
     if (parent != nullptr) {
-        sliderWidth = juce::jlimit(kMinSliderWidth, kMaxSliderWidth, parent->computedSliderWidth);
+        sliderWidth = juce::jmax(kMinSliderWidth, parent->computedSliderWidth);
         sliderHeight = juce::jmax(40, juce::jmin(bounds.getHeight() - kSliderLabelHeight, parent->computedSliderHeight));
     }
 
@@ -903,8 +904,7 @@ void VoiceEditorPanel::OperatorSliders::resized() {
             sliderWidth = juce::jlimit(kMinSliderWidth, sliderWidth, usableWidth / NumSliders);
     }
 
-    const int adjustedTotal = NumSliders * sliderWidth + (NumSliders - 1) * kSliderGap;
-    int sliderX = juce::jmax(bounds.getX(), bounds.getRight() - adjustedTotal);
+    int sliderX = bounds.getX();
     const int sliderY = bounds.getY();
     const int totalSliderHeight = sliderHeight + kSliderLabelHeight;
 
