@@ -97,7 +97,7 @@ VoiceEditorPanel::VoiceEditorPanel()
         // Help panel
         defaultHelpText = "DX7 Voice Editor\nHover over a control for help.";
         helpPanel.setText(defaultHelpText, juce::dontSendNotification);
-        helpPanel.setFont(juce::Font(12.0f));
+    helpPanel.setFont(juce::Font(juce::FontOptions(12.0f)));
         helpPanel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff222222));
         helpPanel.setColour(juce::Label::textColourId, juce::Colours::white);
         helpPanel.setJustificationType(juce::Justification::topLeft);
@@ -165,7 +165,7 @@ VoiceEditorPanel::VoiceEditorPanel()
                 if (!controller) return;
                 auto it2 = operatorSliderParamOffsets.find(vcedKey);
                 if (it2 != operatorSliderParamOffsets.end())
-                    setDexedParam(it2->second, (uint8_t)globalSliders[i].getValue());
+                    setDexedParam(it2->second, static_cast<uint8_t>(globalSliders[i].getValue()));
             };
             globalSliders[i].addMouseListener(this, false);
         }
@@ -212,7 +212,7 @@ VoiceEditorPanel::VoiceEditorPanel()
                 }
                 auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
                 if (it != operatorSliderParamOffsets.end())
-                    setDexedParam(it->second, (uint8_t)globalSliders[i].getValue());
+                    setDexedParam(it->second, static_cast<uint8_t>(globalSliders[i].getValue()));
             };
         }
 
@@ -229,11 +229,12 @@ VoiceEditorPanel::VoiceEditorPanel()
             auto rack = controller->getRack();
             if (rack) {
                 const auto& modules = rack->getModules();
-                if (!modules.empty() && moduleIndex >= 0 && moduleIndex < (int)modules.size()) {
+                if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
                     auto* dexed = modules[moduleIndex]->getDexedEngine();
                     if (dexed) {
                         for (int i = 0; i < 10; ++i) {
-                            dexed->setVoiceDataElement(145 + i, (uint8_t)newName[i]);
+                            const auto byte = static_cast<uint8_t>(static_cast<unsigned char>(newName[i]));
+                            dexed->setVoiceDataElement(static_cast<uint8_t>(145 + i), byte);
                         }
                     }
                 }
@@ -284,8 +285,7 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float svgNumberDistance = svgBounds.getHeight() * 0.71f;
         float scaleFactor = uiDistance / svgNumberDistance;
-        const float desiredX = svgDrawArea.getX() + 4.0f;
-        float offsetX = desiredX - svgBounds.getX() * scaleFactor;
+        float offsetX = svgDrawArea.getX() - svgBounds.getX() * scaleFactor;
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scaleFactor;
         auto transform = AffineTransform::scale(scaleFactor, scaleFactor)
             .followedBy(AffineTransform::translation(offsetX, offsetY));
@@ -294,8 +294,7 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float scale = std::min(svgDrawArea.getWidth() / svgBounds.getWidth(), 
                               svgDrawArea.getHeight() / svgBounds.getHeight());
-        const float desiredX = svgDrawArea.getX() + 4.0f;
-        float offsetX = desiredX - svgBounds.getX() * scale;
+        float offsetX = svgDrawArea.getX() - svgBounds.getX() * scale;
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scale;
         juce::AffineTransform transform = juce::AffineTransform::scale(scale)
                                                                 .translated(offsetX, offsetY);
@@ -477,7 +476,7 @@ void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
     GET_BINARYDATA_PTR(01) else GET_BINARYDATA_PTR(02) else GET_BINARYDATA_PTR(03) else GET_BINARYDATA_PTR(04) else GET_BINARYDATA_PTR(05) else GET_BINARYDATA_PTR(06) else GET_BINARYDATA_PTR(07) else GET_BINARYDATA_PTR(08) else GET_BINARYDATA_PTR(09) else GET_BINARYDATA_PTR(10) else GET_BINARYDATA_PTR(11) else GET_BINARYDATA_PTR(12) else GET_BINARYDATA_PTR(13) else GET_BINARYDATA_PTR(14) else GET_BINARYDATA_PTR(15) else GET_BINARYDATA_PTR(16) else GET_BINARYDATA_PTR(17) else GET_BINARYDATA_PTR(18) else GET_BINARYDATA_PTR(19) else GET_BINARYDATA_PTR(20) else GET_BINARYDATA_PTR(21) else GET_BINARYDATA_PTR(22) else GET_BINARYDATA_PTR(23) else GET_BINARYDATA_PTR(24) else GET_BINARYDATA_PTR(25) else GET_BINARYDATA_PTR(26) else GET_BINARYDATA_PTR(27) else GET_BINARYDATA_PTR(28) else GET_BINARYDATA_PTR(29) else GET_BINARYDATA_PTR(30) else GET_BINARYDATA_PTR(31) else GET_BINARYDATA_PTR(32);
     #undef GET_BINARYDATA_PTR
     if (data && dataSize > 0) {
-        std::unique_ptr<juce::XmlElement> svgXml = juce::XmlDocument::parse(juce::String::fromUTF8((const char*)data, dataSize));
+    std::unique_ptr<juce::XmlElement> svgXml = juce::XmlDocument::parse(juce::String::fromUTF8(reinterpret_cast<const char*>(data), dataSize));
         if (svgXml) {
             algorithmSvg.reset(juce::Drawable::createFromSVG(*svgXml).release());
             std::cout << "[VoiceEditorPanel] SVG loaded successfully for algorithm " << (algorithmIdx + 1) << std::endl;
@@ -498,7 +497,7 @@ void VoiceEditorPanel::loadHelpJson() {
     auto* data = BinaryData::VCED_json;
     int dataSize = BinaryData::VCED_jsonSize;
     std::cout << "[VoiceEditorPanel] Loading help JSON from BinaryData (embedded resource)" << std::endl;
-    juce::String jsonStr = juce::String::fromUTF8((const char*)data, dataSize);
+    juce::String jsonStr = juce::String::fromUTF8(reinterpret_cast<const char*>(data), dataSize);
     var json = JSON::parse(jsonStr);
     if (!json.isObject()) {
         std::cout << "[VoiceEditorPanel] VCED.json parse failed" << std::endl;
@@ -513,9 +512,9 @@ void VoiceEditorPanel::loadHelpJson() {
             auto* obj = p.getDynamicObject();
             if (obj && obj->hasProperty("key") && !obj->getProperty("parameter_number").isVoid()) {
                 auto key = obj->getProperty("key").toString();
-                uint8_t paramNum = (uint8_t)obj->getProperty("parameter_number").toString().getIntValue();
+                const auto paramNum = static_cast<uint8_t>(obj->getProperty("parameter_number").toString().getIntValue());
                 operatorSliderParamOffsets[key] = paramNum;
-                std::cout << "[VoiceEditorPanel] operatorSliderParamOffsets: " << key << " -> " << (int)paramNum << std::endl;
+                std::cout << "[VoiceEditorPanel] operatorSliderParamOffsets: " << key << " -> " << static_cast<int>(paramNum) << std::endl;
             }
             auto keyStd = obj ? obj->getProperty("key").toString().toStdString() : std::string();
             juce::String name = obj ? obj->getProperty("name").toString() : juce::String();
@@ -544,9 +543,9 @@ void VoiceEditorPanel::loadHelpJson() {
             auto* obj = p.getDynamicObject();
             if (obj && obj->hasProperty("key") && !obj->getProperty("parameter_number").isVoid()) {
                 auto key = obj->getProperty("key").toString();
-                uint8_t paramNum = (uint8_t)obj->getProperty("parameter_number").toString().getIntValue();
+                const auto paramNum = static_cast<uint8_t>(obj->getProperty("parameter_number").toString().getIntValue());
                 operatorSliderParamOffsets[key] = paramNum;
-                std::cout << "[VoiceEditorPanel] operatorSliderParamOffsets (TX816Perf): " << key << " -> " << (int)paramNum << std::endl;
+                std::cout << "[VoiceEditorPanel] operatorSliderParamOffsets (TX816Perf): " << key << " -> " << static_cast<int>(paramNum) << std::endl;
             }
             auto keyStd = obj ? obj->getProperty("key").toString().toStdString() : std::string();
             juce::String name = obj ? obj->getProperty("name").toString() : juce::String();
@@ -625,16 +624,18 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
                             } else if (valuesVar.isArray()) {
                                 auto* arr = valuesVar.getArray();
                                 for (auto& v : *arr) {
-                                    allowedValues.push_back((int)v);
+                                    allowedValues.push_back(static_cast<double>(static_cast<int>(v)));
                                 }
                             }
                             std::sort(allowedValues.begin(), allowedValues.end());
                             if (!allowedValues.empty()) {
                                 minValue = 0;
-                                maxValue = (double)(allowedValues.size() - 1);
-                                auto it = std::find(allowedValues.begin(), allowedValues.end(), (int)defaultValue);
+                                const auto valueCount = static_cast<int>(allowedValues.size());
+                                maxValue = static_cast<double>(valueCount - 1);
+                                const auto searchValue = static_cast<double>(static_cast<int>(defaultValue));
+                                auto it = std::find(allowedValues.begin(), allowedValues.end(), searchValue);
                                 if (it != allowedValues.end())
-                                    defaultValue = std::distance(allowedValues.begin(), it);
+                                    defaultValue = static_cast<double>(std::distance(allowedValues.begin(), it));
                                 else
                                     defaultValue = 0;
                             }
@@ -652,15 +653,15 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
     if (isDiscrete && !allowedLabels.empty()) {
         slider.setTextValueSuffix("");
         slider.textFromValueFunction = [allowedLabels, allowedValues](double v) {
-            int idx = (int)v;
-            if (idx >= 0 && idx < (int)allowedLabels.size())
+            const auto idx = static_cast<int>(v);
+            if (idx >= 0 && idx < static_cast<int>(allowedLabels.size()))
                 return allowedLabels[idx];
-            return juce::String((int)v);
+            return juce::String(idx);
         };
         slider.valueFromTextFunction = [allowedValues](const juce::String& text) {
             for (size_t i = 0; i < allowedValues.size(); ++i) {
-                if (text == juce::String((int)allowedValues[i]))
-                    return (double)i;
+                if (text == juce::String(static_cast<int>(allowedValues[i])))
+                    return static_cast<double>(i);
             }
             return 0.0;
         };
@@ -669,14 +670,14 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
 
 // Synchronize slider value with Dexed engine
 void VoiceEditorPanel::syncOperatorSliderWithDexed(Slider& slider, uint8_t paramAddress, const char* sliderKey) {
-    std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] paramAddress=" << (int)paramAddress << " sliderKey=" << (sliderKey ? sliderKey : "null") << std::endl;
+    std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] paramAddress=" << static_cast<int>(paramAddress) << " sliderKey=" << (sliderKey ? sliderKey : "null") << std::endl;
     if (controller && sliderKey) {
         uint8_t value = getDexedParam(paramAddress);
         auto range = getDexedRange(sliderKey);
         double oldValue = slider.getValue();
         slider.setValue(static_cast<double>(value), juce::dontSendNotification);
         slider.setRange(range.first, range.second, 1.0);
-        std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] " << sliderKey << ": value=" << (int)value << " range=[" << (int)range.first << "-" << (int)range.second << "] oldSlider=" << oldValue << " newSlider=" << slider.getValue() << std::endl;
+    std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] " << sliderKey << ": value=" << static_cast<int>(value) << " range=[" << static_cast<int>(range.first) << "-" << static_cast<int>(range.second) << "] oldSlider=" << oldValue << " newSlider=" << slider.getValue() << std::endl;
     } else {
         std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] skipping: controller=" << controller << " sliderKey=" << (sliderKey ? sliderKey : "null") << std::endl;
     }
@@ -693,12 +694,12 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         auto rack = controller->getRack();
         if (rack) {
             const auto& modules = rack->getModules();
-            if (!modules.empty() && moduleIndex >= 0 && moduleIndex < (int)modules.size()) {
+            if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
                 auto* dexed = modules[moduleIndex]->getDexedEngine();
                 if (dexed) {
                     // Dexed voice name is at bytes 145-154 (10 bytes)
                     uint8_t nameBytes[10] = {0};
-                    for (int i = 0; i < 10; ++i) nameBytes[i] = dexed->getVoiceDataElement(145 + i);
+                    for (int i = 0; i < 10; ++i) nameBytes[i] = dexed->getVoiceDataElement(static_cast<uint8_t>(145 + i));
                     std::string name(reinterpret_cast<const char*>(nameBytes), 10);
                     // Remove leading/trailing spaces
                     size_t first = name.find_first_not_of(' ');
@@ -715,7 +716,7 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
             }
         }
     }
-    uint8_t opeBitmask = getDexedParam(155);
+    uint8_t opeBitmask = getDexedParam(static_cast<uint8_t>(155));
     int numOps = static_cast<int>(operators.size());
     for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
         auto& op = operators[uiRowIdx];
@@ -725,7 +726,7 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         bool opEnabled = (opeBitmask & (1 << dexedOpIdx)) != 0;
         double oldOpeValue = op->sliders[0].getValue();
         op->sliders[0].setValue(opEnabled ? 1 : 0, juce::dontSendNotification);
-        std::cout << "  OPE: opeBitmask=0x" << std::hex << (int)opeBitmask << std::dec << " enabled=" << opEnabled << " oldSlider=" << oldOpeValue << " newSlider=" << op->sliders[0].getValue() << std::endl;
+    std::cout << "  OPE: opeBitmask=0x" << std::hex << static_cast<int>(opeBitmask) << std::dec << " enabled=" << opEnabled << " oldSlider=" << oldOpeValue << " newSlider=" << op->sliders[0].getValue() << std::endl;
         for (int s = 1; s < OperatorSliders::NumSliders; ++s) {
             const juce::String sliderName = OperatorSliders::sliderNames[s];
             auto it = operatorSliderParamOffsets.find(sliderName);
@@ -735,7 +736,7 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
             }
             uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             uint8_t value = getDexedParam(paramAddress);
-            std::cout << "  OP" << (dexedOpIdx+1) << " " << sliderName << " paramAddr=" << (int)paramAddress << " value=" << (int)value << std::endl;
+            std::cout << "  OP" << (dexedOpIdx+1) << " " << sliderName << " paramAddr=" << static_cast<int>(paramAddress) << " value=" << static_cast<int>(value) << std::endl;
             syncOperatorSliderWithDexed(op->sliders[s], paramAddress, sliderName.toRawUTF8());
         }
         // --- Envelope widget update ---
@@ -775,13 +776,13 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
     for (int i = 0; i < numGlobalSliders; ++i) {
         auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
         if (it != operatorSliderParamOffsets.end()) {
-            globalSliders[i].setValue(getDexedParam(it->second), juce::dontSendNotification);
+            globalSliders[i].setValue(getDexedParam(static_cast<uint8_t>(it->second)), juce::dontSendNotification);
         }
     }
     // --- PEG Envelope ---
     std::vector<float> pegRates, pegLevels;
-    for (int i = 0; i < 4; ++i) pegRates.push_back(getDexedParam(124 + i) / 99.0f); // Example
-    for (int i = 0; i < 4; ++i) pegLevels.push_back(getDexedParam(128 + i) / 99.0f); // Example
+    for (int i = 0; i < 4; ++i) pegRates.push_back(getDexedParam(static_cast<uint8_t>(124 + i)) / 99.0f); // Example
+    for (int i = 0; i < 4; ++i) pegLevels.push_back(getDexedParam(static_cast<uint8_t>(128 + i)) / 99.0f); // Example
     pegEnvelopeWidget.setEnvelope(pegRates, pegLevels);
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: calling repaint() to update UI" << std::endl;
     repaint();
@@ -797,7 +798,7 @@ std::vector<int> VoiceEditorPanel::getCarrierIndicesForAlgorithm(int algoIdx) co
         {0, 1, 2, 3, 4}, {0, 1, 2, 3, 4}, {0, 1, 3}, {0, 1, 3}, {0, 2, 5}, {0, 1, 2, 4},
         {0, 1, 2, 5}, {0, 1, 2, 3, 4}, {0, 1, 2, 3, 4, 5}
     };
-    if (algoIdx < 0 || algoIdx >= (int)carrierMap.size()) return {};
+    if (algoIdx < 0 || algoIdx >= static_cast<int>(carrierMap.size())) return {};
     return carrierMap[algoIdx];
 }
 
@@ -878,7 +879,6 @@ void VoiceEditorPanel::OperatorSliders::resized() {
     bounds = bounds.reduced(kRowHorizontalPadding, 0);
 
     auto widgetColumn = bounds.removeFromRight(kWidgetColumnWidth);
-    bounds.removeFromRight(kColumnGap);
 
     auto envBounds = widgetColumn.removeFromLeft(kWidgetWidth);
     auto ksBounds = widgetColumn.removeFromRight(kWidgetWidth);
@@ -896,12 +896,15 @@ void VoiceEditorPanel::OperatorSliders::resized() {
         sliderHeight = juce::jmax(40, juce::jmin(bounds.getHeight() - kSliderLabelHeight, parent->computedSliderHeight));
     }
 
-    const int totalNeeded = NumSliders * sliderWidth + (NumSliders - 1) * kSliderGap;
-    if (totalNeeded > sliderAreaWidth) {
-        sliderWidth = juce::jlimit(kMinSliderWidth, sliderWidth, (sliderAreaWidth - (NumSliders - 1) * kSliderGap) / NumSliders);
+    const int totalUsed = NumSliders * sliderWidth + (NumSliders - 1) * kSliderGap;
+    if (totalUsed > sliderAreaWidth) {
+        const int usableWidth = sliderAreaWidth - (NumSliders - 1) * kSliderGap;
+        if (usableWidth > 0)
+            sliderWidth = juce::jlimit(kMinSliderWidth, sliderWidth, usableWidth / NumSliders);
     }
 
-    int sliderX = bounds.getX();
+    const int adjustedTotal = NumSliders * sliderWidth + (NumSliders - 1) * kSliderGap;
+    int sliderX = juce::jmax(bounds.getX(), bounds.getRight() - adjustedTotal);
     const int sliderY = bounds.getY();
     const int totalSliderHeight = sliderHeight + kSliderLabelHeight;
 
@@ -935,12 +938,13 @@ void VoiceEditorPanel::OperatorSliders::resized() {
                 sliders[i].onValueChange = [parent]() {
                     if (!parent->controller) return;
                     uint8_t bitmask = 0;
-                    for (int op = 0; op < parent->operators.size(); ++op) {
+                    const int operatorCount = static_cast<int>(parent->operators.size());
+                    for (int op = 0; op < operatorCount; ++op) {
                         const auto& opSliders = parent->operators[op];
                         const int val = static_cast<int>(opSliders->sliders[0].getValue());
-                        if (val != 0) bitmask |= (1 << op);
+                        if (val != 0) bitmask |= static_cast<uint8_t>(1u << op);
                     }
-                    parent->setDexedParam(155, bitmask);
+                    parent->setDexedParam(static_cast<uint8_t>(155), bitmask);
                 };
             } else {
                 sliders[i].onValueChange = [parent, paramAddress, i, this]() {
@@ -978,6 +982,7 @@ void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx) {
 }
 
 void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
+    juce::ignoreUnused(sliderIdx);
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
         parent->restoreDefaultHelp();
 }
@@ -1036,17 +1041,17 @@ uint8_t VoiceEditorPanel::getDexedParam(uint8_t address) const {
         std::cout << "[VoiceEditorPanel::getDexedParam] called before isInitialized, skipping" << std::endl;
         return 0;
     }
-    std::cout << "[VoiceEditorPanel::getDexedParam] called with address=" << (int)address << ", moduleIndex=" << moduleIndex;
+    std::cout << "[VoiceEditorPanel::getDexedParam] called with address=" << static_cast<int>(address) << ", moduleIndex=" << moduleIndex;
     if (!controller) { std::cout << " [VoiceEditorPanel] getDexedParam: controller is null" << std::endl; return 0; }
     auto rack = controller->getRack();
     if (!rack) { std::cout << " [VoiceEditorPanel] getDexedParam: rack is null" << std::endl; return 0; }
     const auto& modules = rack->getModules();
-    if (modules.empty() || moduleIndex < 0 || moduleIndex >= (int)modules.size()) { std::cout << " [VoiceEditorPanel] getDexedParam: modules empty or bad index" << std::endl; return 0; }
+    if (modules.empty() || moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) { std::cout << " [VoiceEditorPanel] getDexedParam: modules empty or bad index" << std::endl; return 0; }
     auto* dexed = modules[moduleIndex]->getDexedEngine();
     std::cout << ", module ptr=" << modules[moduleIndex].get() << std::endl;
     if (!dexed) { std::cout << " [VoiceEditorPanel] getDexedParam: dexed is null" << std::endl; return 0; }
     uint8_t v = dexed->getVoiceDataElement(address);
-    std::cout << "[VoiceEditorPanel] getDexedParam: address=" << (int)address << " value=" << (int)v << std::endl;
+    std::cout << "[VoiceEditorPanel] getDexedParam: address=" << static_cast<int>(address) << " value=" << static_cast<int>(v) << std::endl;
     return v;
 }
 
@@ -1059,20 +1064,21 @@ std::pair<uint8_t, uint8_t> VoiceEditorPanel::getDexedRange(const char* sliderKe
                 for (auto& p : *params) {
                     auto* obj = p.getDynamicObject();
                     if (obj && obj->hasProperty("key") && obj->getProperty("key").toString().equalsIgnoreCase(key)) {
-                        uint8_t minVal = obj->hasProperty("min") ? (uint8_t)obj->getProperty("min").toString().getIntValue() : 0;
-                        uint8_t maxVal = obj->hasProperty("max") ? (uint8_t)obj->getProperty("max").toString().getIntValue() : 99;
+                        uint8_t minVal = obj->hasProperty("min") ? static_cast<uint8_t>(obj->getProperty("min").toString().getIntValue()) : 0;
+                        uint8_t maxVal = obj->hasProperty("max") ? static_cast<uint8_t>(obj->getProperty("max").toString().getIntValue()) : 99;
                         return {minVal, maxVal};
                     }
                 }
             }
-            return {0, 99};
+            return {static_cast<uint8_t>(0), static_cast<uint8_t>(99)};
         };
         auto r = searchRange("parameters");
-        if (r != std::pair<uint8_t, uint8_t>{0, 99}) return r;
+        const std::pair<uint8_t, uint8_t> defaultRange{static_cast<uint8_t>(0), static_cast<uint8_t>(99)};
+        if (r != defaultRange) return r;
         r = searchRange("TX816Perf");
-        if (r != std::pair<uint8_t, uint8_t>{0, 99}) return r;
+        if (r != defaultRange) return r;
     }
-    return {0, 99};
+    return {static_cast<uint8_t>(0), static_cast<uint8_t>(99)};
 }
 
 void VoiceEditorPanel::setController(FMRackController* controller_) {
@@ -1091,10 +1097,10 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
     std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] called, data.size()=" << data.size() << ", moduleIndex=" << moduleIndex << std::endl;
     if (!data.empty()) {
         std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] first 32 bytes: ";
-        for (size_t i = 0; i < std::min<size_t>(32, data.size()); ++i) std::cout << std::hex << (int)data[i] << " ";
+    for (size_t i = 0; i < std::min<size_t>(32, data.size()); ++i) std::cout << std::hex << static_cast<int>(data[i]) << " ";
         std::cout << std::dec << std::endl;
         std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] last 8 bytes: ";
-        for (size_t i = (data.size() > 8 ? data.size() - 8 : 0); i < data.size(); ++i) std::cout << std::hex << (int)data[i] << " ";
+    for (size_t i = (data.size() > 8 ? data.size() - 8 : 0); i < data.size(); ++i) std::cout << std::hex << static_cast<int>(data[i]) << " ";
         std::cout << std::dec << std::endl;
     }
     // Expect 163 bytes for DX7 single voice sysex: F0 43 00 00 01 1B ... 155 bytes ... checksum F7
@@ -1109,7 +1115,8 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
                 // Print raw bytes for diagnosis
                 std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Raw voice name bytes: ";
                 for (int i = 0; i < 10; ++i) {
-                    std::cout << std::hex << (int)(unsigned char)dataCopy[6 + 145 + i] << " ";
+                    const auto byteValue = static_cast<unsigned char>(dataCopy[6 + 145 + i]);
+                    std::cout << std::hex << static_cast<int>(byteValue) << " ";
                 }
                 std::cout << std::dec << std::endl;
                 // Remove trailing and leading spaces
@@ -1128,23 +1135,23 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
                 std::lock_guard<std::mutex> lock(controller->getMutex());
                 const auto& modules = controller->getRack()->getModules();
                 std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] modules.size()=" << modules.size() << std::endl;
-                if (!modules.empty() && moduleIndex >= 0 && moduleIndex < (int)modules.size()) {
+                if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
                     auto* dexed = modules[moduleIndex]->getDexedEngine();
                     std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] dexed=" << dexed << std::endl;
                     if (dexed) {
-                        uint8_t currentOpeBitmask = dexed->getVoiceDataElement(155);
+                        uint8_t currentOpeBitmask = dexed->getVoiceDataElement(static_cast<uint8_t>(155));
                         if (currentOpeBitmask == 0x0) {
                             currentOpeBitmask = 0x3F;
                             std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Current OPE bitmask was 0x0, defaulting to 0x3F (all operators enabled)" << std::endl;
                         } else {
-                            std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Preserving current OPE bitmask: 0x" << std::hex << (int)currentOpeBitmask << std::dec << std::endl;
+                            std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Preserving current OPE bitmask: 0x" << std::hex << static_cast<int>(currentOpeBitmask) << std::dec << std::endl;
                         }
                         for (int i = 0; i < 155; ++i) {
-                            std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Setting Dexed param " << i << " = " << (int)dataCopy[6 + i] << std::endl;
-                            dexed->setVoiceDataElement(i, dataCopy[6 + i]);
+                            std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Setting Dexed param " << i << " = " << static_cast<int>(dataCopy[6 + i]) << std::endl;
+                            dexed->setVoiceDataElement(static_cast<uint8_t>(i), dataCopy[6 + i]);
                         }
-                        dexed->setVoiceDataElement(155, currentOpeBitmask);
-                        std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Restored OPE bitmask: 0x" << std::hex << (int)currentOpeBitmask << std::dec << std::endl;
+                        dexed->setVoiceDataElement(static_cast<uint8_t>(155), currentOpeBitmask);
+                        std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Restored OPE bitmask: 0x" << std::hex << static_cast<int>(currentOpeBitmask) << std::dec << std::endl;
                         std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Calling dexed->doRefreshVoice()" << std::endl;
                         dexed->doRefreshVoice();
                     } else {
@@ -1169,12 +1176,12 @@ void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
         std::cout << "[VoiceEditorPanel::setDexedParam] called before isInitialized, skipping" << std::endl;
         return;
     }
-    std::cout << "[VoiceEditorPanel::setDexedParam] called, address=" << (int)address << ", value=" << (int)value << ", moduleIndex=" << moduleIndex << std::endl;
+    std::cout << "[VoiceEditorPanel::setDexedParam] called, address=" << static_cast<int>(address) << ", value=" << static_cast<int>(value) << ", moduleIndex=" << moduleIndex << std::endl;
     if (controller) {
         auto rack = controller->getRack();
         if (rack) {
             const auto& modules = rack->getModules();
-            if (!modules.empty() && moduleIndex >= 0 && moduleIndex < (int)modules.size()) {
+            if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
                 auto* dexed = modules[moduleIndex]->getDexedEngine();
                 if (dexed) {
                     dexed->setVoiceDataElement(address, value);

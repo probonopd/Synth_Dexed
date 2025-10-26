@@ -146,7 +146,10 @@ void VoiceBrowserComponent::loadVoiceList() {
     juce::URL url(voiceListUrl);
     
     setStatus("Downloading voice list...");
-    std::unique_ptr<juce::InputStream> stream(url.createInputStream(false));
+    auto listDownloadOptions = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                                   .withConnectionTimeoutMs(15000)
+                                   .withHttpRequestCmd("GET");
+    std::unique_ptr<juce::InputStream> stream(url.createInputStream(listDownloadOptions));
     if (stream != nullptr) {
         std::cerr << "[VoiceBrowser] Download stream created successfully" << std::endl;
         juce::String json = stream->readEntireStreamAsString();
@@ -326,8 +329,10 @@ void VoiceBrowserComponent::downloadVoiceSyx(int index) {
         
         // Download with timeout protection
         juce::URL juceUrl(url);
-        std::unique_ptr<juce::InputStream> stream(juceUrl.createInputStream(false, nullptr, nullptr, 
-            juce::String(), 10000)); // 10 second timeout
+    auto downloadOptions = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                    .withConnectionTimeoutMs(10000)
+                    .withHttpRequestCmd("GET");
+        std::unique_ptr<juce::InputStream> stream(juceUrl.createInputStream(downloadOptions));
         
         if (stream != nullptr) {
             juce::MemoryBlock syx;
@@ -446,7 +451,10 @@ void VoiceBrowserComponent::downloadBankInfo(int index) {
         return;
     }
     juce::URL juceUrl(url);
-    std::unique_ptr<juce::InputStream> stream(juceUrl.createInputStream(false));
+    auto downloadOptions = juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
+                                .withConnectionTimeoutMs(15000)
+                                .withHttpRequestCmd("GET");
+    std::unique_ptr<juce::InputStream> stream(juceUrl.createInputStream(downloadOptions));
     if (stream != nullptr) {
         juce::String result = stream->readEntireStreamAsString();
         juce::var json = juce::JSON::parse(result);

@@ -63,7 +63,7 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     }
     g.strokePath(ksPath, juce::PathStrokeType(2.0f));
     // Draw parameter values above and below the graph
-    g.setFont(juce::Font(10.0f));
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
     g.setColour(juce::Colours::white);
     // Top: Breakpoint, LeftDepth, RightDepth
     juce::Rectangle<float> topArea = area.withHeight(textHeight);
@@ -130,10 +130,12 @@ void KeyboardScalingDisplay::mouseMove(const juce::MouseEvent& e) {
 }
 
 void KeyboardScalingDisplay::mouseEnter(const juce::MouseEvent& e) {
+    juce::ignoreUnused(e);
     // No-op: help text is now handled by callback in mouseMove
 }
 
 void KeyboardScalingDisplay::mouseExit(const juce::MouseEvent& e) {
+    juce::ignoreUnused(e);
     hoveredParam = -1;
     repaint();
     if (auto* parent = getParentComponent()) {
@@ -145,6 +147,7 @@ void KeyboardScalingDisplay::mouseExit(const juce::MouseEvent& e) {
 }
 
 void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
+    juce::ignoreUnused(e);
     if (hoveredParam == -1) return;
     int opIdx = -1;
     if (auto* parent = getParentComponent()) {
@@ -186,7 +189,7 @@ void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juc
                         int dir = wheel.deltaY > 0 ? 1 : -1;
                         idx = (idx + dir + n) % n;
                         leftCurve = curveVals[idx];
-                        uint8_t value = (uint8_t)idx;
+                        uint8_t value = static_cast<uint8_t>(idx);
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 11);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 4) { // RC
@@ -197,7 +200,7 @@ void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juc
                         int dir = wheel.deltaY > 0 ? 1 : -1;
                         idx = (idx + dir + n) % n;
                         rightCurve = curveVals[idx];
-                        uint8_t value = (uint8_t)idx;
+                        uint8_t value = static_cast<uint8_t>(idx);
                         paramAddress = static_cast<uint8_t>(opIdx * 21 + 12);
                         vep->setDexedParam(paramAddress, value);
                     }

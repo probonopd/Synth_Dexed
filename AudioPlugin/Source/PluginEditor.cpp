@@ -80,16 +80,9 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         logTextBox.setMultiLine(true);
         logTextBox.setReadOnly(true);
         logTextBox.setScrollbarsShown(true);
-        logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
-        logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable: 4996)
-#endif
-        logTextBox.setFont(juce::Font(12.0f));
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
+    logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
+    logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+    logTextBox.setFont(juce::Font(juce::FontOptions(12.0f)));
         addAndMakeVisible(logTextBox);
         juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(logTextBox)");
         logTextBox.insertTextAtCaret("[PluginEditor] Constructor started\n");
@@ -132,7 +125,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
                 maxVal = static_cast<int>(param->getNormalisableRange().end);
                 if (currentVal < maxVal)
                 {
-                    param->setValueNotifyingHost(param->convertTo0to1(currentVal + 1));
+                    param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(currentVal + 1)));
                     numModulesChanged();
                 }
             }
@@ -152,7 +145,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
                 minVal = static_cast<int>(param->getNormalisableRange().start);
                 if (currentVal > minVal)
                 {
-                    param->setValueNotifyingHost(param->convertTo0to1(currentVal - 1));
+                    param->setValueNotifyingHost(param->convertTo0to1(static_cast<float>(currentVal - 1)));
                     numModulesChanged();
                 }
             }

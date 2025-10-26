@@ -57,7 +57,7 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
         g.strokePath(envPath, juce::PathStrokeType(2.0f));
     }
     // Draw parameter values as separate items
-    g.setFont(juce::Font(10.0f));
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
     g.setColour(juce::Colours::white);
     float w = area.getWidth();
     float itemW = w / 4.0f;
@@ -129,11 +129,13 @@ void EnvelopeDisplay::mouseMove(const juce::MouseEvent& e) {
 }
 
 void EnvelopeDisplay::mouseExit(const juce::MouseEvent& e) {
+    juce::ignoreUnused(e);
     hoveredParam = -1;
     repaint();
 }
 
 void EnvelopeDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
+    juce::ignoreUnused(e);
     if (hoveredParam == -1) return;
     float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
     int opIdx = -1;
@@ -173,5 +175,6 @@ void EnvelopeDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::Mous
 }
 
 void EnvelopeDisplay::mouseEnter(const juce::MouseEvent& e) {
+    juce::ignoreUnused(e);
     // No-op: help text is now handled by callback in mouseMove
 }

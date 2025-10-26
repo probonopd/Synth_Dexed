@@ -442,10 +442,10 @@ void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData
     if (controller && controller->getPerformance())
     {
         // Use a temporary file to save the performance as INI
-        char tmpPath[L_tmpnam];
-        std::tmpnam(tmpPath);
-        controller->getPerformance()->saveToFile(tmpPath);
-        std::ifstream file(tmpPath, std::ios::binary);
+        auto tempFile = juce::File::createTempFile("FMRackState.ini");
+        const auto tempPath = tempFile.getFullPathName().toStdString();
+        controller->getPerformance()->saveToFile(tempPath);
+        std::ifstream file(tempPath, std::ios::binary);
         if (file)
         {
             std::ostringstream oss;
@@ -455,7 +455,7 @@ void AudioPluginAudioProcessor::getStateInformation (juce::MemoryBlock& destData
             juce::MemoryOutputStream stream(destData, false);
             stream.writeString(iniString);
         }
-        std::remove(tmpPath);
+        tempFile.deleteFile();
     }
 }
 
@@ -466,14 +466,14 @@ void AudioPluginAudioProcessor::setStateInformation (const void* data, int sizeI
         juce::Logger::writeToLog("[PluginProcessor] setStateInformation called");
         juce::MemoryInputStream stream(data, static_cast<size_t>(sizeInBytes), false);
         juce::String iniString = stream.readString();
-        char tmpPath[L_tmpnam];
-        std::tmpnam(tmpPath);
+        auto tempFile = juce::File::createTempFile("FMRackState.ini");
+        const auto tempPath = tempFile.getFullPathName().toStdString();
         {
-            std::ofstream file(tmpPath, std::ios::binary);
+            std::ofstream file(tempPath, std::ios::binary);
             file << iniString.toStdString();
         }
-        controller->getPerformance()->loadFromFile(tmpPath);
-        std::remove(tmpPath);
+        controller->getPerformance()->loadFromFile(tempPath);
+        tempFile.deleteFile();
         // Cache the loaded performance for later controller recreation
         if (!cachedPerformance) cachedPerformance = std::make_unique<FMRack::Performance>();
         *cachedPerformance = *controller->getPerformance();
@@ -537,8 +537,10 @@ void AudioPluginAudioProcessor::setNumModules(int num) {
         }
         if (allZero) {
             juce::Logger::writeToLog("[PluginProcessor] setNumModules: all MIDI channels zero, assigning 1..N");
-            for (int i = 0; i < 16; ++i)
-                controller->getPerformance()->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
+            for (int i = 0; i < 16; ++i) {
+                const uint8_t channel = static_cast<uint8_t>((i < num) ? (i + 1) : 0);
+                controller->getPerformance()->parts[i].midiChannel = channel;
+            }
             controller->setPerformance(*controller->getPerformance());
         } else {
             juce::Logger::writeToLog("[PluginProcessor] setNumModules: NOT all MIDI channels zero, skipping assignment");
@@ -553,7 +555,7 @@ void AudioPluginAudioProcessor::setNumModules(int num) {
 void AudioPluginAudioProcessor::setUnisonVoices(int num) {
     if (controller && controller->getPerformance()) {
         for (int i = 0; i < 16; ++i)
-            controller->getPerformance()->parts[i].unisonVoices = num;
+            controller->getPerformance()->parts[i].unisonVoices = static_cast<uint8_t>(num);
         controller->setPerformance(*controller->getPerformance());
     }
 }

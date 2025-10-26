@@ -189,7 +189,7 @@ void RackAccordionComponent::setNumModulesVT(int num) {
                     if (newPerf.parts[i].midiChannel == 0)
                     {
                         newPerf.parts[i] = FMRack::Performance::PartConfig(); // Reset to default
-                        newPerf.parts[i].midiChannel = i + 1;                   // Assign a unique MIDI channel
+                        newPerf.parts[i].midiChannel = static_cast<uint8_t>(i + 1); // Assign a unique MIDI channel
                     }
                 }
                 else
@@ -643,7 +643,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     noteLimitHighSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)noteLimitHighSlider.getValue();
+        const auto newValue = static_cast<uint8_t>(noteLimitHighSlider.getValue());
         if (part.noteLimitHigh != newValue) {
             part.noteLimitHigh = newValue;
             getController()->setPerformance(*perf);
@@ -652,7 +652,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     noteShiftSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        int8_t newValue = (int8_t)noteShiftSlider.getValue();
+        const auto newValue = static_cast<int8_t>(noteShiftSlider.getValue());
         if (part.noteShift != newValue) {
             part.noteShift = newValue;
             getController()->setPerformance(*perf);
@@ -663,7 +663,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     pitchBendRangeSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)pitchBendRangeSlider.getValue();
+        const auto newValue = static_cast<uint8_t>(pitchBendRangeSlider.getValue());
         if (part.pitchBendRange != newValue) {
             part.pitchBendRange = newValue;
             getController()->setPerformance(*perf);
@@ -674,16 +674,17 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     portamentoModeButton.onClick = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        bool newValue = portamentoModeButton.getToggleState();
-        if (part.portamentoMode != newValue) {
-            part.portamentoMode = newValue;
+        const bool newValue = portamentoModeButton.getToggleState();
+        const bool currentValue = part.portamentoMode != 0;
+        if (currentValue != newValue) {
+            part.portamentoMode = static_cast<uint8_t>(newValue);
             getController()->setPerformance(*perf);
         }
     };
     portamentoTimeSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)portamentoTimeSlider.getValue();
+        const auto newValue = static_cast<uint8_t>(portamentoTimeSlider.getValue());
         if (part.portamentoTime != newValue) {
             part.portamentoTime = newValue;
             getController()->setPerformance(*perf);
@@ -694,9 +695,10 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     monoModeButton.onClick = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        bool newValue = monoModeButton.getToggleState();
-        if (part.monoMode != newValue) {
-            part.monoMode = newValue;
+        const bool newValue = monoModeButton.getToggleState();
+        const bool currentValue = part.monoMode != 0;
+        if (currentValue != newValue) {
+            part.monoMode = static_cast<uint8_t>(newValue);
             getController()->setPerformance(*perf);
         }
     };
@@ -705,7 +707,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     velocityScaleSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)velocityScaleSlider.getValue();
+        const auto newValue = static_cast<uint8_t>(velocityScaleSlider.getValue());
         if (part.velocityScale != newValue) {
             part.velocityScale = newValue;
             getController()->setPerformance(*perf);
@@ -714,7 +716,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     masterTuneSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        int16_t newValue = (int16_t)masterTuneSlider.getValue();
+        const auto newValue = static_cast<int16_t>(masterTuneSlider.getValue());
         if (part.masterTune != newValue) {
             part.masterTune = newValue;
             getController()->setPerformance(*perf);
@@ -725,16 +727,17 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     filterEnabledButton.onClick = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        bool newValue = filterEnabledButton.getToggleState();
-        if (part.filterEnabled != newValue) {
-            part.filterEnabled = newValue;
+        const bool newValue = filterEnabledButton.getToggleState();
+        const bool currentValue = part.filterEnabled != 0;
+        if (currentValue != newValue) {
+            part.filterEnabled = static_cast<uint8_t>(newValue);
             getController()->setPerformance(*perf);
         }
     };
     filterCutoffSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)filterCutoffSlider.getValue();
+        const auto newValue = static_cast<uint8_t>(filterCutoffSlider.getValue());
         if (part.filterCutoff != newValue) {
             part.filterCutoff = newValue;
             getController()->setPerformance(*perf);
@@ -743,7 +746,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     filterResonanceSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)filterResonanceSlider.getValue();
+        const auto newValue = static_cast<uint8_t>(filterResonanceSlider.getValue());
         if (part.filterResonance != newValue) {
             part.filterResonance = newValue;
             getController()->setPerformance(*perf);
