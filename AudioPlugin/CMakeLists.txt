@@ -52,6 +52,7 @@ juce_add_plugin(${PROJECT_NAME}
     FORMATS Standalone VST3
     PRODUCT_NAME "${PROJECT_NAME}"
     STANDALONE_BUFFER_SIZE 512
+    VST3_AUTO_MANIFEST TRUE # This runs the plugin after building it, results in faster scanning by DAWs
 )
 
 # Ensure the VST3 output is named FMRack.vst3
