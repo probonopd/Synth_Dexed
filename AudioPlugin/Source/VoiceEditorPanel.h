@@ -69,7 +69,6 @@ public:
         ~OperatorSliders() override;
         void paint(juce::Graphics&) override;
         void resized() override;
-        void addAndLayoutSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap);
         void mouseEnter(const juce::MouseEvent&) override;
         void mouseExit(const juce::MouseEvent&) override;
         void sliderMouseEnter(int sliderIdx);
@@ -134,6 +133,7 @@ public:
 
     // --- Global (non-per-operator) controls ---
     static constexpr int numGlobalSliders = 27;
+    static constexpr int numGlobalRows = 3;
     static constexpr const char* globalSliderKeys[numGlobalSliders] = {
         "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP", "SRC", "PMO", "PBR", "PBS", "PRT", "PGL", "PMD", "MWS", "MWA", "FCS", "FCA", "ATS", "ATA", "BCS", "BCA", "ATT", "MTU"
     };
@@ -145,4 +145,11 @@ public:
     // PEG Envelope widget
     EnvelopeDisplay pegEnvelopeWidget;
     juce::Label pegEnvelopeLabel;
+
+    // Cached layout metrics for consistent component sizing
+    juce::Rectangle<int> operatorAreaBounds;
+    juce::Rectangle<int> globalAreaBounds;
+    juce::Rectangle<int> pegAreaBounds;
+    int computedSliderWidth = 32;
+    int computedSliderHeight = 56;
 };

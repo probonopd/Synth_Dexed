@@ -99,10 +99,10 @@ private:
     {
         addAndMakeVisible(slider);
         slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 20);
         addAndMakeVisible(label);
         label.setText(labelText, juce::dontSendNotification);
-        label.attachToComponent(&slider, true);
+        label.setJustificationType(juce::Justification::centred);
         attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.treeState, paramID, slider);
     }
 

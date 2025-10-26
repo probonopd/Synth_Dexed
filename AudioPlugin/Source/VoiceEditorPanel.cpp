@@ -13,6 +13,48 @@ using namespace juce;
 // Global instance for operator slider look
 static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
 
+namespace
+{
+    constexpr int kOuterMargin = 12;
+    constexpr int kSectionGap = 12;
+    constexpr int kColumnGap = 16;
+    constexpr int kTopRowHeight = 36;
+    constexpr int kHelpPanelWidth = 300;
+    constexpr int kSvgPanelWidth = 140;
+    constexpr int kOperatorLabelWidth = 36;
+    constexpr int kWidgetWidth = 128;
+    constexpr int kWidgetInnerGap = 12;
+    constexpr int kWidgetColumnWidth = kWidgetWidth * 2 + kWidgetInnerGap;
+    constexpr int kRowGap = 10;
+    constexpr int kRowVerticalPadding = 4;
+    constexpr int kRowHorizontalPadding = 6;
+    constexpr int kSliderGap = 8;
+    constexpr int kSliderLabelHeight = 16;
+    constexpr int kSliderTextBoxHeight = 18;
+    constexpr int kMinSliderWidth = 28;
+    constexpr int kMaxSliderWidth = 44;
+
+    void layoutSliderWithLabel(juce::Slider& slider,
+                               juce::Label& label,
+                               const juce::String& text,
+                               const juce::Rectangle<int>& totalBounds,
+                               int textBoxHeight)
+    {
+        auto sliderBounds = totalBounds.withHeight(totalBounds.getHeight() - kSliderLabelHeight);
+        slider.setBounds(sliderBounds);
+        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, sliderBounds.getWidth(), textBoxHeight);
+        slider.setNumDecimalPlacesToDisplay(0);
+
+        label.setText(text, juce::dontSendNotification);
+        label.setJustificationType(juce::Justification::centred);
+        juce::Rectangle<int> labelBounds(totalBounds.getX(),
+                                         totalBounds.getBottom() - kSliderLabelHeight,
+                                         totalBounds.getWidth(),
+                                         kSliderLabelHeight);
+        label.setBounds(labelBounds);
+    }
+}
+
 VoiceEditorPanel::VoiceEditorPanel()
 {
     std::cout << "[VoiceEditorPanel] Constructor start" << std::endl;
@@ -77,9 +119,6 @@ VoiceEditorPanel::VoiceEditorPanel()
         }
 
         // --- Global controls (dynamic, JSON-driven, 3 rows) ---
-        int globalSliderW = 32, globalSliderH = 120, globalValueBoxH = 10, globalLabelH = 10, globalGap = 8;
-        int numRows = 3;
-        int slidersPerRow = (numGlobalSliders + numRows - 1) / numRows;
         for (int i = 0; i < numGlobalSliders; ++i) {
             juce::String vcedKey = globalSliderKeys[i];
             auto it = operatorSliderParamOffsets.find(vcedKey);
@@ -106,7 +145,7 @@ VoiceEditorPanel::VoiceEditorPanel()
             addAndMakeVisible(globalSliderLabelsUI[i]);
             globalSliders[i].setLookAndFeel(&operatorSliderLookAndFeel);
             globalSliders[i].setSliderStyle(juce::Slider::LinearVertical);
-            globalSliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, globalSliderW, globalValueBoxH);
+            globalSliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, kSliderTextBoxHeight);
             globalSliders[i].setNumDecimalPlacesToDisplay(0);
             globalSliders[i].setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
             globalSliders[i].setEnabled(enabled);
@@ -225,38 +264,14 @@ void VoiceEditorPanel::initializeIfReady() {
 }
 
 void VoiceEditorPanel::paint(Graphics& g) {
-    if (!isInitialized) {
-        std::cout << "[VoiceEditorPanel::paint] called before isInitialized, skipping paint" << std::endl;
-        return;
-    }
     g.fillAll(Colour(0xff332b28));
-    // Draw backgrounds for the two global parameter rows
-    int helpPanelWidth = 280;
-    int svgPanelWidth = 100;
-    int margin = 10;
-    auto area = getLocalBounds();
-    int globalRowH = 48;
-    int globalSliderW = 32, globalSliderH = 100; // fallback, will be updated in resized
-    int globalValueBoxH = 10;
-    int globalLabelH = 10;
-    int globalGap = 8;
-    int numRows = 2;
-    int slidersPerRow = (numGlobalSliders + numRows - 1) / numRows;
-    int opAreaH = area.getHeight() - 2 * margin - (globalRowH + 10 + 20 + 60 + 10); // reservedBottom from resized
-    int opAreaY = area.getY() + margin;
-    int globalRowY = opAreaY + opAreaH + 10;
-    int gx[2] = {svgPanelWidth + 10, svgPanelWidth + 10};
-    int gy[2] = {globalRowY, globalRowY + globalSliderH + globalValueBoxH + globalLabelH + 8};
-    int rowW = (slidersPerRow * (globalSliderW + globalGap)) + 128 + 8; // sliders + PEG widget + gap
-    int rowH = globalSliderH + globalValueBoxH + globalLabelH;
-    Colour rowColour = Colour(33, 33, 33);
-    for (int row = 0; row < numRows; ++row) {
-        int x = gx[row] - 8;
-        int y = gy[row] - 4;
-        int w = rowW;
-        int h = rowH + 8;
-        g.setColour(rowColour);
-        g.fillRoundedRectangle((float)x, (float)y, (float)w, (float)h, 6.0f);
+    if (!isInitialized)
+        return;
+
+    if (globalAreaBounds.getWidth() > 0 && globalAreaBounds.getHeight() > 0) {
+        auto background = globalAreaBounds.expanded(0, kRowVerticalPadding).toFloat();
+        g.setColour(Colour(33, 33, 33));
+        g.fillRoundedRectangle(background, 6.0f);
     }
 }
 
@@ -269,7 +284,8 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float svgNumberDistance = svgBounds.getHeight() * 0.71f;
         float scaleFactor = uiDistance / svgNumberDistance;
-        float offsetX = 10.0f;
+        const float desiredX = svgDrawArea.getX() + 4.0f;
+        float offsetX = desiredX - svgBounds.getX() * scaleFactor;
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scaleFactor;
         auto transform = AffineTransform::scale(scaleFactor, scaleFactor)
             .followedBy(AffineTransform::translation(offsetX, offsetY));
@@ -278,7 +294,8 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
         auto svgBounds = algorithmSvg->getDrawableBounds();
         float scale = std::min(svgDrawArea.getWidth() / svgBounds.getWidth(), 
                               svgDrawArea.getHeight() / svgBounds.getHeight());
-        float offsetX = -svgBounds.getX() * scale;
+        const float desiredX = svgDrawArea.getX() + 4.0f;
+        float offsetX = desiredX - svgBounds.getX() * scale;
         float offsetY = svgDrawArea.getY() - svgBounds.getY() * scale;
         juce::AffineTransform transform = juce::AffineTransform::scale(scale)
                                                                 .translated(offsetX, offsetY);
@@ -286,125 +303,162 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
     }
 }
 
-// Helper for global slider layout, matching per-OP slider style
-static void layoutGlobalSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap) {
-    slider.setBounds(x, y, w, h);
-    label.setText(text, juce::dontSendNotification);
-    label.setFont(juce::Font(juce::FontOptions(10.0f)));
-    label.setColour(juce::Label::textColourId, juce::Colours::white);
-    label.setJustificationType(juce::Justification::centred);
-    label.setBounds(x, y + h, w, 10);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, w, 10);
-    slider.setNumDecimalPlacesToDisplay(0);
-    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-    x += w + gap;
-}
-
 void VoiceEditorPanel::resized() {
     if (!isInitialized) {
         std::cout << "[VoiceEditorPanel::resized] called before isInitialized, skipping layout" << std::endl;
         return;
     }
-    auto area = getLocalBounds();
-    int minPanelHeight = 600;
-    if (getHeight() < minPanelHeight)
-        setSize(getWidth(), minPanelHeight);
-    // Top controls (algorithm, voice name, channel)
-    auto topControls = area.removeFromTop(40).reduced(10, 0);
-    int colW = 120, gap = 10;
-    algorithmLabel.setBounds(topControls.getX(), topControls.getY(), colW, 24);
-    algorithmSelector.setBounds(topControls.getX() + colW, topControls.getY(), 60, 24);
-    voiceNameLabel.setBounds(topControls.getX() + colW + 60 + gap, topControls.getY(), colW, 24);
-    voiceNameEditor.setBounds(topControls.getX() + colW + 60 + gap + colW, topControls.getY(), 180, 24);
-    channelLabel.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap, topControls.getY(), colW, 24);
-    channelSelector.setBounds(topControls.getX() + colW + 60 + gap + colW + 180 + gap + colW, topControls.getY(), 60, 24);
-    // Place the request dump button at the top right, next to the help panel
-    int buttonW = 140, buttonH = 28;
-    int buttonX = area.getRight() - buttonW - 20; // 20px margin from right edge
-    int buttonY = 10; // 10px from top
-    requestDumpButton.setBounds(buttonX, buttonY, buttonW, buttonH);
-    int helpPanelWidth = 280;
-    int svgPanelWidth = 100;
-    int margin = 10;
-    svgDrawArea = juce::Rectangle<float>(0, area.getY() + margin, svgPanelWidth, area.getHeight() - 2 * margin);
-    // --- Operator rows ---
-    int opCount = 6;
-    int reservedGlobalRows = 3; // number of global rows
-    int reservedGlobalRowGap = 8; // gap between global rows
-    int reservedGlobalValueBoxH = 10;
-    int reservedGlobalLabelH = 10;
-    int opNumColW = 36;
-    // Calculate row height so that all rows (op + global) are the same
-    int totalRows = opCount + reservedGlobalRows;
-    int rowH = (area.getHeight() - 2 * margin - (reservedGlobalRows - 1) * reservedGlobalRowGap - reservedGlobalRows * (reservedGlobalValueBoxH + reservedGlobalLabelH)) / totalRows;
-    int opSliderW = 32;
-    int opSliderH = rowH;
-    // Operator area
-    auto opArea = juce::Rectangle<int>(
-        svgPanelWidth,
-        area.getY() + margin,
-        area.getWidth() - helpPanelWidth - svgPanelWidth,
-        opCount * rowH
-    );
-    operatorRowCenters.clear();
-    for (int i = 0; i < opCount; ++i) {
-        int opIdx = i;
-        float rowCenterY = opArea.getY() + i * rowH + rowH * 0.5f;
-        operatorRowCenters.push_back(rowCenterY);
-        juce::Rectangle<int> opNumBounds(
-            0,
-            opArea.getY() + i * rowH,
-            opNumColW,
-            rowH - 2
-        );
-        if (operators[opIdx]) {
-            operators[opIdx]->label.setBounds(opNumBounds.reduced(0, 0));
-        }
-    }
-    for (int i = 0; i < opCount; ++i) {
-        auto opBounds = juce::Rectangle<int>(
-            0,
-            opArea.getY() + i * rowH,
-            opArea.getWidth(),
-            rowH - 2
-        );
-        if (operators[i]) {
-            operators[i]->setBounds(opBounds);
-        }
-    }
-    // --- Global rows ---
-    int globalRowY = opArea.getBottom();
-    int globalSliderW = opSliderW, globalSliderH = opSliderH;
-    int globalValueBoxH = reservedGlobalValueBoxH;
-    int globalLabelH = reservedGlobalLabelH;
-    int globalGap = 8;
-    int numRows = reservedGlobalRows;
-    int slidersPerRow = (numGlobalSliders + numRows - 1) / numRows;
-    int gx[3] = {svgPanelWidth + 10, svgPanelWidth + 10, svgPanelWidth + 10};
-    int gy[3] = {
-        globalRowY,
-        globalRowY + rowH + globalValueBoxH + globalLabelH + reservedGlobalRowGap,
-        globalRowY + 2 * (rowH + globalValueBoxH + globalLabelH + reservedGlobalRowGap)
+    auto bounds = getLocalBounds();
+    if (getHeight() < 620)
+        setSize(getWidth(), 620);
+
+    auto layoutBounds = bounds.reduced(kOuterMargin);
+
+    // Header row
+    auto headerBounds = layoutBounds.removeFromTop(kTopRowHeight);
+    juce::FlexBox headerFlex;
+    headerFlex.flexDirection = juce::FlexBox::Direction::row;
+    headerFlex.alignItems = juce::FlexBox::AlignItems::center;
+    headerFlex.justifyContent = juce::FlexBox::JustifyContent::flexStart;
+
+    auto fixedItem = [&](juce::Component& comp, float width)
+    {
+        return juce::FlexItem(comp).withWidth(width).withMinWidth(width).withMaxWidth(width).withHeight((float)kTopRowHeight);
     };
-    int pegWidgetW = 128, pegWidgetH = globalSliderH;
-    for (int row = 0; row < numRows; ++row) {
-        int sliderCount = 0;
-        for (int i = 0; i < slidersPerRow; ++i) {
-            int idx = row * slidersPerRow + i;
-            if (idx >= numGlobalSliders) break;
-            layoutGlobalSliderWithLabel(globalSliders[idx], globalSliderLabelsUI[idx], globalSliderLabelsUI[idx].getText(), gx[row], gy[row], globalSliderW, globalSliderH, globalGap);
-            globalSliders[idx].setEnabled(globalSliderLabelsUI[idx].getText().isNotEmpty());
-            ++sliderCount;
-        }
-        // Place PEG envelope widget in the first global row, after the last slider
-        if (row == 0) {
-            int pegX = gx[row];
-            int pegY = gy[row];
-            pegEnvelopeWidget.setBounds(pegX, pegY, pegWidgetW, pegWidgetH);
+    auto flexItem = [&](juce::Component& comp, float minWidth)
+    {
+        return juce::FlexItem(comp).withMinWidth(minWidth).withFlex(1.0f).withHeight((float)kTopRowHeight);
+    };
+    auto addGap = [&](float width)
+    {
+        headerFlex.items.add(juce::FlexItem().withWidth(width));
+    };
+
+    headerFlex.items.add(fixedItem(algorithmLabel, 80.0f));
+    addGap(6.0f);
+    headerFlex.items.add(fixedItem(algorithmSelector, 84.0f));
+    addGap(12.0f);
+    headerFlex.items.add(fixedItem(voiceNameLabel, 60.0f));
+    addGap(6.0f);
+    headerFlex.items.add(flexItem(voiceNameEditor, 180.0f));
+    addGap(12.0f);
+    headerFlex.items.add(fixedItem(channelLabel, 74.0f));
+    addGap(6.0f);
+    headerFlex.items.add(fixedItem(channelSelector, 86.0f));
+    addGap(18.0f);
+    headerFlex.items.add(fixedItem(requestDumpButton, 148.0f));
+    headerFlex.performLayout(headerBounds.toFloat());
+
+    layoutBounds.removeFromTop(kSectionGap);
+
+    // Right column: help panel
+    auto helpArea = layoutBounds.removeFromRight(kHelpPanelWidth);
+    helpPanel.setBounds(helpArea.reduced(6, 0));
+
+    layoutBounds.removeFromRight(kColumnGap);
+
+    // Left column: algorithm diagram
+    auto svgArea = layoutBounds.removeFromLeft(kSvgPanelWidth);
+    svgDrawArea = svgArea.toFloat().reduced(0, 6);
+
+    layoutBounds.removeFromLeft(kColumnGap);
+
+    if (layoutBounds.getHeight() <= 0)
+        return;
+    if (layoutBounds.getWidth() <= 0)
+        return;
+
+    const int opCount = static_cast<int>(operators.size());
+    const int totalRows = opCount + numGlobalRows;
+    const int totalRowGaps = juce::jmax(0, totalRows - 1) * kRowGap;
+    const int availableHeight = layoutBounds.getHeight() - totalRowGaps;
+
+    int rowHeight = juce::jmax(kSliderLabelHeight + 48,
+                               availableHeight > 0 ? availableHeight / juce::jmax(1, totalRows)
+                                                    : kSliderLabelHeight + 48);
+    computedSliderHeight = juce::jmax(40, rowHeight - kSliderLabelHeight);
+
+    const int sliderAreaWidth = layoutBounds.getWidth() - kOperatorLabelWidth - kColumnGap - kWidgetColumnWidth - 2 * kRowHorizontalPadding;
+    int perSlider = kMinSliderWidth;
+    if (sliderAreaWidth > 0)
+        perSlider = (sliderAreaWidth - (OperatorSliders::NumSliders - 1) * kSliderGap) / OperatorSliders::NumSliders;
+    computedSliderWidth = juce::jlimit(kMinSliderWidth, kMaxSliderWidth, perSlider);
+
+    operatorRowCenters.clear();
+    operatorRowCenters.reserve(opCount);
+
+    juce::Rectangle<int> remaining = layoutBounds;
+    int operatorStartY = -1;
+    int operatorBottomY = -1;
+    int globalStartY = -1;
+    int globalBottomY = -1;
+    int globalSliderIndex = 0;
+    const int slidersPerRow = (numGlobalSliders + numGlobalRows - 1) / numGlobalRows;
+
+    for (int row = 0; row < totalRows; ++row) {
+        auto rowBounds = remaining.removeFromTop(rowHeight);
+        if (row < totalRows - 1)
+            remaining.removeFromTop(kRowGap);
+
+        auto rowContent = rowBounds.reduced(0, kRowVerticalPadding);
+
+        if (row < opCount) {
+            if (operatorStartY < 0)
+                operatorStartY = rowContent.getY();
+            operatorBottomY = rowContent.getBottom();
+
+            if (operators[row])
+                operators[row]->setBounds(rowContent);
+            operatorRowCenters.push_back(static_cast<float>(rowContent.getCentreY()));
+        } else {
+            if (globalStartY < 0)
+                globalStartY = rowContent.getY();
+            globalBottomY = rowContent.getBottom();
+
+            auto sliderArea = rowContent;
+            sliderArea.removeFromRight(kWidgetColumnWidth);
+            sliderArea.removeFromRight(kColumnGap);
+            sliderArea.removeFromLeft(kOperatorLabelWidth);
+            sliderArea = sliderArea.reduced(kRowHorizontalPadding, 0);
+
+            int sliderX = sliderArea.getX();
+            for (int i = 0; i < slidersPerRow && globalSliderIndex < numGlobalSliders; ++i) {
+                juce::Rectangle<int> sliderBounds(sliderX,
+                                                  sliderArea.getY(),
+                                                  computedSliderWidth,
+                                                  computedSliderHeight + kSliderLabelHeight);
+                layoutSliderWithLabel(globalSliders[globalSliderIndex],
+                                      globalSliderLabelsUI[globalSliderIndex],
+                                      globalSliderLabelsUI[globalSliderIndex].getText(),
+                                      sliderBounds,
+                                      kSliderTextBoxHeight);
+                globalSliders[globalSliderIndex].setEnabled(globalSliderLabelsUI[globalSliderIndex].getText().isNotEmpty());
+                sliderX += computedSliderWidth + kSliderGap;
+                ++globalSliderIndex;
+            }
         }
     }
-    // Help panel on the right (restore to fixed width and margin)
-    helpPanel.setBounds(area.getRight() - helpPanelWidth + margin, area.getY() + margin, helpPanelWidth - margin, area.getHeight() - 2 * margin);
+
+    if (operatorStartY >= 0 && operatorBottomY > operatorStartY)
+        operatorAreaBounds = juce::Rectangle<int>(layoutBounds.getX(), operatorStartY, layoutBounds.getWidth(), operatorBottomY - operatorStartY);
+    else
+        operatorAreaBounds = {};
+
+    if (globalStartY >= 0 && globalBottomY > globalStartY) {
+        pegAreaBounds = juce::Rectangle<int>(layoutBounds.getRight() - kWidgetColumnWidth,
+                                             globalStartY,
+                                             kWidgetColumnWidth,
+                                             globalBottomY - globalStartY);
+        pegEnvelopeWidget.setBounds(pegAreaBounds.reduced(kRowHorizontalPadding, 2));
+        globalAreaBounds = juce::Rectangle<int>(layoutBounds.getX(),
+                                                globalStartY,
+                                                layoutBounds.getWidth(),
+                                                globalBottomY - globalStartY);
+    } else {
+        pegAreaBounds = {};
+        pegEnvelopeWidget.setBounds({});
+        globalAreaBounds = {};
+    }
 }
 
 void VoiceEditorPanel::loadAlgorithmSvg(int algorithmIdx) {
@@ -771,6 +825,16 @@ void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
 // OperatorSliders implementation
 VoiceEditorPanel::OperatorSliders::OperatorSliders() {
     for (int i = 0; i < NumSliders; ++i) {
+        addAndMakeVisible(sliders[i]);
+        addAndMakeVisible(sliderLabels[i]);
+        sliderLabels[i].setText(sliderNames[i], juce::dontSendNotification);
+        sliderLabels[i].setFont(juce::Font(juce::FontOptions(10.0f)));
+        sliderLabels[i].setColour(juce::Label::textColourId, juce::Colours::white);
+        sliderLabels[i].setJustificationType(juce::Justification::centred);
+        sliders[i].setSliderStyle(juce::Slider::LinearVertical);
+        sliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, 48, kSliderTextBoxHeight);
+        sliders[i].setNumDecimalPlacesToDisplay(0);
+        sliders[i].setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
         sliders[i].addMouseListener(this, true); // Ensure mouse events are forwarded
     }
     envWidget.addMouseListener(this, true);
@@ -805,71 +869,44 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders() {
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
 
-void VoiceEditorPanel::OperatorSliders::addAndLayoutSliderWithLabel(juce::Slider& slider, juce::Label& label, const juce::String& text, int& x, int y, int w, int h, int gap) {
-    addAndMakeVisible(slider);
-    label.setText(text, juce::dontSendNotification);
-    label.setFont(juce::Font(juce::FontOptions(10.0f)));
-    label.setColour(juce::Label::textColourId, juce::Colours::white);
-    label.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(label);
-    slider.setSliderStyle(juce::Slider::LinearVertical);
-    // slider.setLookAndFeel(&operatorSliderLookAndFeel);
-    slider.setBounds(x, y, w, h); x += w + gap;
-    label.setBounds(x - w, y + h, w, 10); // Text label (slider name) below the slider
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, w, 10); // Value box below the slider
-    // No decimal places in the text box
-    slider.setNumDecimalPlacesToDisplay(0);
-    slider.setColour(Slider::textBoxTextColourId, juce::Colours::white);
-}
-
 void VoiceEditorPanel::OperatorSliders::resized() {
-    auto area = getLocalBounds();
-    label.setBounds(area.removeFromLeft(32).reduced(2));
-    // Reserve space for right-side widgets (envelope and keyboard scaling)
-    int widgetW = 128;
-    // Get the fixed X position for envWidget and ksWidget from the parent panel (match PEG envelope X)
-    int envX = -1, envY = area.getY(), envH = area.getHeight();
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
-        // Use the same X as the PEG envelope widget in the global row
-        int helpPanelWidth = 280;
-        int svgPanelWidth = 100;
-        int margin = 10;
-        auto parentArea = parent->getLocalBounds();
-        int globalRowH = 48;
-        int pegEnvelopeH = 20 + 60 + 10;
-        int reservedBottom = globalRowH + 10 + pegEnvelopeH + 10;
-        auto opArea = juce::Rectangle<int>(
-            svgPanelWidth,
-            parentArea.getY() + margin,
-            parentArea.getWidth() - helpPanelWidth - svgPanelWidth,
-            parentArea.getHeight() - 2 * margin - reservedBottom
-        );
-        int globalSliderW = 32, globalSliderH = opArea.getHeight() > 0 && parent->operators.size() > 0 ? (opArea.getHeight() - 10) / 6 - 20 : 100;
-        int globalValueBoxH = 10;
-        int globalLabelH = 10;
-        int globalGap = 8;
-        int numRows = 3;
-        int slidersPerRow = (parent->numGlobalSliders + numRows - 1) / numRows;
-        int gx0 = svgPanelWidth + 10;
-        int pegX = gx0 + slidersPerRow * (globalSliderW + globalGap);
-        envX = pegX;
+    auto bounds = getLocalBounds();
+
+    auto labelBounds = bounds.removeFromLeft(kOperatorLabelWidth);
+    label.setBounds(labelBounds.reduced(0, 2));
+
+    bounds = bounds.reduced(kRowHorizontalPadding, 0);
+
+    auto widgetColumn = bounds.removeFromRight(kWidgetColumnWidth);
+    bounds.removeFromRight(kColumnGap);
+
+    auto envBounds = widgetColumn.removeFromLeft(kWidgetWidth);
+    auto ksBounds = widgetColumn.removeFromRight(kWidgetWidth);
+    envWidget.setBounds(envBounds.reduced(0, 2));
+    ksWidget.setBounds(ksBounds.reduced(0, 2));
+
+    auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent());
+
+    int sliderAreaWidth = bounds.getWidth();
+    int sliderWidth = juce::jlimit(kMinSliderWidth, kMaxSliderWidth, 36);
+    int sliderHeight = juce::jmax(40, bounds.getHeight() - kSliderLabelHeight);
+
+    if (parent != nullptr) {
+        sliderWidth = juce::jlimit(kMinSliderWidth, kMaxSliderWidth, parent->computedSliderWidth);
+        sliderHeight = juce::jmax(40, juce::jmin(bounds.getHeight() - kSliderLabelHeight, parent->computedSliderHeight));
     }
-    if (envX >= 0) {
-        envWidget.setBounds(envX, envY, widgetW, envH);
-        ksWidget.setBounds(envX + widgetW + 4, envY, widgetW, envH);
-    } else {
-        // fallback: right align as before
-        ksWidget.setBounds(area.removeFromRight(widgetW).reduced(2));
-        envWidget.setBounds(area.removeFromRight(widgetW).reduced(2));
+
+    const int totalNeeded = NumSliders * sliderWidth + (NumSliders - 1) * kSliderGap;
+    if (totalNeeded > sliderAreaWidth) {
+        sliderWidth = juce::jlimit(kMinSliderWidth, sliderWidth, (sliderAreaWidth - (NumSliders - 1) * kSliderGap) / NumSliders);
     }
-    // Sliders area
-    int sliderW = 32, sliderH = area.getHeight() - 20;
-    int gap = 0;
-    int y = area.getY();
-    int x = area.getX() + 60;
-    // Find our UI row index (0 = top, 5 = bottom)
+
+    int sliderX = bounds.getX();
+    const int sliderY = bounds.getY();
+    const int totalSliderHeight = sliderHeight + kSliderLabelHeight;
+
     int uiRowIdx = -1;
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+    if (parent != nullptr) {
         for (int idx = 0; idx < parent->operators.size(); ++idx) {
             if (parent->operators[idx].get() == this) {
                 uiRowIdx = idx;
@@ -877,37 +914,38 @@ void VoiceEditorPanel::OperatorSliders::resized() {
             }
         }
     }
-    int dexedOpIdx = (uiRowIdx >= 0) ? uiRowIdx : 0;
+    int dexedOpIdx = juce::jmax(0, uiRowIdx);
+
     for (int i = 0; i < NumSliders; ++i) {
-        addAndLayoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], x, y, sliderW, sliderH, gap);
-        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+        juce::Rectangle<int> sliderBounds(sliderX, sliderY, sliderWidth, totalSliderHeight);
+        layoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], sliderBounds, kSliderTextBoxHeight);
+        sliderX += sliderWidth + kSliderGap;
+
+        if (parent != nullptr) {
             const juce::String sliderName = sliderNames[i];
             auto it = operatorSliderParamOffsets.find(sliderName);
             if (it == operatorSliderParamOffsets.end()) {
                 std::cout << "[OperatorSliders] No param offset for slider '" << sliderName << "'\n";
                 continue;
             }
-            uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
+            const uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             parent->syncOperatorSliderWithDexed(sliders[i], paramAddress, sliderName.toRawUTF8());
             if (i == 0) {
                 sliders[i].setRange(0, 1, 1.0);
                 sliders[i].onValueChange = [parent]() {
-                    std::cout << "[OperatorSliders] OPE onValueChange, parent=" << parent << ", controller=" << parent->controller << std::endl;
                     if (!parent->controller) return;
                     uint8_t bitmask = 0;
                     for (int op = 0; op < parent->operators.size(); ++op) {
-                        int dexedOp = op;
-                        auto& opSliders = parent->operators[op];
-                        int val = static_cast<int>(opSliders->sliders[0].getValue());
-                        if (val != 0) bitmask |= (1 << dexedOp);
+                        const auto& opSliders = parent->operators[op];
+                        const int val = static_cast<int>(opSliders->sliders[0].getValue());
+                        if (val != 0) bitmask |= (1 << op);
                     }
                     parent->setDexedParam(155, bitmask);
                 };
             } else {
                 sliders[i].onValueChange = [parent, paramAddress, i, this]() {
-                    std::cout << "[OperatorSliders] Slider[" << i << "] onValueChange, parent=" << parent << ", controller=" << parent->controller << std::endl;
                     if (!parent->controller) return;
-                    int value = static_cast<int>(sliders[i].getValue());
+                    const int value = static_cast<int>(sliders[i].getValue());
                     parent->setDexedParam(paramAddress, static_cast<uint8_t>(value));
                 };
             }

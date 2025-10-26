@@ -5,6 +5,58 @@
 #include "VoiceBrowserComponent.h"
 #include <iostream> // For logging
 
+namespace
+{
+    struct SliderLabelPair
+    {
+        juce::Slider* slider = nullptr;
+        juce::Label* label = nullptr;
+    };
+
+    constexpr int kRotaryLabelHeight = 18;
+
+    void layoutRotarySliderGrid(const juce::Rectangle<int>& area,
+                                const std::initializer_list<SliderLabelPair>& controls,
+                                int columns,
+                                int sliderSize,
+                                int rowGap,
+                                int columnGap)
+    {
+        if (controls.size() == 0 || columns <= 0)
+            return;
+
+        const int totalControls = static_cast<int>(controls.size());
+        const int rows = (totalControls + columns - 1) / columns;
+
+        const int totalWidth = columns * sliderSize + (columns - 1) * columnGap;
+        const int totalHeight = rows * (sliderSize + kRotaryLabelHeight) + (rows - 1) * rowGap;
+
+        const int startX = area.getX() + juce::jmax(0, (area.getWidth() - totalWidth) / 2);
+        const int startY = area.getY() + juce::jmax(0, (area.getHeight() - totalHeight) / 2);
+
+        int index = 0;
+        for (auto control : controls)
+        {
+            const int row = index / columns;
+            const int column = index % columns;
+
+            const int x = startX + column * (sliderSize + columnGap);
+            const int y = startY + row * (sliderSize + kRotaryLabelHeight + rowGap);
+
+            if (control.slider != nullptr)
+                control.slider->setBounds(x, y, sliderSize, sliderSize);
+
+            if (control.label != nullptr)
+            {
+                control.label->setJustificationType(juce::Justification::centred);
+                control.label->setBounds(x, y + sliderSize, sliderSize, kRotaryLabelHeight);
+            }
+
+            ++index;
+        }
+    }
+}
+
 //==============================================================================
 AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAudioProcessor& p)
     : AudioProcessorEditor (&p), processorRef (p), resizer(this, &constrainer)
@@ -185,75 +237,118 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 void AudioPluginAudioProcessorEditor::resized()
 {
     juce::Logger::writeToLog("[PluginEditor] resized() called");
-    auto bounds = getLocalBounds();
-    resizer.setBounds (bounds.getRight() - 16, bounds.getBottom() - 16, 16, 16);    auto topArea = bounds.removeFromTop(40);
-    loadPerformanceButton.setBounds(topArea.removeFromLeft(150).reduced(5));
-    savePerformanceButton.setBounds(topArea.removeFromLeft(150).reduced(5));
-    removeModuleButton.setBounds(topArea.removeFromRight(30).reduced(2));
-    addModuleButton.setBounds(topArea.removeFromRight(30).reduced(2));
+    const int resizerSize = 16;
+    resizer.setBounds(getWidth() - resizerSize, getHeight() - resizerSize, resizerSize, resizerSize);
 
-    auto rackWidth = bounds.getWidth() * 2 / 3;
-    auto effectsWidth = bounds.getWidth() - rackWidth;
+    const int outerMargin = 12;
+    const int sectionGap = 12;
+    const int controlGap = 8;
+    const int topButtonHeight = 30;
+    const int logHeight = juce::jlimit(100, 180, getHeight() / 4);
 
+    auto layoutBounds = getLocalBounds().reduced(outerMargin);
+
+    auto logArea = layoutBounds.removeFromBottom(logHeight);
+    logArea = logArea.withTrimmedRight(resizerSize).reduced(0, 4);
+    logTextBox.setBounds(logArea);
+
+    layoutBounds.removeFromBottom(sectionGap);
+
+    auto topRow = layoutBounds.removeFromTop(topButtonHeight);
+    layoutBounds.removeFromTop(sectionGap);
+
+    const int largeButtonWidth = juce::jlimit(140, 200, topRow.getWidth() / 4 * 2);
+    const int smallButtonWidth = 32;
+
+    auto alignButton = [&](juce::Rectangle<int> area)
+    {
+        return juce::Rectangle<int>(area.getX(), area.getCentreY() - topButtonHeight / 2, area.getWidth(), topButtonHeight);
+    };
+
+    auto loadBounds = topRow.removeFromLeft(largeButtonWidth);
+    loadPerformanceButton.setBounds(alignButton(loadBounds));
+    topRow.removeFromLeft(controlGap);
+    auto saveBounds = topRow.removeFromLeft(largeButtonWidth);
+    savePerformanceButton.setBounds(alignButton(saveBounds));
+
+    auto addBounds = topRow.removeFromRight(smallButtonWidth);
+    addModuleButton.setBounds(alignButton(addBounds));
+    topRow.removeFromRight(controlGap);
+    auto removeBounds = topRow.removeFromRight(smallButtonWidth);
+    removeModuleButton.setBounds(alignButton(removeBounds));
+
+    const int spacing = 14;
+    int availableWidth = layoutBounds.getWidth();
+    int effectsWidth = juce::jmax(280, availableWidth / 3);
+    int rackWidth = availableWidth - effectsWidth - spacing;
+
+    if (rackWidth < 420)
+    {
+        rackWidth = juce::jmax(420, availableWidth - effectsWidth - spacing);
+        effectsWidth = availableWidth - rackWidth - spacing;
+    }
+
+    rackWidth = juce::jmax(0, rackWidth);
+    effectsWidth = juce::jmax(0, effectsWidth);
+
+    auto rackArea = layoutBounds.removeFromLeft(rackWidth);
     if (rackAccordion)
-        rackAccordion->setBounds(bounds.removeFromLeft(rackWidth));
+        rackAccordion->setBounds(rackArea);
 
-    effectsGroup.setBounds(bounds.reduced(5));
-    auto effectsArea = effectsGroup.getBounds().reduced(15);
-    effectsArea.removeFromTop(10); // Space for group title
+    layoutBounds.removeFromLeft(spacing);
 
-    // Arrange compressor and reverb enable buttons in a row
-    auto buttonRow = effectsArea.removeFromTop(30);
-    compressorEnableButton.setBounds(buttonRow.removeFromLeft(100).reduced(5));
-    reverbEnableButton.setBounds(buttonRow.removeFromLeft(100).reduced(5));
+    auto effectsArea = layoutBounds;
+    effectsGroup.setBounds(effectsArea);
 
-    // Arrange the effect sliders in two rows, three per row, matching the style of the other sliders
-    int sliderW = 55;
-    int sliderH = 100;
-    int labelH = 20;
-    int labelGap = 4;
-    int sliderSpacingX = 20;
-    int sliderSpacingY = 10;
-    int startX = effectsArea.getX() + 10;
-    int startY = effectsArea.getY();
+    const int groupPadding = 12;
+    const int groupLabelOffset = 24;
+    const int toggleHeight = 26;
+    const int rowGap = 18;
+    const int columnGapRotary = 16;
 
-    // Use setupSlider for all global effect sliders (ensures consistent style)
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> dummy;
-    setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", dummy);
-    setupSlider(reverbHighDampSlider, reverbHighDampLabel, "High Damp", "reverbHighDamp", dummy);
-    setupSlider(reverbLowDampSlider, reverbLowDampLabel, "Low Damp", "reverbLowDamp", dummy);
-    setupSlider(reverbLowPassSlider, reverbLowPassLabel, "Low Pass", "reverbLowPass", dummy);
-    setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diffusion", "reverbDiffusion", dummy);
-    setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", dummy);
+    auto effectsContent = effectsArea.reduced(groupPadding).withTrimmedTop(groupLabelOffset);
 
-    // First row
-    int x = startX;
-    int y = startY;
-    reverbSizeSlider.setBounds(x, y, sliderW, sliderH);
-    reverbSizeLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
-    x += sliderW + sliderSpacingX;
-    reverbHighDampSlider.setBounds(x, y, sliderW, sliderH);
-    reverbHighDampLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
-    x += sliderW + sliderSpacingX;
-    reverbLowDampSlider.setBounds(x, y, sliderW, sliderH);
-    reverbLowDampLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+    auto toggleRow = effectsContent.removeFromTop(toggleHeight);
+    int toggleWidth = juce::jmax(70, (toggleRow.getWidth() - columnGapRotary) / 2);
+    if (toggleWidth * 2 + columnGapRotary > toggleRow.getWidth())
+        toggleWidth = juce::jmax(40, (toggleRow.getWidth() - columnGapRotary) / 2);
+    const int toggleTotalWidth = toggleWidth * 2 + columnGapRotary;
+    const int toggleStartX = toggleRow.getX() + juce::jmax(0, (toggleRow.getWidth() - toggleTotalWidth) / 2);
 
-    // Second row
-    x = startX;
-    y += sliderH + labelH + sliderSpacingY + labelGap;
-    reverbLowPassSlider.setBounds(x, y, sliderW, sliderH);
-    reverbLowPassLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
-    x += sliderW + sliderSpacingX;
-    reverbDiffusionSlider.setBounds(x, y, sliderW, sliderH);
-    reverbDiffusionLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
-    x += sliderW + sliderSpacingX;
-    reverbLevelSlider.setBounds(x, y, sliderW, sliderH);
-    reverbLevelLabel.setBounds(x, y + sliderH + labelGap, sliderW, labelH);
+    juce::Rectangle<int> compressorBounds(toggleStartX, toggleRow.getCentreY() - toggleHeight / 2, toggleWidth, toggleHeight);
+    juce::Rectangle<int> reverbBounds = compressorBounds.translated(toggleWidth + columnGapRotary, 0);
+
+    compressorEnableButton.setBounds(compressorBounds);
+    reverbEnableButton.setBounds(reverbBounds);
+
+    effectsContent.removeFromTop(rowGap);
+
+    const int rotaryColumns = 3;
+    const int rotaryRows = 2;
+    const int availableGridWidth = juce::jmax(0, effectsContent.getWidth() - columnGapRotary * (rotaryColumns - 1));
+    const int availableGridHeight = juce::jmax(0, effectsContent.getHeight() - rowGap * (rotaryRows - 1) - kRotaryLabelHeight * rotaryRows);
+    const int widthLimitedSize = rotaryColumns > 0 ? availableGridWidth / rotaryColumns : availableGridWidth;
+    const int heightLimitedSize = rotaryRows > 0 ? availableGridHeight / rotaryRows : availableGridHeight;
+    int rotarySize = juce::jmin(110, juce::jmin(widthLimitedSize, heightLimitedSize));
+    if (rotarySize <= 0)
+        rotarySize = 70;
+
+    layoutRotarySliderGrid(effectsContent,
+                           {
+                               { &reverbSizeSlider, &reverbSizeLabel },
+                               { &reverbHighDampSlider, &reverbHighDampLabel },
+                               { &reverbLowDampSlider, &reverbLowDampLabel },
+                               { &reverbLowPassSlider, &reverbLowPassLabel },
+                               { &reverbDiffusionSlider, &reverbDiffusionLabel },
+                               { &reverbLevelSlider, &reverbLevelLabel }
+                           },
+                           rotaryColumns,
+                           rotarySize,
+                           rowGap,
+                           columnGapRotary);
 
     if (voiceEditorWindow)
-    {
         voiceEditorWindow->setBounds(100, 100, 800, 600);
-    }
 
     juce::Logger::writeToLog("[PluginEditor] resized() end");
 }
