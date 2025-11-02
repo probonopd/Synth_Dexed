@@ -772,7 +772,15 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         dialogPtr->showDialog(this,
             [this](const juce::File& file) {
                 fileDialogOpen = false;
-                loadVoiceFile(file);
+                // Get the currently active tab index instead of using this tab's moduleIndex
+                int currentTabIndex = 0;
+                if (parentAccordion) {
+                    currentTabIndex = parentAccordion->getCurrentTabIndex();
+                    if (currentTabIndex < 0 || currentTabIndex >= 16) {
+                        currentTabIndex = 0; // Fallback
+                    }
+                }
+                loadVoiceFileIntoModule(file, currentTabIndex);
             },
             [this]() {
                 fileDialogOpen = false;
@@ -1034,9 +1042,60 @@ void ModuleTabComponent::loadVoiceFile(const juce::File& file)
                 juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
                 juce::Logger::writeToLog("[ModuleTabComponent] Loaded voice: " + voiceName);
                 if (editor) {
-                    editor->appendLogMessage("Voice loaded: " + voiceName);
+                    editor->appendLogMessage("Voice loaded: " + voiceName + " into module " + juce::String(moduleIndex + 1));
                     // --- Force update of voice editor panel if open ---
                     editor->showVoiceEditorPanel(moduleIndex);
+                }
+            }
+        } else {
+            juce::Logger::writeToLog("[ModuleTabComponent] Failed to load voice file: " + file.getFullPathName());
+            if (editor) {
+                editor->appendLogMessage("Failed to load voice file");
+            }
+        }
+    }
+}
+
+void ModuleTabComponent::loadVoiceFileIntoModule(const juce::File& file, int targetModuleIndex)
+{
+    auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+    auto* processor = editor ? editor->getProcessor() : nullptr;
+    auto* controller = processor ? processor->getController() : nullptr;
+    if (controller) {
+        // Use VoiceData to load the voice file
+        VoiceData voiceData;
+        bool loaded = voiceData.loadFromFile(file.getFullPathName().toStdString());
+        
+        if (loaded && !voiceData.voices.empty()) {
+            // Get the first voice from the file
+            const auto& voiceBytes = voiceData.voices[0];
+            
+            // Convert to Dexed format if needed
+            std::vector<uint8_t> dexedVoice;
+            if (voiceBytes.size() == 128) {
+                // Convert DX7 voice to Dexed format
+                dexedVoice = VoiceData::convertDX7ToDexed(voiceBytes);
+            } else if (voiceBytes.size() == 156) {
+                // Already in Dexed format
+                dexedVoice = voiceBytes;
+            } else {
+                juce::Logger::writeToLog("[ModuleTabComponent] Unsupported voice data size: " + juce::String((int)voiceBytes.size()));
+                if (editor) {
+                    editor->appendLogMessage("Unsupported voice data format");
+                }
+                return;
+            }
+            
+            // Set the voice data in the performance
+            auto* perf = controller->getPerformance();
+            if (perf && targetModuleIndex >= 0 && targetModuleIndex < 16) {
+                controller->setPartVoiceData(targetModuleIndex, dexedVoice);
+                juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
+                juce::Logger::writeToLog("[ModuleTabComponent] Loaded voice into module " + juce::String(targetModuleIndex + 1) + ": " + voiceName);
+                if (editor) {
+                    editor->appendLogMessage("Voice loaded: " + voiceName + " into module " + juce::String(targetModuleIndex + 1));
+                    // --- Force update of voice editor panel if open ---
+                    editor->showVoiceEditorPanel(targetModuleIndex);
                 }
             }
         } else {

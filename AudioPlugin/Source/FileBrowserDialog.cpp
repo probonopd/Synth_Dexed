@@ -66,6 +66,13 @@ void FileBrowserDialog::showDialog(juce::Component* parent,
                                  std::function<void(const juce::File&)> onFileSelected,
                                  std::function<void()> onCancelled)
 {
+    // Bring existing dialog to front if already open
+    if (dialogWindow != nullptr) 
+    {
+        dialogWindow->toFront(true);
+        return;
+    }
+        
     try {
         fileSelectedCallback = onFileSelected;
         cancelledCallback = onCancelled;

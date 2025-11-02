@@ -204,6 +204,7 @@ void AudioPluginAudioProcessor::changeProgramName (int index, const juce::String
 void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     try {
+        logToGui("prepareToPlay called. sampleRate=" + juce::String(sampleRate) + ", samplesPerBlock=" + juce::String(samplesPerBlock));
         juce::Logger::writeToLog("[PluginProcessor] prepareToPlay called. sampleRate=" + juce::String(sampleRate) + ", samplesPerBlock=" + juce::String(samplesPerBlock));
         std::cout << "[PluginProcessor] prepareToPlay called. sampleRate=" << sampleRate << ", samplesPerBlock=" << samplesPerBlock << std::endl;
 
@@ -251,6 +252,7 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
 
 void AudioPluginAudioProcessor::releaseResources()
 {
+    logToGui("releaseResources called.");
     try {
         controller.reset();
     } catch (const std::exception& e) {
@@ -264,6 +266,7 @@ void AudioPluginAudioProcessor::releaseResources()
 
 bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
+    logToGui("isBusesLayoutSupported called.");
   #if JucePlugin_IsMidiEffect
     juce::ignoreUnused (layouts);
     return true;
@@ -428,7 +431,7 @@ void AudioPluginAudioProcessor::setEditorPointer(AudioPluginAudioProcessorEditor
     editorPtr = editor;
 }
 
-void AudioPluginAudioProcessor::logToGui(const juce::String& message) {
+void AudioPluginAudioProcessor::logToGui(const juce::String& message) const {
     if (editorPtr) {
         juce::MessageManager::callAsync([this, msg = message]() {
             if (editorPtr) editorPtr->appendLogMessage(msg);

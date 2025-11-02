@@ -30,6 +30,9 @@ public:
     // Expose moduleTabs for safe read-only access (for crash prevention logic)
     const std::vector<std::unique_ptr<ModuleTabComponent>>& getModuleTabs() const { return moduleTabs; }
 
+    // Get the currently selected tab index
+    int getCurrentTabIndex() const { return tabs.getCurrentTabIndex(); }
+
     void suppressNumModulesSync(bool shouldSuppress) { suppressSetNumModulesVT = shouldSuppress; }
 
 private:
@@ -129,6 +132,7 @@ private:
     std::atomic<bool> fileDialogOpen { false };
 
     void loadVoiceFile(const juce::File& file);
+    void loadVoiceFileIntoModule(const juce::File& file, int targetModuleIndex);
 
     // Helper methods to get controller and performance
     FMRackController* getController();

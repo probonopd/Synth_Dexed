@@ -424,7 +424,7 @@ void VoiceBrowserComponent::sendVoiceSyx(const juce::MemoryBlock& syx, int /*mid
         if (onVoiceLoaded) {
             onVoiceLoaded(dexedVoice);
             juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
-            setStatus("Voice loaded: " + voiceName);
+            setStatus("Voice loaded: " + voiceName + " into module: " + juce::String(channelCombo.getSelectedId() + 1), false);
         } else {
             setStatus("No voice loading callback available", true);
         }

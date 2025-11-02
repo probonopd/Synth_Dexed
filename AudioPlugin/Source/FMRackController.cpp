@@ -300,7 +300,7 @@ void FMRackController::setNumModules(int num)
     if (performance) {
         std::cout << "[FMRackController] setNumModules: performance exists, updating MIDI channels" << std::endl;
         for (int i = 0; i < 16; ++i) {
-            performance->parts[i].midiChannel = (i < num) ? (i + 1) : 0;
+            performance->parts[i].midiChannel = (i < num) ? static_cast<uint8_t>(i + 1) : 0;
         }
         // Debug: print all MIDI channels after setting
         std::cout << "[FMRackController] setNumModules: MIDI channels after update: ";
@@ -345,7 +345,7 @@ void FMRackController::requestSingleVoiceDump(int midiChannel) {
     std::lock_guard<std::mutex> lock(mutex);
     if (rack) {
         std::cout << "[FMRackController] requestSingleVoiceDump: calling rack->routeSysexToModules with sysex.size()=" << sysex.size() << ", midiChannel=" << midiChannel << std::endl;
-        rack->routeSysexToModules(sysex.data(), (int)sysex.size(), midiChannel);
+        rack->routeSysexToModules(sysex.data(), static_cast<int>(sysex.size()), static_cast<uint8_t>(midiChannel));
     } else {
         std::cout << "[FMRackController] requestSingleVoiceDump: rack is nullptr" << std::endl;
     }

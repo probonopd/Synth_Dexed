@@ -495,7 +495,7 @@ void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
     dialog.release();
 }
 
-void AudioPluginAudioProcessorEditor::showVoiceBrowser(int moduleIndex)
+void AudioPluginAudioProcessorEditor::showVoiceBrowser(int /*moduleIndex*/)
 {
     if (!voiceBrowser)
         voiceBrowser = std::make_unique<VoiceBrowserComponent>();
@@ -515,6 +515,17 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int moduleIndex)
             delete this;
         }
     };
+
+    // If there's already a dialog open, bring it to front
+    if (voiceBrowser)
+    {
+        juce::DialogWindow* existingDialog = dynamic_cast<juce::DialogWindow*>(voiceBrowser->getTopLevelComponent());
+        if (existingDialog)
+        {
+            existingDialog->toFront(true);
+            return;
+        }
+    }
     
     auto* dialog = new VoiceBrowserDialog("DX7 Voice Browser", juce::Colours::lightgrey, true, true);
     
@@ -525,20 +536,29 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int moduleIndex)
     };
     
     // Set up voice loading callback using the same method as the "Open" button
-    voiceBrowser->onVoiceLoaded = [this, moduleIndex](const std::vector<uint8_t>& voiceData) {
+    voiceBrowser->onVoiceLoaded = [this](const std::vector<uint8_t>& voiceData) {
+        // Get the currently visible tab index at the time of loading
+        int currentModuleIndex = 0; // Default to module 0
+        if (rackAccordion) {
+            currentModuleIndex = rackAccordion->getCurrentTabIndex();
+            if (currentModuleIndex < 0 || currentModuleIndex >= 16) {
+                currentModuleIndex = 0; // Fallback
+            }
+        }
+        
         // Use the existing voice loading mechanism from ModuleTabComponent::loadVoiceFile
         auto* controller = processorRef.getController();
-        if (controller && moduleIndex >= 0 && moduleIndex < 16) {
+        if (controller && currentModuleIndex >= 0 && currentModuleIndex < 16) {
             // Load the voice data into the specified module using the existing method
-            controller->setPartVoiceData(moduleIndex, voiceData);
+            controller->setPartVoiceData(currentModuleIndex, voiceData);
             juce::String voiceName = VoiceData::extractDX7VoiceName(voiceData);
-            appendLogMessage("Voice loaded from browser: " + voiceName);
+            appendLogMessage("Voice loaded from browser: " + voiceName + " into module " + juce::String(currentModuleIndex + 1));
             
             // Update the voice editor panel if it's open for this module
             if (auto* voiceEditor = getVoiceEditorPanel()) {
-                if (voiceEditor->getModuleIndex() == moduleIndex) {
+                if (voiceEditor->getModuleIndex() == currentModuleIndex) {
                     // Refresh the voice editor to show the new voice data
-                    showVoiceEditorPanel(moduleIndex);
+                    showVoiceEditorPanel(currentModuleIndex);
                 }
             }
         } else {
