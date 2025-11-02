@@ -299,8 +299,15 @@ void FMRackController::setNumModules(int num)
     std::cout << "[FMRackController] setNumModules(" << num << ") called" << std::endl;
     if (performance) {
         std::cout << "[FMRackController] setNumModules: performance exists, updating MIDI channels" << std::endl;
+        // Find the MIDI channel of the last active part to use for new parts
+        uint8_t lastActiveChannel = 1; // Default to 1
+        for (int j = 0; j < 16; ++j) {
+            if (performance->parts[j].midiChannel != 0) {
+                lastActiveChannel = performance->parts[j].midiChannel;
+            }
+        }
         for (int i = 0; i < 16; ++i) {
-            performance->parts[i].midiChannel = (i < num) ? static_cast<uint8_t>(i + 1) : 0;
+            performance->parts[i].midiChannel = (i < num) ? lastActiveChannel : 0;
         }
         // Debug: print all MIDI channels after setting
         std::cout << "[FMRackController] setNumModules: MIDI channels after update: ";

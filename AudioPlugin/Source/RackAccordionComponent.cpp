@@ -181,6 +181,16 @@ void RackAccordionComponent::setNumModulesVT(int num) {
             FMRack::Performance newPerf = *perf; // Make a copy
 
             // Enable parts up to 'num', disable parts after 'num'
+            // Find the MIDI channel of the last active part to use for new parts
+            uint8_t lastActiveChannel = 1; // Default to 1
+            for (int j = 0; j < 16; ++j)
+            {
+                if (newPerf.parts[j].midiChannel != 0)
+                {
+                    lastActiveChannel = newPerf.parts[j].midiChannel;
+                }
+            }
+            
             for (int i = 0; i < 16; ++i)
             {
                 if (i < num)
@@ -189,7 +199,7 @@ void RackAccordionComponent::setNumModulesVT(int num) {
                     if (newPerf.parts[i].midiChannel == 0)
                     {
                         newPerf.parts[i] = FMRack::Performance::PartConfig(); // Reset to default
-                        newPerf.parts[i].midiChannel = static_cast<uint8_t>(i + 1); // Assign a unique MIDI channel
+                        newPerf.parts[i].midiChannel = lastActiveChannel; // Use the same channel as the last active module
                     }
                 }
                 else
@@ -768,10 +778,12 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*",
             juce::File(),
             FileBrowserDialog::DialogType::Voice);
+        openFileDialog = dialog.get();
         auto* dialogPtr = dialog.get();
         dialogPtr->showDialog(this,
             [this](const juce::File& file) {
                 fileDialogOpen = false;
+                openFileDialog = nullptr;
                 // Get the currently active tab index instead of using this tab's moduleIndex
                 int currentTabIndex = 0;
                 if (parentAccordion) {
@@ -784,6 +796,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             },
             [this]() {
                 fileDialogOpen = false;
+                openFileDialog = nullptr;
             });
         dialog.release();
     };
@@ -1108,6 +1121,11 @@ void ModuleTabComponent::loadVoiceFileIntoModule(const juce::File& file, int tar
 }
 
 ModuleTabComponent::~ModuleTabComponent() {
+    // Close any open file dialog
+    if (openFileDialog) {
+        openFileDialog->closeDialog();
+        openFileDialog = nullptr;
+    }
     fileDialogOpen = false;
 }
 

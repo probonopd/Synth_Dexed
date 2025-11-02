@@ -130,6 +130,7 @@ private:
     int moduleIndex;
     RackAccordionComponent* parentAccordion;
     std::atomic<bool> fileDialogOpen { false };
+    FileBrowserDialog* openFileDialog { nullptr }; // Track the currently open dialog
 
     void loadVoiceFile(const juce::File& file);
     void loadVoiceFileIntoModule(const juce::File& file, int targetModuleIndex);

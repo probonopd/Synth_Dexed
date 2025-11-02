@@ -67,6 +67,9 @@ private:
     std::unique_ptr<VoiceEditorWindow> voiceEditorWindow; // Added for the voice editor window
     std::unique_ptr<VoiceBrowserComponent> voiceBrowser;
 
+    // Track open file dialogs to ensure they are closed when the editor is destroyed
+    std::vector<FileBrowserDialog*> openFileDialogs;
+
     juce::GroupComponent effectsGroup;
     juce::ToggleButton compressorEnableButton{ "Compressor" };
     juce::ToggleButton reverbEnableButton{ "Reverb" };

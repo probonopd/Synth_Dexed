@@ -125,7 +125,7 @@ void CALLBACK midiInProc(HMIDIIN, UINT wMsg, DWORD_PTR, DWORD_PTR dwParam1, DWOR
 void audioThread() {
     // Set audio thread to high priority
     HANDLE hThread = GetCurrentThread(); SetThreadPriority(hThread, THREAD_PRIORITY_HIGHEST);
-    std::vector<float> leftBuffer(BUFFER_FRAMES), rightBuffer(BUFFER_FRAMES); float outputGain = 1.0f;
+    std::vector<float> leftBuffer(BUFFER_FRAMES), rightBuffer(BUFFER_FRAMES);
     while (g_running) {
         if (g_rack && g_hWaveOut && (g_waveHeaders[g_currentBuffer].dwFlags & WHDR_DONE || !(g_waveHeaders[g_currentBuffer].dwFlags & WHDR_INQUEUE))) {
             if (useSine) {
@@ -972,8 +972,8 @@ int main(int argc, char* argv[]) {
             perf.setDefaults(numModules, unisonVoices);
             for (int i = 0; i < 8; ++i) {
                 if (i < numModules) {
-                    perf.parts[i].midiChannel = i + 1;
-                    perf.parts[i].unisonVoices = unisonVoices;
+                    perf.parts[i].midiChannel = static_cast<uint8_t>(i + 1);
+                    perf.parts[i].unisonVoices = static_cast<uint8_t>(unisonVoices);
                     perf.parts[i].unisonDetune = unisonDetune; // Use command-line value
                     perf.parts[i].unisonSpread = unisonSpread; // Use command-line value
                     perf.parts[i].volume = 100;

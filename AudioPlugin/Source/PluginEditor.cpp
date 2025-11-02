@@ -213,6 +213,13 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
             }
             rackAccordion.reset();
         }
+        // Close any open file dialogs created by this editor
+        for (auto* dialog : openFileDialogs) {
+            if (dialog) {
+                dialog->closeDialog();
+            }
+        }
+        openFileDialogs.clear();
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[PluginEditor] Exception in destructor: " + juce::String(e.what()));
     } catch (...) {
@@ -372,8 +379,14 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
         juce::File(),
         FileBrowserDialog::DialogType::Performance);
     auto* dialogPtr = dialog.get();
+    openFileDialogs.push_back(dialogPtr);
     dialogPtr->showDialog(this,
-        [this](const juce::File& file) {
+        [this, dialogPtr](const juce::File& file) {
+            // Remove from tracking list when dialog closes
+            auto it = std::find(openFileDialogs.begin(), openFileDialogs.end(), dialogPtr);
+            if (it != openFileDialogs.end()) {
+                openFileDialogs.erase(it);
+            }
             if (file.getFileExtension().equalsIgnoreCase(".ini"))
             {
                 appendLogMessage("Loading performance: " + file.getFullPathName());
@@ -467,8 +480,14 @@ void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
         juce::File(),
         FileBrowserDialog::DialogType::Performance);
     auto* dialogPtr = dialog.get();
+    openFileDialogs.push_back(dialogPtr);
     dialogPtr->showDialog(this,
-        [this](const juce::File& file) {
+        [this, dialogPtr](const juce::File& file) {
+            // Remove from tracking list when dialog closes
+            auto it = std::find(openFileDialogs.begin(), openFileDialogs.end(), dialogPtr);
+            if (it != openFileDialogs.end()) {
+                openFileDialogs.erase(it);
+            }
             juce::String path = file.getFullPathName();
             if (!path.endsWithIgnoreCase(".ini"))
                 path += ".ini";
@@ -489,8 +508,12 @@ void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
                 appendLogMessage("Failed to save performance.");
             }
         },
-        []() {
-            // Cancel callback - nothing needed
+        [this, dialogPtr]() {
+            // Remove from tracking list when dialog closes
+            auto it = std::find(openFileDialogs.begin(), openFileDialogs.end(), dialogPtr);
+            if (it != openFileDialogs.end()) {
+                openFileDialogs.erase(it);
+            }
         });
     dialog.release();
 }

@@ -539,10 +539,11 @@ void AudioPluginAudioProcessor::setNumModules(int num) {
             }
         }
         if (allZero) {
-            juce::Logger::writeToLog("[PluginProcessor] setNumModules: all MIDI channels zero, assigning 1..N");
+            juce::Logger::writeToLog("[PluginProcessor] setNumModules: all MIDI channels zero, assigning same channel to all");
+            // Find the MIDI channel to use - default to 1
+            uint8_t channel = 1;
             for (int i = 0; i < 16; ++i) {
-                const uint8_t channel = static_cast<uint8_t>((i < num) ? (i + 1) : 0);
-                controller->getPerformance()->parts[i].midiChannel = channel;
+                controller->getPerformance()->parts[i].midiChannel = (i < num) ? channel : 0;
             }
             controller->setPerformance(*controller->getPerformance());
         } else {

@@ -16,7 +16,7 @@ namespace FMRack {
 
 Performance::Performance() {
     // Initialize with default values
-    setDefaults(16, 1); // Added unisonVoices parameter
+    setDefaults(1, 1); // Added unisonVoices parameter
 }
 
 Performance::~Performance() {
@@ -61,107 +61,107 @@ bool Performance::loadFromFile(const std::string& filename) {
             bool setting_found_for_this_part_key = false;
             if (key == "BankNumber" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].bankNumber = std::clamp(v, 0, 127);
+                parts[part_num-1].bankNumber = static_cast<uint8_t>(std::clamp(v, 0, 127));
                 setting_found_for_this_part_key = true;
             } else if (key == "VoiceNumber" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].voiceNumber = std::clamp(v, 1, 32);
+                parts[part_num-1].voiceNumber = static_cast<uint8_t>(std::clamp(v, 1, 32));
                 setting_found_for_this_part_key = true;
             } else if (key == "MIDIChannel" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].midiChannel = (v < 0) ? 0 : (v > 255 ? 255 : v); // allow 0, 1..16, >16 for omni
+                parts[part_num-1].midiChannel = (v < 0) ? 0 : (v > 255 ? 255 : static_cast<uint8_t>(v)); // allow 0, 1..16, >16 for omni
                 setting_found_for_this_part_key = true;
             } else if (key == "Volume" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].volume = std::clamp(v, 0, 127);
+                parts[part_num-1].volume = static_cast<uint8_t>(std::clamp(v, 0, 127));
                 setting_found_for_this_part_key = true;
             } else if (key == "Pan" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].pan = std::clamp(v, 0, 127);
+                parts[part_num-1].pan = static_cast<uint8_t>(std::clamp(v, 0, 127));
                 setting_found_for_this_part_key = true;
             } else if (key == "Detune" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].detune = std::clamp(v, -99, 99);
+                parts[part_num-1].detune = static_cast<int8_t>(std::clamp(v, -99, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "Cutoff" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].cutoff = std::clamp(v, 0, 99);
+                parts[part_num-1].cutoff = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "Resonance" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].resonance = std::clamp(v, 0, 99);
+                parts[part_num-1].resonance = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "NoteLimitLow" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].noteLimitLow = std::clamp(v, 0, 127);
+                parts[part_num-1].noteLimitLow = static_cast<uint8_t>(std::clamp(v, 0, 127));
                 setting_found_for_this_part_key = true;
             } else if (key == "NoteLimitHigh" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].noteLimitHigh = std::clamp(v, 0, 127);
+                parts[part_num-1].noteLimitHigh = static_cast<uint8_t>(std::clamp(v, 0, 127));
                 setting_found_for_this_part_key = true;
             } else if (key == "NoteShift" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].noteShift = std::clamp(v, -24, 24);
+                parts[part_num-1].noteShift = static_cast<int8_t>(std::clamp(v, -24, 24));
                 setting_found_for_this_part_key = true;
             } else if (key == "ReverbSend" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].reverbSend = std::clamp(v, 0, 99);
+                parts[part_num-1].reverbSend = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "PitchBendRange" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].pitchBendRange = std::clamp(v, 0, 12);
+                parts[part_num-1].pitchBendRange = static_cast<uint8_t>(std::clamp(v, 0, 12));
                 setting_found_for_this_part_key = true;
             } else if (key == "PitchBendStep" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].pitchBendStep = std::clamp(v, 0, 12);
+                parts[part_num-1].pitchBendStep = static_cast<uint8_t>(std::clamp(v, 0, 12));
                 setting_found_for_this_part_key = true;
             } else if (key == "PortamentoMode" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].portamentoMode = std::clamp(v, 0, 1);
+                parts[part_num-1].portamentoMode = static_cast<uint8_t>(std::clamp(v, 0, 1));
                 setting_found_for_this_part_key = true;
             } else if (key == "PortamentoGlissando" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].portamentoGlissando = std::clamp(v, 0, 1);
+                parts[part_num-1].portamentoGlissando = static_cast<uint8_t>(std::clamp(v, 0, 1));
                 setting_found_for_this_part_key = true;
             } else if (key == "PortamentoTime" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].portamentoTime = std::clamp(v, 0, 99);
+                parts[part_num-1].portamentoTime = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "MonoMode" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].monoMode = std::clamp(v, 0, 1);
+                parts[part_num-1].monoMode = static_cast<uint8_t>(std::clamp(v, 0, 1));
                 setting_found_for_this_part_key = true;
             } else if (key == "ModulationWheelRange" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].modulationWheelRange = std::clamp(v, 0, 99);
+                parts[part_num-1].modulationWheelRange = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "ModulationWheelTarget" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].modulationWheelTarget = std::clamp(v, 0, 7);
+                parts[part_num-1].modulationWheelTarget = static_cast<uint8_t>(std::clamp(v, 0, 7));
                 setting_found_for_this_part_key = true;
             } else if (key == "FootControlRange" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].footControlRange = std::clamp(v, 0, 99);
+                parts[part_num-1].footControlRange = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "FootControlTarget" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].footControlTarget = std::clamp(v, 0, 7);
+                parts[part_num-1].footControlTarget = static_cast<uint8_t>(std::clamp(v, 0, 7));
                 setting_found_for_this_part_key = true;
             } else if (key == "BreathControlRange" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].breathControlRange = std::clamp(v, 0, 99);
+                parts[part_num-1].breathControlRange = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "BreathControlTarget" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].breathControlTarget = std::clamp(v, 0, 7);
+                parts[part_num-1].breathControlTarget = static_cast<uint8_t>(std::clamp(v, 0, 7));
                 setting_found_for_this_part_key = true;
             } else if (key == "AftertouchRange" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].aftertouchRange = std::clamp(v, 0, 99);
+                parts[part_num-1].aftertouchRange = static_cast<uint8_t>(std::clamp(v, 0, 99));
                 setting_found_for_this_part_key = true;
             } else if (key == "AftertouchTarget" + std::to_string(part_num)) {
                 int v = std::stoi(value);
-                parts[part_num-1].aftertouchTarget = std::clamp(v, 0, 7);
+                parts[part_num-1].aftertouchTarget = static_cast<uint8_t>(std::clamp(v, 0, 7));
                 setting_found_for_this_part_key = true;
             } else if (key == "VoiceData" + std::to_string(part_num)) {
                 std::istringstream hexStream(value);
@@ -317,9 +317,9 @@ void Performance::setDefaults(int numParts, int unisonVoices) {
         this->parts[i].unisonSpread = 0.5f; // Default stereo spread
 
         if (i < numParts) {
-            this->parts[i].midiChannel = i + 1; // Assign unique MIDI channels for active parts
+            this->parts[i].midiChannel = static_cast<uint8_t>(i + 1); // Assign unique MIDI channels for active parts
             this->parts[i].volume = 100;        // Active parts default volume
-            this->parts[i].unisonVoices = unisonVoices; // Use the provided unison voices value for active parts
+            this->parts[i].unisonVoices = static_cast<uint8_t>(unisonVoices); // Use the provided unison voices value for active parts
         } else {
             this->parts[i].midiChannel = 0; // Disable unused parts
             this->parts[i].volume = 0;      // Inactive parts have no volume
