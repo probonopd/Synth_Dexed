@@ -354,7 +354,7 @@ void RackAccordionComponent::resized()
 void RackAccordionComponent::paint(juce::Graphics& g)
 {
     // Use the same background color as VoiceEditorPanel
-    g.fillAll(juce::Colour(0xff23272e)); // dark gray-blue, adjust as needed to match VoiceEditorPanel
+    g.fillAll(juce::Colour(0xff332b28)); // Match Voice Editor's dark brown/sepia background
 }
 
 // ================= ModuleTabComponent =================

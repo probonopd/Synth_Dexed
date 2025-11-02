@@ -78,7 +78,7 @@ void FileBrowserDialog::showDialog(juce::Component* parent,
         cancelledCallback = onCancelled;
         // Always set a reasonable default size before showing
         setSize(600, 400);
-        dialogWindow = std::make_unique<CustomDialogWindow>("Select File", juce::Colours::darkgrey, true, this);
+        dialogWindow = std::make_unique<CustomDialogWindow>("Select File", juce::Colour(0xff332b28), true, this);
         dialogWindow->setContentOwned(this, false);
         dialogWindow->setUsingNativeTitleBar(true);
         dialogWindow->setResizable(true, false);

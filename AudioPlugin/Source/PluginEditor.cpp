@@ -80,7 +80,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         logTextBox.setMultiLine(true);
         logTextBox.setReadOnly(true);
         logTextBox.setScrollbarsShown(true);
-    logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
+    logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
     logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
     logTextBox.setFont(juce::Font(juce::FontOptions(12.0f)));
         addAndMakeVisible(logTextBox);
@@ -231,7 +231,7 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 {
     // (Our component is opaque, so we must completely fill the background with a solid colour)
-    g.fillAll (getLookAndFeel().findColour (juce::ResizableWindow::backgroundColourId));
+    g.fillAll (juce::Colour(0xff332b28)); // Match Voice Editor's dark brown/sepia background
 }
 
 void AudioPluginAudioProcessorEditor::resized()

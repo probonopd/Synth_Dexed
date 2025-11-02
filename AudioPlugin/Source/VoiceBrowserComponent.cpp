@@ -21,16 +21,16 @@ VoiceBrowserComponent::VoiceBrowserComponent() {
     addAndMakeVisible(searchBox);
     searchBox.setTextToShowWhenEmpty("Search voices...", juce::Colours::grey);
     searchBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
-    searchBox.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black);
+    searchBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
     searchBox.onTextChange = [this] { filterVoices(); };
 
     addAndMakeVisible(voiceListBox);
     voiceListBox.setModel(this);
-    voiceListBox.setColour(juce::ListBox::backgroundColourId, juce::Colours::black);
+    voiceListBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
 
     addAndMakeVisible(channelCombo);
     channelCombo.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    channelCombo.setColour(juce::ComboBox::backgroundColourId, juce::Colours::black);
+    channelCombo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
     for (int i = 1; i <= 16; ++i) channelCombo.addItem("MIDI " + juce::String(i), i);
     channelCombo.addItem("Omni", 17);
     channelCombo.setSelectedId(1);    // Buttons removed - voices are loaded automatically when clicked
@@ -48,7 +48,7 @@ VoiceBrowserComponent::~VoiceBrowserComponent() {
 }
 
 void VoiceBrowserComponent::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colours::darkgrey);
+    g.fillAll(juce::Colour(0xff332b28)); // Match Voice Editor's dark brown/sepia background
 }
 
 void VoiceBrowserComponent::resized() {
