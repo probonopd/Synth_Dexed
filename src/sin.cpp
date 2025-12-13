@@ -29,7 +29,7 @@ int32_t sintab[SIN_N_SAMPLES + 1];
 #endif
 
 void Sin::init() {
-  FRAC_NUM dphase = 2 * M_PI / SIN_N_SAMPLES;
+  FRAC_NUM dphase = static_cast<FRAC_NUM>(2.0) * static_cast<FRAC_NUM>(M_PI) / static_cast<FRAC_NUM>(SIN_N_SAMPLES);
   //int32_t c = (int32_t)floor(cos(dphase) * (1 << 30) + 0.5);
   int32_t c = (int32_t)floor(COS_FUNC(dphase) * (1 << 30) + 0.5);
   //int32_t s = (int32_t)floor(sin(dphase) * (1 << 30) + 0.5);

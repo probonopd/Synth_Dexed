@@ -33,12 +33,18 @@
 #endif
 #include <functional>
 
-// Add DLL export/import declarations for Windows
+// Windows DLL export/import declarations.
+//
+// In this project we build Dexed sources directly into the final binary/library,
+// so importing (dllimport) can trigger MSVC warnings (C4251/C4273) when the
+// consuming target isn't actually linking against a Dexed DLL.
+//
+// If you later split Dexed into its own shared library, reintroduce dllimport.
 #if defined(_WIN32) && !defined(SYNTH_DEXED_STATIC)
   #ifdef SYNTH_DEXED_EXPORTS
     #define DEXED_API __declspec(dllexport)
   #else
-    #define DEXED_API __declspec(dllimport)
+    #define DEXED_API
   #endif
 #else
   #define DEXED_API

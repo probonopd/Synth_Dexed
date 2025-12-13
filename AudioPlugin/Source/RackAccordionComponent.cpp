@@ -750,22 +750,21 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     // Load Voice button
     loadVoiceButton.setButtonText("Load");
     loadVoiceButton.onClick = [this] {
-        if (fileDialogOpen) {
-            juce::Logger::writeToLog("[ModuleTabComponent] File dialog already open, ignoring.");
-            return;
+        if (!openVoiceFileDialog)
+        {
+            openVoiceFileDialog = std::make_unique<FileBrowserDialog>(
+                "Select Voice File",
+                "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*",
+                juce::File(),
+                FileBrowserDialog::DialogType::Voice);
         }
+
         fileDialogOpen = true;
-        auto dialog = std::make_unique<FileBrowserDialog>(
-            "Select Voice File",
-            "*.syx;*.bin;*.dx7;*.dat;*.voice;*.vce;*.opm;*.ini;*",
-            juce::File(),
-            FileBrowserDialog::DialogType::Voice);
-        openFileDialog = dialog.get();
-        auto* dialogPtr = dialog.get();
+
+        auto* dialogPtr = openVoiceFileDialog.get();
         dialogPtr->showDialog(this,
             [this](const juce::File& file) {
                 fileDialogOpen = false;
-                openFileDialog = nullptr;
                 // Get the currently active tab index instead of using this tab's moduleIndex
                 int currentTabIndex = 0;
                 if (parentAccordion) {
@@ -778,9 +777,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             },
             [this]() {
                 fileDialogOpen = false;
-                openFileDialog = nullptr;
             });
-        dialog.release();
     };
     loadVoiceButton.setButtonText("Open");
     addAndMakeVisible(loadVoiceButton);
@@ -1090,9 +1087,8 @@ void ModuleTabComponent::loadVoiceFileIntoModule(const juce::File& file, int tar
 
 ModuleTabComponent::~ModuleTabComponent() {
     // Close any open file dialog
-    if (openFileDialog) {
-        openFileDialog->closeDialog();
-        openFileDialog = nullptr;
+    if (openVoiceFileDialog) {
+        openVoiceFileDialog->closeDialog();
     }
     fileDialogOpen = false;
 }
@@ -1102,12 +1098,8 @@ bool ModuleTabComponent::isFileDialogOpen() const {
 }
 
 void ModuleTabComponent::closeFileDialog() {
-    // Defensive: try to find any FileBrowserDialog child and close it
-    for (int i = 0; i < getNumChildComponents(); ++i) {
-        if (auto* dialog = dynamic_cast<FileBrowserDialog*>(getChildComponent(i))) {
-            dialog->closeDialog();
-        }
-    }
+    if (openVoiceFileDialog)
+        openVoiceFileDialog->closeDialog();
     fileDialogOpen = false;
 }
 

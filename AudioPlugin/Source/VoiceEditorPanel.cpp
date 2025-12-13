@@ -845,6 +845,7 @@ void VoiceEditorPanel::OperatorSliders::resized()
 
 void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx)
 {
+    juce::ignoreUnused(sliderIdx);
     // Forward to parent VoiceEditorPanel
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
         parent->showHelpForKey(sliderNames[sliderIdx]);
@@ -853,6 +854,7 @@ void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx)
 
 void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx)
 {
+    juce::ignoreUnused(sliderIdx);
     // Forward to parent VoiceEditorPanel
     if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
         parent->restoreDefaultHelp();

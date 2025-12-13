@@ -256,13 +256,7 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
             }
             rackAccordion.reset();
         }
-        // Close any open file dialogs created by this editor
-        for (auto* dialog : openFileDialogs) {
-            if (dialog) {
-                dialog->closeDialog();
-            }
-        }
-        openFileDialogs.clear();
+        // Singleton dialogs are owned here; no special handling needed beyond normal destruction.
     } catch (const std::exception& e) {
         juce::Logger::writeToLog("[PluginEditor] Exception in destructor: " + juce::String(e.what()));
     } catch (...) {
@@ -369,9 +363,9 @@ void AudioPluginAudioProcessorEditor::resized()
     const int verticalColumns = 3;
     const int verticalRows = 2;
     const int availableGridWidth = juce::jmax(0, effectsContent.getWidth() - columnGapRotary * (verticalColumns - 1));
+    juce::ignoreUnused(availableGridWidth);
     const int availableGridHeight = juce::jmax(0, effectsContent.getHeight() - rowGap * (verticalRows - 1) - kVerticalSliderLabelHeight * verticalRows);
-    const int widthLimitedHeight = verticalColumns > 0 ? availableGridWidth / verticalColumns : availableGridWidth;
-    const int heightLimitedHeight = verticalRows > 0 ? availableGridHeight / verticalRows : availableGridHeight;
+    juce::ignoreUnused(availableGridHeight);
     int verticalSliderHeight = juce::jlimit(80, 150, effectsContent.getHeight() / 4);
     if (verticalSliderHeight <= 0)
         verticalSliderHeight = 80;
@@ -416,20 +410,18 @@ void AudioPluginAudioProcessorEditor::numModulesChanged() {
 
 void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 {
-    auto dialog = std::make_unique<FileBrowserDialog>(
-        "Select Performance File",
-        "*.ini",
-        juce::File(),
-        FileBrowserDialog::DialogType::Performance);
-    auto* dialogPtr = dialog.get();
-    openFileDialogs.push_back(dialogPtr);
+    if (!performanceFileDialog)
+    {
+        performanceFileDialog = std::make_unique<FileBrowserDialog>(
+            "Select Performance File",
+            "*.ini",
+            juce::File(),
+            FileBrowserDialog::DialogType::Performance);
+    }
+
+    auto* dialogPtr = performanceFileDialog.get();
     dialogPtr->showDialog(this,
-        [this, dialogPtr](const juce::File& file) {
-            // Remove from tracking list when dialog closes
-            auto it = std::find(openFileDialogs.begin(), openFileDialogs.end(), dialogPtr);
-            if (it != openFileDialogs.end()) {
-                openFileDialogs.erase(it);
-            }
+        [this](const juce::File& file) {
             if (file.getFileExtension().equalsIgnoreCase(".ini"))
             {
                 appendLogMessage("Loading performance: " + file.getFullPathName());
@@ -481,7 +473,6 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
         []() {
             // Cancel callback - nothing needed
         });
-    dialog.release();
 }
 
 void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
@@ -517,20 +508,18 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
 
 void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
 {
-    auto dialog = std::make_unique<FileBrowserDialog>(
-        "Save Performance File",
-        "*.ini",
-        juce::File(),
-        FileBrowserDialog::DialogType::Performance);
-    auto* dialogPtr = dialog.get();
-    openFileDialogs.push_back(dialogPtr);
+    if (!performanceFileDialog)
+    {
+        performanceFileDialog = std::make_unique<FileBrowserDialog>(
+            "Save Performance File",
+            "*.ini",
+            juce::File(),
+            FileBrowserDialog::DialogType::Performance);
+    }
+
+    auto* dialogPtr = performanceFileDialog.get();
     dialogPtr->showDialog(this,
-        [this, dialogPtr](const juce::File& file) {
-            // Remove from tracking list when dialog closes
-            auto it = std::find(openFileDialogs.begin(), openFileDialogs.end(), dialogPtr);
-            if (it != openFileDialogs.end()) {
-                openFileDialogs.erase(it);
-            }
+        [this](const juce::File& file) {
             juce::String path = file.getFullPathName();
             if (!path.endsWithIgnoreCase(".ini"))
                 path += ".ini";
@@ -551,54 +540,44 @@ void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
                 appendLogMessage("Failed to save performance.");
             }
         },
-        [this, dialogPtr]() {
-            // Remove from tracking list when dialog closes
-            auto it = std::find(openFileDialogs.begin(), openFileDialogs.end(), dialogPtr);
-            if (it != openFileDialogs.end()) {
-                openFileDialogs.erase(it);
-            }
+        []() {
         });
-    dialog.release();
 }
 
 void AudioPluginAudioProcessorEditor::showVoiceBrowser(int /*moduleIndex*/)
 {
     if (!voiceBrowser)
         voiceBrowser = std::make_unique<VoiceBrowserComponent>();
-    
-    // Create a custom dialog window that properly handles close events
-    class VoiceBrowserDialog : public juce::DialogWindow
-    {
-    public:
-        VoiceBrowserDialog(const juce::String& name, juce::Colour backgroundColour, bool escapeKeyTriggersCloseButton, bool addToDesktop)
-            : juce::DialogWindow(name, backgroundColour, escapeKeyTriggersCloseButton, addToDesktop)
-        {
-        }
-        
-        void closeButtonPressed() override
-        {
-            setVisible(false);
-            delete this;
-        }
-    };
 
-    // If there's already a dialog open, bring it to front
-    if (voiceBrowser)
+    // Create singleton window if needed
+    if (!voiceBrowserWindow)
     {
-        juce::DialogWindow* existingDialog = dynamic_cast<juce::DialogWindow*>(voiceBrowser->getTopLevelComponent());
-        if (existingDialog)
+        class VoiceBrowserDialogWindow : public juce::DialogWindow
         {
-            existingDialog->toFront(true);
-            return;
-        }
+        public:
+            using juce::DialogWindow::DialogWindow;
+
+            void closeButtonPressed() override
+            {
+                setVisible(false);
+            }
+        };
+
+        voiceBrowserWindow = std::make_unique<VoiceBrowserDialogWindow>(
+            "DX7 Voice Browser",
+            juce::Colours::lightgrey,
+            true);
+
+        voiceBrowserWindow->setUsingNativeTitleBar(true);
+        voiceBrowserWindow->setResizable(true, false);
+        voiceBrowserWindow->setContentNonOwned(voiceBrowser.get(), true);
+        voiceBrowserWindow->centreWithSize(600, 400);
     }
-    
-    auto* dialog = new VoiceBrowserDialog("DX7 Voice Browser", juce::Colours::lightgrey, true, true);
-    
-    // Set up close callback for ESC key
-    voiceBrowser->onClose = [dialog]() {
-        dialog->setVisible(false);
-        delete dialog;
+
+    // ESC should just hide the singleton window
+    voiceBrowser->onClose = [this]() {
+        if (voiceBrowserWindow)
+            voiceBrowserWindow->setVisible(false);
     };
     
     // Set up voice loading callback using the same method as the "Open" button
@@ -632,12 +611,7 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int /*moduleIndex*/)
         }
     };
     
-    // Make ESC key work and allow window X button to close
-    dialog->setUsingNativeTitleBar(true);
-    
-    // Don't release ownership - keep the voiceBrowser so we can reuse it
-    dialog->setContentNonOwned(voiceBrowser.get(), true);
-    dialog->centreWithSize(600, 400);
-    dialog->setVisible(true);
+    voiceBrowserWindow->setVisible(true);
+    voiceBrowserWindow->toFront(true);
 }
 

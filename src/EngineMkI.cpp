@@ -78,14 +78,14 @@ EngineMkI::EngineMkI() {
     float bitReso = SINLOG_TABLESIZE;
     
     for(int32_t i=0;i<SINLOG_TABLESIZE;i++) {
-        float x1 = sin(((0.5+i)/bitReso) * M_PI/2.0);
-        sinLogTable[i] = round(-1024 * log2(x1));
+        const float x1 = sinf(((0.5f + static_cast<float>(i)) / bitReso) * static_cast<float>(M_PI) / 2.0f);
+        sinLogTable[i] = static_cast<uint16_t>(lroundf(-1024.0f * log2f(x1)));
     }
     
     bitReso = SINEXP_TABLESIZE;
     for(int32_t i=0;i<SINEXP_TABLESIZE;i++) {
-        float x1 = (pow(2, float(i)/bitReso)-1) * 4096;
-        sinExpTable[i] = round(x1);
+        const float x1 = (powf(2.0f, static_cast<float>(i) / bitReso) - 1.0f) * 4096.0f;
+        sinExpTable[i] = static_cast<uint16_t>(lroundf(x1));
     }
     
 #ifdef MKIDEBUG
@@ -119,7 +119,11 @@ EngineMkI::EngineMkI() {
 }
 
 inline int32_t mkiSin(int32_t phase, uint16_t env) {
-    uint16_t expVal = sinLog(phase >> (22 - SINLOG_BITDEPTH)) + (env);
+    const uint16_t expValBase = sinLog(phase >> (22 - SINLOG_BITDEPTH));
+    // Keep the computation explicitly in 16-bit space to avoid MSVC's C4244 warning
+    // about an int32_t->uint16_t narrowing during usual integral promotions.
+    const uint16_t env16 = static_cast<uint16_t>(env);
+    uint16_t expVal = static_cast<uint16_t>(static_cast<uint16_t>(expValBase) + env16);
     //int16_t expValShow = expVal;
     
     const bool isSigned = expVal & NEGATIVE_BIT;
@@ -156,7 +160,7 @@ void EngineMkI::compute(int32_t *output, const int32_t *input,
 
     for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
-        int32_t y = mkiSin((phase+input[i]), gain);
+        int32_t y = mkiSin((phase + input[i]), static_cast<uint16_t>(gain));
         output[i] = y + adder[i];
         phase += freq;
     }
@@ -170,7 +174,7 @@ void EngineMkI::compute_pure(int32_t *output, int32_t phase0, int32_t freq, int3
     
     for (uint8_t i = 0; i < _N_; i++) {
         gain += dgain;
-        int32_t y = mkiSin(phase , gain);
+        int32_t y = mkiSin(phase, static_cast<uint16_t>(gain));
         output[i] = y + adder[i];
         phase += freq;
     }
@@ -188,7 +192,7 @@ void EngineMkI::compute_fb(int32_t *output, int32_t phase0, int32_t freq, int32_
         gain += dgain;
         int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
         y0 = y;
-        y = mkiSin((phase+scaled_fb), gain);
+        y = mkiSin((phase + scaled_fb), static_cast<uint16_t>(gain));
         output[i] = y + adder[i];
         phase += freq;
     }
@@ -222,12 +226,12 @@ void EngineMkI::compute_fb2(int32_t *output, FmOpParams *parms, int32_t gain01, 
         // op 0
         gain[0] += dgain[0];
         y0 = y;
-        y = mkiSin(phase[0]+scaled_fb, gain[0]);
+    y = mkiSin(phase[0] + scaled_fb, static_cast<uint16_t>(gain[0]));
         phase[0] += parms[0].freq;
         
         // op 1
         gain[1] += dgain[1];
-        y = mkiSin(phase[1]+y, gain[1]);
+    y = mkiSin(phase[1] + y, static_cast<uint16_t>(gain[1]));
         phase[1] += parms[1].freq;
         
         output[i] = y;
@@ -266,17 +270,17 @@ void EngineMkI::compute_fb3(int32_t *output, FmOpParams *parms, int32_t gain01, 
         // op 0
         gain[0] += dgain[0];
         y0 = y;
-        y = mkiSin(phase[0]+scaled_fb, gain[0]);
+    y = mkiSin(phase[0] + scaled_fb, static_cast<uint16_t>(gain[0]));
         phase[0] += parms[0].freq;
         
         // op 1
         gain[1] += dgain[1];
-        y = mkiSin(phase[1]+y, gain[1]);
+    y = mkiSin(phase[1] + y, static_cast<uint16_t>(gain[1]));
         phase[1] += parms[1].freq;
         
         // op 2
         gain[2] += dgain[2];
-        y = mkiSin(phase[2]+y, gain[2]);
+    y = mkiSin(phase[2] + y, static_cast<uint16_t>(gain[2]));
         phase[2] += parms[2].freq;
         
         output[i] = y;

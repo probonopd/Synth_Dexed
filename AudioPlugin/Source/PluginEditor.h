@@ -67,9 +67,10 @@ private:
     std::unique_ptr<VoiceEditorPanel> voiceEditorPanel; // Added to manage the new panel
     std::unique_ptr<VoiceEditorWindow> voiceEditorWindow; // Added for the voice editor window
     std::unique_ptr<VoiceBrowserComponent> voiceBrowser;
+    std::unique_ptr<juce::DialogWindow> voiceBrowserWindow;
 
-    // Track open file dialogs to ensure they are closed when the editor is destroyed
-    std::vector<FileBrowserDialog*> openFileDialogs;
+    // Singleton dialogs: reuse the same instance and bring to front if already open
+    std::unique_ptr<FileBrowserDialog> performanceFileDialog;
 
     juce::GroupComponent effectsGroup;
     juce::ToggleButton compressorEnableButton{ "Compressor" };

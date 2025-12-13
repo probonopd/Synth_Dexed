@@ -212,7 +212,17 @@ bool Performance::saveToFile(const std::string& filename) const {
     file << "; FMRack Performance INI\n";
     file << "; Saved on: ";
     time_t now = time(nullptr);
-    file << std::put_time(std::localtime(&now), "%Y-%m-%d %H:%M:%S") << "\n\n";
+    {
+#ifdef _WIN32
+    std::tm tmSnapshot{};
+    localtime_s(&tmSnapshot, &now);
+    file << std::put_time(&tmSnapshot, "%Y-%m-%d %H:%M:%S") << "\n\n";
+#else
+    std::tm tmSnapshot{};
+    localtime_r(&now, &tmSnapshot);
+    file << std::put_time(&tmSnapshot, "%Y-%m-%d %H:%M:%S") << "\n\n";
+#endif
+    }
 
     // Write part configs (1-based)
     for (int part_num = 1; part_num <= 8; ++part_num) {

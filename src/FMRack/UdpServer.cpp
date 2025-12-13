@@ -23,7 +23,13 @@ extern bool debugEnabled;
 
 namespace FMRack {
 
-UdpServer::UdpServer(int port, Callback cb) : port_(port), callback_(cb), running_(false), sock_(-1) {
+UdpServer::UdpServer(int port, Callback cb) : port_(port), callback_(cb), running_(false),
+#ifdef _WIN32
+    sock_(INVALID_SOCKET)
+#else
+    sock_(-1)
+#endif
+{
 #ifdef _WIN32
     // Windows specific initialization
     WSADATA wsaData;
@@ -93,7 +99,7 @@ void UdpServer::start() {
     sockaddr_in serverAddr;
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY;
-    serverAddr.sin_port = htons(port_);
+    serverAddr.sin_port = htons(static_cast<u_short>(port_));
 
     if (bind(sock_, (SOCKADDR*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
         // Handle error

@@ -39,13 +39,13 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
     if (!enabled_) return;
     
     // Set module parameters
-    volume_ = config.volume / 127.0f;
-    pan_ = config.pan / 127.0f;
+    volume_ = static_cast<float>(config.volume) / 127.0f;
+    pan_ = static_cast<float>(config.pan) / 127.0f;
     detune_ = config.detune;
     noteShift_ = config.noteShift;
     noteLimitLow_ = config.noteLimitLow;
     noteLimitHigh_ = config.noteLimitHigh;
-    reverbSend_ = config.reverbSend / 127.0f;
+    reverbSend_ = static_cast<float>(config.reverbSend) / 127.0f;
     monoMode_ = (config.monoMode != 0);
     
     // Set up unison
@@ -68,25 +68,25 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
                       << " cents, pan " << (unisonPan_[i] * 100.0f) << "%\n";
         }
 
-        engine->setModWheelRange(config.modulationWheelRange);
+    engine->setModWheelRange(static_cast<uint8_t>(config.modulationWheelRange));
         engine->setModWheelTarget(config.modulationWheelTarget);
-        engine->setFootControllerRange(config.footControlRange);
+    engine->setFootControllerRange(static_cast<uint8_t>(config.footControlRange));
         engine->setFootControllerTarget(config.footControlTarget);
-        engine->setBreathControllerRange(config.breathControlRange);
+    engine->setBreathControllerRange(static_cast<uint8_t>(config.breathControlRange));
         engine->setBreathControllerTarget(config.breathControlTarget);
-        engine->setAftertouchRange(config.aftertouchRange);
+    engine->setAftertouchRange(static_cast<uint8_t>(config.aftertouchRange));
         engine->setAftertouchTarget(config.aftertouchTarget);
-        engine->setPitchbendRange(config.pitchBendRange);
-        engine->setPitchbendStep(config.pitchBendStep);
+    engine->setPitchbendRange(static_cast<uint8_t>(config.pitchBendRange));
+    engine->setPitchbendStep(static_cast<uint8_t>(config.pitchBendStep));
         engine->setPortamentoMode(config.portamentoMode);
         engine->setPortamentoGlissando(config.portamentoGlissando);
         engine->setPortamentoTime(config.portamentoTime);
         engine->setMonoMode(config.monoMode != 0);
         // Do not delete this comment: Do not set master tune here, because it is set per voice in setupUnison
-        engine->setVelocityScale(config.velocityScale);
-        engine->setMaxNotes(config.maxNotes);
-        engine->setEngineType(config.engineType);
-        engine->setGain(config.gain);
+    engine->setVelocityScale(static_cast<uint8_t>(config.velocityScale));
+    engine->setMaxNotes(static_cast<uint8_t>(config.maxNotes));
+    engine->setEngineType(static_cast<uint8_t>(config.engineType));
+    engine->setGain(static_cast<int16_t>(config.gain));
         engine->setSustain(config.sustain != 0);
         engine->setSostenuto(config.sostenuto != 0);
         engine->setHold(config.hold != 0);
@@ -98,8 +98,8 @@ void Module::configureFromPerformance(const Performance::PartConfig& config) {
         engine->setCompRatio(config.compRatio);
         engine->setCompThreshold(config.compThreshold);
 */
-        engine->setFilterCutoff(config.filterCutoff);
-        engine->setFilterResonance(config.filterResonance);
+        engine->setFilterCutoff(static_cast<float>(config.filterCutoff));
+        engine->setFilterResonance(static_cast<float>(config.filterResonance));
     }
 }
 
@@ -118,7 +118,7 @@ void Module::setupUnison(uint8_t voices, float detune, float spread) {
     
     // Create engines with detuning and panning
     for (uint8_t i = 0; i < voices; ++i) {
-        auto engine = std::make_unique<Dexed>(16, static_cast<uint16_t>(sampleRate_));
+        auto engine = std::make_unique<Dexed>(static_cast<uint8_t>(16), static_cast<uint16_t>(sampleRate_));
         // Register MIDI out callback to print MIDI from Dexed
         engine->setMidiOutCallback([this](const uint8_t* data, int len) { this->onMidiFromDexed(data, len); });
         
@@ -134,7 +134,7 @@ void Module::setupUnison(uint8_t voices, float detune, float spread) {
             voicePan = std::clamp(voicePan, 0.0f, 1.0f);
         }
         // Apply detune to Dexed engine (in cents)
-        engine->setMasterTune(static_cast<int8_t>(voiceDetune));
+        engine->setMasterTune(static_cast<int8_t>(std::lround(voiceDetune)));
         fmEngines_.push_back(std::move(engine));
         unisonDetune_.push_back(voiceDetune);
         unisonPan_.push_back(voicePan);
@@ -168,7 +168,7 @@ void Module::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2) {
     uint8_t msgChannel = (status & 0x0F) + 1; // 1-based channel for Dexed
     for (auto& engine : fmEngines_) {
         DEBUG_PRINT("[DEBUG] midiDataHandler: channel=" << (int)msgChannel << ", status=0x" << std::hex << (int)status << std::dec << ", data1=" << (int)data1 << ", data2=" << (int)data2);
-        engine->midiDataHandler(msgChannel, midiData, 3);
+        engine->midiDataHandler(msgChannel, midiData, static_cast<int16_t>(3));
     }
 }
 
@@ -197,7 +197,7 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
     // Process each unison voice
     for (size_t voice = 0; voice < fmEngines_.size(); ++voice) {
         // Get mono samples from Dexed (int16_t format)
-        fmEngines_[voice]->getSamples(tempBuffer_.data(), numSamples);
+        fmEngines_[voice]->getSamples(tempBuffer_.data(), static_cast<uint16_t>(numSamples));
         
         // Apply voice-specific detune/pan
         float voicePan = unisonPan_[voice];
@@ -231,8 +231,9 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
         sumLPre += leftOut[i] * leftOut[i];
         sumRPre += rightOut[i] * rightOut[i];
     }
-    float rmsLPre = numSamples > 0 ? std::sqrt(sumLPre / numSamples) : 0.0f;
-    float rmsRPre = numSamples > 0 ? std::sqrt(sumRPre / numSamples) : 0.0f;
+    const float n = numSamples > 0 ? static_cast<float>(numSamples) : 1.0f;
+    float rmsLPre = numSamples > 0 ? std::sqrt(sumLPre / n) : 0.0f;
+    float rmsRPre = numSamples > 0 ? std::sqrt(sumRPre / n) : 0.0f;
     preGainLevelL_.store(rmsLPre);
     preGainLevelR_.store(rmsRPre);
     // --- Post-gain metering (after gain applied) ---
@@ -243,8 +244,8 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
         sumL += left * left;
         sumR += right * right;
     }
-    float rmsL = numSamples > 0 ? std::sqrt(sumL / numSamples) : 0.0f;
-    float rmsR = numSamples > 0 ? std::sqrt(sumR / numSamples) : 0.0f;
+    float rmsL = numSamples > 0 ? std::sqrt(sumL / n) : 0.0f;
+    float rmsR = numSamples > 0 ? std::sqrt(sumR / n) : 0.0f;
     outputLevelL_.store(rmsL);
     outputLevelR_.store(rmsR);
 }
@@ -264,7 +265,7 @@ void Module::processSysex(const uint8_t* data, int len) {
     // Forward all other SysEx to all FM engines (Dexed instances)
     for (auto& engine : fmEngines_) {
         if (engine) {
-            engine->midiDataHandler(midiChannel_, const_cast<uint8_t*>(data), len);
+            engine->midiDataHandler(midiChannel_, const_cast<uint8_t*>(data), static_cast<int16_t>(len));
         }
     }
 }
@@ -283,7 +284,7 @@ void Module::onMidiFromDexed(const uint8_t* data, int len) {
 
                 // Set the 155 bytes of voice parameters from the dump (positions 0-154)
                 for (int i = 0; i < 155; ++i)
-                    engine->setVoiceDataElement(i, data[6 + i]);
+                    engine->setVoiceDataElement(static_cast<uint8_t>(i), data[6 + i]);
 
                 // Restore the OPE bitmask after loading the voice parameters
                 engine->setVoiceDataElement(155, currentOpeBitmask);

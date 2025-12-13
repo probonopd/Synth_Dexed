@@ -50,17 +50,17 @@ inline q16_t q16_convert(q16_t input, uint8_t src_frac_bits, uint8_t dest_frac_b
 }
 
 // Adjust the logic to handle the range correctly
-inline q16_t q16_saturate(q16_t r) {
-    if (r > static_cast<q16_t>(INT16_MAX)) {
+inline q16_t q16_saturate(int32_t r) {
+    if (r > static_cast<int32_t>(INT16_MAX)) {
         return static_cast<q16_t>(INT16_MAX);
-    } else if (r < static_cast<q16_t>(INT16_MIN)) {
+    } else if (r < static_cast<int32_t>(INT16_MIN)) {
         return static_cast<q16_t>(INT16_MIN);
     }
-    return r;
+    return static_cast<q16_t>(r);
 }
 
 inline q16_t q16_add(q16_t a, q16_t b) {
-    return(a + b);
+    return static_cast<q16_t>(a + b);
 }
 
 inline q16_t q16_add_sat(q16_t a, q16_t b) {
@@ -69,7 +69,7 @@ inline q16_t q16_add_sat(q16_t a, q16_t b) {
 }
 
 inline q16_t q16_sub(q16_t a, q16_t b) {
-    return(a - b);
+    return static_cast<q16_t>(a - b);
 }
 
 inline q16_t q16_sub_sat(q16_t a, q16_t b) {
@@ -79,7 +79,7 @@ inline q16_t q16_sub_sat(q16_t a, q16_t b) {
 
 inline q16_t q16_mul(q16_t a, q16_t b, uint8_t M) {
     int32_t r = (((int32_t)a * (int32_t)b) >> M);
-    return(r);
+    return static_cast<q16_t>(r);
 }
 
 inline q16_t q16_mul_sat(q16_t a, q16_t b, uint8_t M) {
@@ -92,7 +92,7 @@ inline q16_t q16_div(q16_t a, q16_t b, uint8_t M) {
         return (a >= 0) ? INT16_MAX : INT16_MIN;
     }
     int32_t r = ((int32_t)a << M) / (int32_t)b;
-    return(r);
+    return static_cast<q16_t>(r);
 }
 
 inline q16_t q16_div_sat(q16_t a, q16_t b, uint8_t M) {
@@ -116,8 +116,8 @@ void q16_init_cos(uint8_t M) {
   float angle;
 
   for(uint16_t i = 0; i < Q16_COS_LUT_SIZE; ++i) {
-    angle = M_PI/2.0 * i / (Q16_COS_LUT_SIZE - 1);
-    __q16_cos_lut[i] = float_to_q16(cos(angle), M);
+        angle = static_cast<float>(M_PI / 2.0) * static_cast<float>(i) / static_cast<float>(Q16_COS_LUT_SIZE - 1);
+        __q16_cos_lut[i] = float_to_q16(static_cast<float>(cosf(angle)), M);
   }
 }
 
@@ -128,21 +128,21 @@ inline q16_t q16_cos(q16_t x, uint8_t M) {
         angle += (Q16_M_TWO_PI(M));
     }
 
-    uint8_t quadrant = angle / (Q16_M_PI_HALF(M));
+    uint8_t quadrant = static_cast<uint8_t>(angle / (Q16_M_PI_HALF(M)));
     angle = angle % (Q16_M_PI_HALF(M));
    if (quadrant == 1 || quadrant == 3)
         angle = (Q16_M_PI_HALF(M)) - angle;
 
 
-    uint16_t index = (int32_t)angle * Q16_COS_LUT_SIZE / (Q16_M_PI_HALF(M));
+    uint16_t index = static_cast<uint16_t>((static_cast<int32_t>(angle) * Q16_COS_LUT_SIZE) / (Q16_M_PI_HALF(M)));
     uint16_t next_index = index + 1;
 
     if (next_index >= Q16_COS_LUT_SIZE) {
         next_index = Q16_COS_LUT_SIZE - 1;
     }
 
-    q16_t x0 = (Q16_M_PI_HALF(M)) * index / (Q16_COS_LUT_SIZE - 1);
-    q16_t x1 = (Q16_M_PI_HALF(M)) * next_index / (Q16_COS_LUT_SIZE - 1);
+    q16_t x0 = static_cast<q16_t>(((Q16_M_PI_HALF(M)) * static_cast<int32_t>(index)) / (Q16_COS_LUT_SIZE - 1));
+    q16_t x1 = static_cast<q16_t>(((Q16_M_PI_HALF(M)) * static_cast<int32_t>(next_index)) / (Q16_COS_LUT_SIZE - 1));
 
     int16_t x0_sub_from_x1 = x1 - x0;
     q16_t result = __q16_cos_lut[index];
@@ -210,7 +210,7 @@ inline q32_t q32_sub_sat(q32_t a, q32_t b) {
 
 inline q32_t q32_mul(q32_t a, q32_t b, uint8_t M) {
     int32_t r = (((int64_t)a * (int64_t)b) >> M);
-    return(r);
+    return static_cast<q32_t>(r);
 }
 
 inline q32_t q32_mul_sat(q32_t a, q32_t b, uint8_t M) {
@@ -247,8 +247,8 @@ void q32_init_cos(uint8_t M) {
   float angle;
 
   for(uint16_t i = 0; i < Q32_COS_LUT_SIZE; ++i) {
-    angle = M_PI/2.0 * i / (Q32_COS_LUT_SIZE - 1);
-    __q32_cos_lut[i] = float_to_q32(cos(angle), M);
+        angle = static_cast<float>(M_PI / 2.0) * static_cast<float>(i) / static_cast<float>(Q32_COS_LUT_SIZE - 1);
+        __q32_cos_lut[i] = float_to_q32(static_cast<float>(cosf(angle)), M);
   }
 }
 
@@ -259,21 +259,21 @@ inline q32_t q32_cos(q32_t x, uint8_t M) {
         angle += (Q32_M_TWO_PI(M));
     }
 
-    uint8_t quadrant = angle / (Q32_M_PI_HALF(M));
+    uint8_t quadrant = static_cast<uint8_t>(angle / (Q32_M_PI_HALF(M)));
     angle = angle % (Q32_M_PI_HALF(M));
     if (quadrant == 1 || quadrant == 3)
         angle = (Q32_M_PI_HALF(M)) - angle;
 
 
-    uint16_t index = (int64_t)angle * Q32_COS_LUT_SIZE / (Q32_M_PI_HALF(M));
+    uint16_t index = static_cast<uint16_t>((static_cast<int64_t>(angle) * Q32_COS_LUT_SIZE) / (Q32_M_PI_HALF(M)));
     uint16_t next_index = index + 1;
 
     if (next_index >= Q32_COS_LUT_SIZE) {
         next_index = Q32_COS_LUT_SIZE - 1;
     }
 
-    q32_t x0 = (Q32_M_PI_HALF(M)) * index / (Q32_COS_LUT_SIZE - 1);
-    q32_t x1 = (Q32_M_PI_HALF(M)) * next_index / (Q32_COS_LUT_SIZE - 1);
+    q32_t x0 = static_cast<q32_t>(((Q32_M_PI_HALF(M)) * static_cast<int64_t>(index)) / (Q32_COS_LUT_SIZE - 1));
+    q32_t x1 = static_cast<q32_t>(((Q32_M_PI_HALF(M)) * static_cast<int64_t>(next_index)) / (Q32_COS_LUT_SIZE - 1));
 
     q32_t result = q32_linear_interpolate(__q32_cos_lut[index], __q32_cos_lut[next_index], angle, x0, x1);
 

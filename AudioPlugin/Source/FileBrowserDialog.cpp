@@ -26,6 +26,7 @@ FileBrowserDialog::FileBrowserDialog(const juce::String& title,
                                    DialogType dialogType)
     : filePattern(filePattern), dialogType(dialogType)
 {
+    juce::ignoreUnused(title);
     juce::File startDir = initialDirectory;
     if (dialogType != DialogType::Other)
     {
@@ -78,8 +79,9 @@ void FileBrowserDialog::showDialog(juce::Component* parent,
         cancelledCallback = onCancelled;
         // Always set a reasonable default size before showing
         setSize(600, 400);
-        dialogWindow = std::make_unique<CustomDialogWindow>("Select File", juce::Colour(0xff332b28), true, this);
-        dialogWindow->setContentOwned(this, false);
+    dialogWindow = std::make_unique<CustomDialogWindow>("Select File", juce::Colour(0xff332b28), true, this);
+    // Important: never let the window delete this component (it's owned by the editor/tab).
+    dialogWindow->setContentNonOwned(this, true);
         dialogWindow->setUsingNativeTitleBar(true);
         dialogWindow->setResizable(true, false);
         dialogWindow->setSize(600, 400); // Explicitly set dialog window size
@@ -166,15 +168,21 @@ void FileBrowserDialog::resized()
 void FileBrowserDialog::closeDialog()
 {
     removeKeyListener(this);
-    
-    if (cancelledCallback)
-        cancelledCallback();
-        
+
+    // Snapshot + clear callbacks first, so we can't re-enter and call stale lambdas.
+    auto cancelled = std::move(cancelledCallback);
+    cancelledCallback = nullptr;
+    fileSelectedCallback = nullptr;
+
     if (dialogWindow)
     {
         dialogWindow->setVisible(false);
         dialogWindow.reset();
     }
+
+    // Run cancelled after tearing down the window/component relationship.
+    if (cancelled)
+        cancelled();
 }
 
 void FileBrowserDialog::cancelButtonClicked()

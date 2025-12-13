@@ -57,14 +57,16 @@ int32_t osc_freq(int midinote, int mode, int coarse, int fine, int detune) {
     logfreq = midinote_to_logfreq(midinote);
     // could use more precision, closer enough for now. those numbers comes from my DX7
     //FRAC_NUM detuneRatio = 0.0209 * exp(-0.396 * (((float)logfreq) / (1 << 24))) / 7;
-    FRAC_NUM detuneRatio = 0.0209 * EXP_FUNC(-0.396 * (((float)logfreq) / (1 << 24))) / 7;
-    logfreq += detuneRatio * logfreq * (detune - 7);
+  const FRAC_NUM detuneRatio = static_cast<FRAC_NUM>(0.0209f) *
+                 static_cast<FRAC_NUM>(EXP_FUNC(static_cast<FRAC_NUM>(-0.396f) * (static_cast<FRAC_NUM>(logfreq) / static_cast<FRAC_NUM>(1 << 24)))) /
+                 static_cast<FRAC_NUM>(7.0f);
+    logfreq += static_cast<int32_t>(detuneRatio * static_cast<FRAC_NUM>(logfreq) * static_cast<FRAC_NUM>(detune - 7));
 
     logfreq += coarsemul[coarse & 31];
     if (fine) {
       // (1 << 24) / log(2)
       //logfreq += (int32_t)floor(24204406.323123 * log(1 + 0.01 * fine) + 0.5);
-      logfreq += (int32_t)floor(24204406.323123 * LOG_FUNC(1 + 0.01 * fine) + 0.5);
+      logfreq += static_cast<int32_t>(floor(24204406.323123 * LOG_FUNC(1.0 + 0.01 * fine) + 0.5));
     }
 
     // // This was measured at 7.213Hz per count at 9600Hz, but the exact
@@ -221,8 +223,8 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   int32_t poly_pitch_mod = 0;
   if (aftertouch_ > 0 && ctrls->at.pitch) {
     // Apply same scaling and sensitivity as other pitch mod sources
-    float range = ctrls->at.range / 100.0f;
-    uint8_t scaled_aftertouch = uint8_t(float(aftertouch_) * range);
+    const float range = static_cast<float>(ctrls->at.range) / 100.0f;
+    const uint8_t scaled_aftertouch = static_cast<uint8_t>(static_cast<float>(aftertouch_) * range);
     poly_pitch_mod = (int32_t)(((int64_t)scaled_aftertouch * (int64_t)senslfo) >> 14);
     poly_pitch_mod = abs(poly_pitch_mod);
   }
@@ -235,7 +237,7 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   int32_t pb = (pitchbend - 0x2000);
   if (pb != 0) {
     if (ctrls->values_[kControllerPitchStep] == 0) {
-      pb = ((float) (pb << 11)) * ((float) ctrls->values_[kControllerPitchRange]) / 12.0;
+      pb = static_cast<int32_t>(((static_cast<float>(pb << 11)) * static_cast<float>(ctrls->values_[kControllerPitchRange])) / 12.0f);
     } else {
       int stp = 12 / ctrls->values_[kControllerPitchStep];
       pb = pb * stp / 8191;
@@ -256,8 +258,8 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   uint32_t poly_amp_mod = 0;
   if (aftertouch_ > 0 && ctrls->at.amp) {
     // Apply same scaling as other amp mod sources
-    float range = ctrls->at.range / 100.0f;
-    uint8_t scaled_aftertouch = uint8_t(float(aftertouch_) * range);
+    const float range = static_cast<float>(ctrls->at.range) / 100.0f;
+    const uint8_t scaled_aftertouch = static_cast<uint8_t>(static_cast<float>(aftertouch_) * range);
     poly_amp_mod = (uint32_t)(((int64_t) scaled_aftertouch * (int64_t) lfo_val) >> 7);
   }
   
@@ -270,8 +272,8 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
   // Apply polyphonic aftertouch to EG if configured
   if (aftertouch_ > 0 && ctrls->at.eg) {
     // Apply same scaling as other EG mod sources
-    float range = ctrls->at.range / 100.0f;
-    uint8_t scaled_aftertouch = uint8_t(float(aftertouch_) * range);
+    const float range = static_cast<float>(ctrls->at.range) / 100.0f;
+    const uint8_t scaled_aftertouch = static_cast<uint8_t>(static_cast<float>(aftertouch_) * range);
     // Reduce EG modulation when polyphonic aftertouch is applied
     uint32_t poly_eg_reduction = (scaled_aftertouch + 1) << 17;
     amod_3 = std::min(amod_3, poly_eg_reduction);
@@ -307,7 +309,7 @@ void Dx7Note::compute(int32_t *buf, int32_t lfo_val, int32_t lfo_delay, const Co
 
         // TODO: mehhh.. this needs some real tuning.
         //uint32_t pt = exp(((float)sensamp) / 262144 * 0.07 + 12.2);
-        uint32_t pt = EXP_FUNC(((float)sensamp) / 262144 * 0.07 + 12.2);
+  uint32_t pt = static_cast<uint32_t>(EXP_FUNC(static_cast<FRAC_NUM>((static_cast<float>(sensamp) / 262144.0f) * 0.07f + 12.2f)));
         uint32_t ldiff = (uint32_t)(((uint64_t)level) * (((uint64_t)pt << 4)) >> 28);
         level -= ldiff;
       }

@@ -110,9 +110,9 @@ inline int16_t oplSin( uint16_t phase, uint16_t env ) {
 
     if( isSigned ) {
         // -1 for one's complement
-        return -result - 1;
+        return static_cast<int16_t>(-static_cast<int32_t>(result) - 1);
     } else {
-        return result;
+        return static_cast<int16_t>(result);
     }    
 }
 

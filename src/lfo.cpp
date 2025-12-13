@@ -56,7 +56,7 @@ int32_t Lfo::getsample() {
   switch (waveform_) {
     case 0:  // triangle
       x = phase_ >> 7;
-      x ^= -(phase_ >> 31);
+      x ^= -static_cast<int32_t>(static_cast<uint32_t>(phase_) >> 31);
       x &= (1 << 24) - 1;
       return x;
     case 1:  // sawtooth down
@@ -83,7 +83,7 @@ int32_t Lfo::getdelay() {
   if (d > ~0u) {
     return 1 << 24;
   }
-  delaystate_ = d;
+  delaystate_ = static_cast<uint32_t>(d);
   if (d < (1U << 31)) {
     return 0;
   } else {

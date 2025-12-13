@@ -28,7 +28,9 @@ template<typename T, size_t size, size_t alignment = 16>
 class AlignedBuf {
   public:
     T *get() {
-      return (T *)((((intptr_t)storage_) + alignment - 1) & -alignment);
+      const intptr_t addr = (intptr_t)storage_;
+      const intptr_t mask = (intptr_t)alignment - 1;
+      return (T *)((addr + mask) & ~mask);
     }
   private:
     unsigned char storage_[size * sizeof(T) + alignment];

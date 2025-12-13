@@ -90,7 +90,7 @@ void Dexed::initFilter(float cutoff, float resonance) {
 }
 
 void Dexed::updateCoefficients(void) {
-  float w0 = 2.0f * M_PI * filter.cutoff / samplerate;
+  float w0 = 2.0f * static_cast<float>(M_PI) * filter.cutoff / samplerate;
   float alpha = sinf(w0) * sinhf(logf(2.0f) / 2.0f * filter.resonance * w0 / sinf(w0));
   float a0 = 1.0f + alpha;
   float a1 = -2.0f * cosf(w0) / a0;
@@ -127,7 +127,7 @@ void Dexed::setFilterCutoffFrequency(float cutoff) {
 }
 
 float Dexed::getFilterCutoff(void) {
-  return(exp(mapfloat(filter.cutoff,20.0,20000.0,0.0,1.0)/4.0));
+  return static_cast<float>(expf(mapfloat(filter.cutoff, 20.0f, 20000.0f, 0.0f, 1.0f) / 4.0f));
 }
 
 float Dexed::getFilterCutoffFrequency(void) {
@@ -380,7 +380,7 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 #endif
     // Fill all output samples, not just every _N_-th sample
     for (uint16_t i = 0; i < n_samples; ++i)
-        buffer[i]=q16_mul_sat(q32_convert(q32_buffer[i],Q32_SHIFT,Q16_SHIFT),gain,Q16_SHIFT);
+    buffer[i]=q16_mul_sat(static_cast<q16_t>(q32_convert(q32_buffer[i],Q32_SHIFT,Q16_SHIFT)), gain, Q16_SHIFT);
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
@@ -389,7 +389,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
     return;
   }
 
-  velo=uint8_t((float(velo)/127.0)*velocity_diff+0.5)+velocity_offset;
+  velo = static_cast<uint8_t>(static_cast<uint8_t>(((static_cast<float>(velo) / 127.0f) * static_cast<float>(velocity_diff) + 0.5f)) + velocity_offset);
 
   pitch += data[144] - TRANSPOSE_FIX;
 
@@ -400,7 +400,7 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
   if ( controllers.portamento_enable_cc && previousKeyDown >= 0 )
     porta = controllers.portamento_cc;
 
-  uint8_t note = currentNote;
+  uint8_t note = static_cast<uint8_t>(currentNote);
   uint8_t keydown_counter = 0;
 
   if (!monoMode && noteRefreshMode)
@@ -457,9 +457,9 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
       if ( hold )
       {
         bool held_key_down = false;
-        for (uint8_t i = 0; i < getMaxNotes(); i++)
+        for (uint8_t j = 0; j < getMaxNotes(); j++)
         {
-          if ( voices[i].keydown && voices[i].held )
+          if ( voices[j].keydown && voices[j].held )
           {
             held_key_down = true;
             break;
@@ -467,12 +467,12 @@ void Dexed::keydown(uint8_t pitch, uint8_t velo) {
         }
         if ( !held_key_down )
         {
-          for (uint8_t i = 0; i < getMaxNotes(); i++)
+          for (uint8_t j = 0; j < getMaxNotes(); j++)
           {
-            if (voices[i].held)
+            if (voices[j].held)
             {
-              voices[i].dx7_note->keyup();
-              voices[i].held = false;
+              voices[j].dx7_note->keyup();
+              voices[j].held = false;
             }
           }
         }
@@ -855,7 +855,11 @@ bool Dexed::decodeVoice(uint8_t* new_data, uint8_t* encoded_data)
   panic();
   doRefreshVoice();
 
-  strncpy(dexed_voice_name, (char *)&encoded_data[118], sizeof(dexed_voice_name) - 1);
+  {
+    const size_t n = sizeof(dexed_voice_name) - 1;
+    memcpy(dexed_voice_name, (const char *)&encoded_data[118], n);
+    dexed_voice_name[n] = '\0';
+  }
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
   Serial.print(F("Voice ["));
   Serial.print(dexed_voice_name);
@@ -963,7 +967,11 @@ void Dexed::loadVoiceParameters(uint8_t* new_data)
   
   doRefreshVoice();
 #if defined(MICRODEXED_VERSION) && defined(DEBUG)
-  strncpy(dexed_voice_name, (char *)&new_data[145], sizeof(dexed_voice_name) - 1);
+  {
+    const size_t n = sizeof(dexed_voice_name) - 1;
+    memcpy(dexed_voice_name, (const char *)&new_data[145], n);
+    dexed_voice_name[n] = '\0';
+  }
 
   Serial.print(F("Voice ["));
   Serial.print(dexed_voice_name);
@@ -1101,7 +1109,7 @@ void Dexed::setPortamentoGlissando(uint8_t portamento_glissando)
 
 uint8_t Dexed::getPortamentoGlissando(void)
 {
-  return(controllers.values_[kControllerPortamentoGlissando]);
+  return static_cast<uint8_t>(controllers.values_[kControllerPortamentoGlissando]);
 }
 
 void Dexed::setPortamentoTime(uint8_t portamento_time)
@@ -1119,7 +1127,7 @@ void Dexed::setPortamentoTime(uint8_t portamento_time)
 
 uint8_t Dexed::getPortamentoTime(void)
 {
-  return(controllers.portamento_cc);
+  return static_cast<uint8_t>(controllers.portamento_cc);
 }
 
 int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
@@ -1142,7 +1150,7 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
 */
 {
   int32_t bulk_checksum_calc = 0;
-  const int8_t bulk_checksum = sysex[161];
+  int8_t bulk_checksum = 0;
 
   // Check for SYSEX end byte
   if (sysex[len - 1] != 0xf7)
@@ -1206,7 +1214,7 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
       break;
     case 163: // 1 Voice bulk upload
       {
-        const int8_t bulk_checksum = sysex[161];
+        bulk_checksum = (int8_t)sysex[161];
         if ((sysex[3] & 0x7f) != 0)
           return(-5);
 
@@ -1214,8 +1222,8 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
           return(-6);
 
         // checksum calculation
-        for (uint8_t i = 0; i < 155 ; i++)
-          bulk_checksum_calc -= sysex[i + 6];
+        for (uint8_t j = 0; j < 155 ; j++)
+          bulk_checksum_calc -= sysex[j + 6];
         bulk_checksum_calc &= 0x7f;
 
         if (bulk_checksum_calc != bulk_checksum)
@@ -1226,7 +1234,7 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
       break;
     case 4104: // 1 Bank bulk upload
       {
-        const int8_t bulk_checksum = sysex[4102];
+        bulk_checksum = (int8_t)sysex[4102];
         if ((sysex[3] & 0x7f) != 9)
           return(-8);
 
@@ -1234,8 +1242,8 @@ int16_t Dexed::checkSystemExclusive(const uint8_t* sysex, const uint16_t len)
           return(-9);
 
         // checksum calculation
-        for (uint16_t i = 0; i < 4096 ; i++)
-          bulk_checksum_calc -= sysex[i + 6];
+        for (uint16_t j = 0; j < 4096 ; j++)
+          bulk_checksum_calc -= sysex[j + 6];
         bulk_checksum_calc &= 0x7f;
         
         if (bulk_checksum_calc != bulk_checksum)
@@ -1273,7 +1281,7 @@ void Dexed::setMasterTune(int8_t mastertune)
 {
   mastertune = constrain(mastertune, -99, 99);
 
-  controllers.masterTune = (int(mastertune / 100.0 * 0x4000) << 11) * (1.0 / 12.0);
+  controllers.masterTune = static_cast<int32_t>((static_cast<int32_t>(static_cast<float>(mastertune) / 100.0f * 0x4000f) << 11) * (1.0f / 12.0f));
 }
 
 int8_t Dexed::getMasterTune(void)
@@ -1357,7 +1365,7 @@ void Dexed::setPitchbend(uint16_t value)
 
 int16_t Dexed::getPitchbend(void)
 {
-  return (controllers.values_[kControllerPitch] - 0x2000);
+  return static_cast<int16_t>(controllers.values_[kControllerPitch] - 0x2000);
 }
 
 void Dexed::setPitchbendRange(uint8_t range)
@@ -1369,7 +1377,7 @@ void Dexed::setPitchbendRange(uint8_t range)
 
 uint8_t Dexed::getPitchbendRange(void)
 {
-  return (controllers.values_[kControllerPitchRange]);
+  return static_cast<uint8_t>(controllers.values_[kControllerPitchRange]);
 }
 
 void Dexed::setPitchbendStep(uint8_t step)
@@ -1381,7 +1389,7 @@ void Dexed::setPitchbendStep(uint8_t step)
 
 uint8_t Dexed::getPitchbendStep(void)
 {
-  return (controllers.values_[kControllerPitchStep]);
+  return static_cast<uint8_t>(controllers.values_[kControllerPitchStep]);
 }
 
 void Dexed::setModWheelRange(uint8_t range)
@@ -1951,7 +1959,6 @@ void Dexed::setLFOSync(bool sync)
 bool Dexed::getLFOSync(void)
 {
   return (data[DEXED_VOICE_OFFSET + DEXED_LFO_SYNC]);
-  lfo.reset(data + 137);
 }
 
 void Dexed::setLFOWaveform(uint8_t waveform)
@@ -1994,12 +2001,12 @@ uint8_t Dexed::getTranspose(void)
 
 void Dexed::setName(char name[11])
 {
-  strncpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], name, 10);
+  memcpy((char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], name, 10);
 }
 
 void Dexed::getName(char buffer[11])
 {
-  strncpy(buffer, (char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], 10);
+  memcpy(buffer, (char*)&data[DEXED_VOICE_OFFSET + DEXED_NAME], 10);
   buffer[10] = 0;
 }
 
@@ -2007,7 +2014,7 @@ void Dexed::setVelocityScale(uint8_t offset, uint8_t max)
 {
   velocity_offset = offset & 0x7f;
   velocity_max = max & 0x7f;
-  velocity_diff = velocity_max - velocity_offset;
+  velocity_diff = static_cast<float>(static_cast<int32_t>(velocity_max) - static_cast<int32_t>(velocity_offset));
 }
 
 void Dexed::getVelocityScale(uint8_t* offset, uint8_t* max)
@@ -2107,7 +2114,7 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
                     case 4:   setFootController(midiData[2]); ControllersRefresh(); ret = true; break;
                     case 5:   setPortamentoTime(midiData[2]); ret = true; break;
                     case 6:   /* Data Entry MSB */ break;
-                    case 7:   setGain(float(midiData[2])/127.0); ret = true; break;
+                    case 7:   setGain(static_cast<float>(midiData[2]) / 127.0f); ret = true; break;
                     case 10:  /* Pan */ break;
                     case 11:  /* Expression */ break;
                     case 32:  /* Bank Select LSB */ break;

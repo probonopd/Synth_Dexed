@@ -7,6 +7,7 @@ void OperatorSliderLookAndFeel::drawLinearSlider(
     float sliderPos, float minSliderPos, float maxSliderPos,
     const juce::Slider::SliderStyle style, juce::Slider& slider)
 {
+    juce::ignoreUnused(minSliderPos, maxSliderPos, slider);
     // Draw track background with a vertical ColourGradient
     auto trackBounds = juce::Rectangle<float>((float)x + width * 0.4f, (float)y + 0, width * 0.2f, (float)height - 0);
     juce::ColourGradient trackGradient(
@@ -43,5 +44,6 @@ void OperatorSliderLookAndFeel::drawLinearSlider(
 
 juce::Font OperatorSliderLookAndFeel::getLabelFont(juce::Label& label)
 {
-    return juce::Font(12.0f);
+    juce::ignoreUnused(label);
+    return juce::Font(juce::FontOptions(12.0f));
 }

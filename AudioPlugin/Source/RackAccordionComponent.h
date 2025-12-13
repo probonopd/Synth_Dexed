@@ -114,7 +114,7 @@ private:
     int moduleIndex;
     RackAccordionComponent* parentAccordion;
     std::atomic<bool> fileDialogOpen { false };
-    FileBrowserDialog* openFileDialog { nullptr }; // Track the currently open dialog
+    std::unique_ptr<FileBrowserDialog> openVoiceFileDialog; // Singleton voice file dialog for this tab
 
     void loadVoiceFile(const juce::File& file);
     void loadVoiceFileIntoModule(const juce::File& file, int targetModuleIndex);
