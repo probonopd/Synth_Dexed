@@ -69,6 +69,11 @@ private:
     class AudioPluginAudioProcessorEditor* editorPtr = nullptr;
     float lastSampleRate = 44100.0f; // Added to track the last used sample rate
     std::unique_ptr<FMRack::Performance> cachedPerformance;
+    
+    // Pre-allocated audio buffers to avoid memory allocation in audio thread
+    std::vector<float> audioBufferLeft;
+    std::vector<float> audioBufferRight;
+    int lastPreparedBlockSize = 0;
 
 public:
     void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);

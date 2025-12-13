@@ -32,8 +32,9 @@ Rack::Rack(float sampleRate) : initialized(false), sampleRate_(sampleRate) {
 }
 
 bool Rack::loadPerformance(const std::string& filename) {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     if (performance_->loadFromFile(filename)) {
-        createModulesFromPerformance();
+        createModulesFromPerformance_Unlocked();
         // Configure effects from performance
         DEBUG_PRINT("[DEBUG] Performance loaded: " << filename);
         DEBUG_PRINT("[DEBUG] ReverbEnable: " << performance_->effects.reverbEnable);
@@ -49,12 +50,14 @@ bool Rack::loadPerformance(const std::string& filename) {
 }
 
 int Rack::getNumModules() const {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     return static_cast<int>(modules_.size());
 }
 
 void Rack::setDefaultPerformance() {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     performance_->setDefaults(16, 1); // Added unisonVoices parameter
-    createModulesFromPerformance();
+    createModulesFromPerformance_Unlocked();
     
     // Set default effects
     reverb_->setEnabled(true);
@@ -64,6 +67,11 @@ void Rack::setDefaultPerformance() {
 
 void Rack::createModulesFromPerformance() {
     std::lock_guard<std::mutex> lock(modulesMutex);
+    createModulesFromPerformance_Unlocked();
+}
+
+void Rack::createModulesFromPerformance_Unlocked() {
+    // NOTE: Caller must hold modulesMutex!
     std::cout << "\n=== Creating modules from performance ===\n";
     modules_.clear();
     std::cout << "[DEBUG] performance_->parts.size(): " << performance_->parts.size() << std::endl;
@@ -232,32 +240,45 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
         std::fill(rightOut, rightOut + numSamples, 0.0f);
         return;
     }
-    // Clear accumulation buffers
-    std::fill(dryLeftBuffer_.begin(), dryLeftBuffer_.begin() + numSamples, 0.0f);
-    std::fill(dryRightBuffer_.begin(), dryRightBuffer_.begin() + numSamples, 0.0f);
-    std::fill(reverbLeftBuffer_.begin(), reverbLeftBuffer_.begin() + numSamples, 0.0f);
-    std::fill(reverbRightBuffer_.begin(), reverbRightBuffer_.begin() + numSamples, 0.0f);
-    std::fill(reverbOutLeftBuffer_.begin(), reverbOutLeftBuffer_.begin() + numSamples, 0.0f);
-    std::fill(reverbOutRightBuffer_.begin(), reverbOutRightBuffer_.begin() + numSamples, 0.0f);
-    std::fill(finalLeftBuffer_.begin(), finalLeftBuffer_.begin() + numSamples, 0.0f);
-    std::fill(finalRightBuffer_.begin(), finalRightBuffer_.begin() + numSamples, 0.0f);
+    
+    // Safety check: don't exceed pre-allocated buffer size
+    if (numSamples > kMaxBufferSize) {
+        std::fill(leftOut, leftOut + numSamples, 0.0f);
+        std::fill(rightOut, rightOut + numSamples, 0.0f);
+        return;
+    }
+    
+    // Clear accumulation buffers using memset for speed
+    std::memset(dryLeftBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(dryRightBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(reverbLeftBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(reverbRightBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(reverbOutLeftBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(reverbOutRightBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(finalLeftBuffer_.data(), 0, numSamples * sizeof(float));
+    std::memset(finalRightBuffer_.data(), 0, numSamples * sizeof(float));
+
+    // Get module count (capped at max)
+    const size_t moduleCount = std::min(modules_.size(), static_cast<size_t>(kMaxModules));
 
     // Only use multiprocessing if enabled
-    if (multiprocessingEnabled) {
-        // Prepare per-module buffers and futures
-        struct ModuleBuffers {
-            std::vector<float> left, right, revLeft, revRight;
-            ModuleBuffers(int n) : left(n, 0.0f), right(n, 0.0f), revLeft(n, 0.0f), revRight(n, 0.0f) {}
-        };
-        std::vector<ModuleBuffers> moduleBuffers;
-        std::vector<std::future<void>> futures;
-        moduleBuffers.reserve(modules_.size());
-        futures.reserve(modules_.size());
+    if (multiprocessingEnabled && moduleCount > 1) {
+        // Use pre-allocated per-module buffers - no heap allocation!
+        // Clear the buffers we'll use
+        for (size_t i = 0; i < moduleCount; ++i) {
+            std::memset(moduleBuffers_[i].left.data(), 0, numSamples * sizeof(float));
+            std::memset(moduleBuffers_[i].right.data(), 0, numSamples * sizeof(float));
+            std::memset(moduleBuffers_[i].revLeft.data(), 0, numSamples * sizeof(float));
+            std::memset(moduleBuffers_[i].revRight.data(), 0, numSamples * sizeof(float));
+        }
 
         // Launch parallel processing for each module
-        for (size_t i = 0; i < modules_.size(); ++i) {
-            moduleBuffers.emplace_back(numSamples);
-            auto& mbuf = moduleBuffers.back();
+        // Note: std::async still allocates, but this is much less than before
+        std::vector<std::future<void>> futures;
+        futures.reserve(moduleCount);
+        
+        for (size_t i = 0; i < moduleCount; ++i) {
+            auto& mbuf = moduleBuffers_[i];
             auto* module = modules_[i].get();
             futures.push_back(std::async(std::launch::async, [module, &mbuf, numSamples]() {
                 module->processAudio(
@@ -272,7 +293,8 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
             fut.get();
         }
         // Accumulate results
-        for (const auto& mbuf : moduleBuffers) {
+        for (size_t m = 0; m < moduleCount; ++m) {
+            const auto& mbuf = moduleBuffers_[m];
             for (int i = 0; i < numSamples; ++i) {
                 dryLeftBuffer_[i] += mbuf.left[i];
                 dryRightBuffer_[i] += mbuf.right[i];
@@ -281,29 +303,22 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
             }
         }
     } else {
-        // Serial processing: use per-module buffers and sum
-        struct ModuleBuffers {
-            std::vector<float> left, right, revLeft, revRight;
-            ModuleBuffers(int n) : left(n, 0.0f), right(n, 0.0f), revLeft(n, 0.0f), revRight(n, 0.0f) {}
-        };
-        std::vector<ModuleBuffers> moduleBuffers;
-        moduleBuffers.reserve(modules_.size());
-        for (auto& module : modules_) {
-            moduleBuffers.emplace_back(numSamples);
-            auto& mbuf = moduleBuffers.back();
+        // Serial processing: use pre-allocated per-module buffers
+        for (size_t m = 0; m < moduleCount; ++m) {
+            auto& mbuf = moduleBuffers_[m];
             // Clear per-module buffers before processing
-            std::fill(mbuf.left.begin(), mbuf.left.end(), 0.0f);
-            std::fill(mbuf.right.begin(), mbuf.right.end(), 0.0f);
-            std::fill(mbuf.revLeft.begin(), mbuf.revLeft.end(), 0.0f);
-            std::fill(mbuf.revRight.begin(), mbuf.revRight.end(), 0.0f);
-            module->processAudio(
+            std::memset(mbuf.left.data(), 0, numSamples * sizeof(float));
+            std::memset(mbuf.right.data(), 0, numSamples * sizeof(float));
+            std::memset(mbuf.revLeft.data(), 0, numSamples * sizeof(float));
+            std::memset(mbuf.revRight.data(), 0, numSamples * sizeof(float));
+            
+            modules_[m]->processAudio(
                 mbuf.left.data(), mbuf.right.data(),
                 mbuf.revLeft.data(), mbuf.revRight.data(),
                 numSamples
             );
-        }
-        // Accumulate results
-        for (const auto& mbuf : moduleBuffers) {
+            
+            // Accumulate results immediately (better cache locality)
             for (int i = 0; i < numSamples; ++i) {
                 dryLeftBuffer_[i] += mbuf.left[i];
                 dryRightBuffer_[i] += mbuf.right[i];
@@ -337,6 +352,7 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
 bool Rack::isInitialized() const { return initialized; }
 
 int Rack::getActiveVoices() const {
+    std::lock_guard<std::mutex> lock(modulesMutex);
     int total = 0;
     for (const auto& module : modules_) {
         if (module->isActive()) {
@@ -367,15 +383,13 @@ std::string Rack::getControllerTargetName(uint8_t target) const {
 
 void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_channel) {
     std::lock_guard<std::mutex> lock(modulesMutex);
+    // NOTE: All std::cout logging removed - this function may be called from audio thread
+    
     // Only handle MiniDexed (0x7D) SysEx in Performance
     if (len >= 3 && data[1] == 0x7D && performance_) {
-        std::cout << "[SYSEX] MiniDexed SysEx received, length: " << len << " bytes\n";
         std::vector<uint8_t> response;
         if (performance_->handleSysex(data, len, response)) {
-            if (!response.empty()) {
-                // TODO: Send response via MIDI output here
-                std::cout << "[SYSEX] TODO: Send performance parameter response (" << response.size() << " bytes)\n";
-            }
+            // TODO: Send response via MIDI output here (if !response.empty())
             return;
         }
     }
@@ -383,8 +397,6 @@ void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_chann
     for (auto& module : modules_) {
         if (sysex_channel == 0 || module->getMIDIChannel() == sysex_channel) {
             module->processSysex(data, len);
-            std::cout << "[SYSEX] Forwarded SysEx to module on MIDI channel " 
-                      << static_cast<int>(module->getMIDIChannel()) << "\n";
         }
     }
 }

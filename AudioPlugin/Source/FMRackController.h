@@ -40,13 +40,26 @@ public:
     void setReverbLevel(float level);
     void setReverbSize(float size);
 
-    // Set a Dexed parameter (address, value)
+    // Set a Dexed parameter (address, value) for module 0 (legacy)
     void setDexedParam(uint8_t address, uint8_t value);
+    
+    // Thread-safe Dexed parameter access by module index
+    uint8_t getDexedParamForModule(int moduleIndex, uint8_t address) const;
+    void setDexedParamForModule(int moduleIndex, uint8_t address, uint8_t value);
+    
+    // Thread-safe voice name access
+    juce::String getVoiceNameForModule(int moduleIndex) const;
+    void setVoiceNameForModule(int moduleIndex, const juce::String& name);
+    
+    // Thread-safe Dexed engine access (returns nullptr if invalid)
+    // NOTE: Caller must hold getMutex() lock while using the returned pointer!
+    class Dexed* getDexedEngineForModule(int moduleIndex);
 
     // Request a DX7 single voice dump from the given MIDI channel (1-16)
     void requestSingleVoiceDump(int midiChannel);
     // This function should be called by the MIDI/SysEx receive path when a single voice dump is received
-    void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
+    // NOTE: Uses pointer+length to avoid heap allocation in audio thread
+    void onSingleVoiceDumpReceived(const uint8_t* data, int len);
 
     // Voice data management
     void setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData);

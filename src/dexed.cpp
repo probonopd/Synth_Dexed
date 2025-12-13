@@ -314,8 +314,22 @@ void Dexed::deactivate(void)
 
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 {
-    // Allocate and zero-initialize q32_buffer
-    int32_t* q32_buffer = new int32_t[n_samples]();
+    // Safety check: don't exceed pre-allocated buffer size
+    if (n_samples > kMaxSamplesBuffer) {
+        // Clear output and return
+        for (uint16_t i = 0; i < n_samples; i++) {
+            buffer[i] = 0;
+        }
+        return;
+    }
+    
+    // Use pre-allocated buffer instead of heap allocation
+    int32_t* q32_buffer = q32_buffer_;
+    
+    // Zero-initialize the buffer
+    for (uint16_t i = 0; i < n_samples; i++) {
+        q32_buffer[i] = 0;
+    }
 
     if (refreshVoice)
     {
@@ -330,7 +344,6 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
 
     for (uint16_t i = 0; i < n_samples; i++) {
         buffer[i]=0;
-        q32_buffer[i]=0;
     }
     
     for (uint16_t i = 0; i < n_samples; i += _N_)
@@ -368,7 +381,6 @@ void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
     // Fill all output samples, not just every _N_-th sample
     for (uint16_t i = 0; i < n_samples; ++i)
         buffer[i]=q16_mul_sat(q32_convert(q32_buffer[i],Q32_SHIFT,Q16_SHIFT),gain,Q16_SHIFT);
-    delete[] q32_buffer;
 }
 
 void Dexed::keydown(uint8_t pitch, uint8_t velo) {
@@ -2118,11 +2130,7 @@ bool Dexed::midiDataHandler(uint8_t midiChannel, uint8_t* midiData, int16_t len)
                 }
                 break;
             case 0xC0: // Program Change
-                #ifdef _WIN32
-                printf("[MIDI] Program Change received (not implemented yet)\n");
-                #else
-                std::cout << "[MIDI] Program Change received (not implemented yet)" << std::endl;
-                #endif
+                // NOTE: Removed std::cout/printf - called from audio thread
                 ret = true;
                 break;
             case 0xD0: // Channel Aftertouch

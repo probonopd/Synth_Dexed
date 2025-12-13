@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <array>
 #include <memory>
 #include <string>
 #include "Performance.h"
@@ -21,8 +22,9 @@ public:
     bool loadPerformance(const std::string& filename);
     void setDefaultPerformance();
     void setPerformance(const Performance& perf) {
+        std::lock_guard<std::mutex> lock(modulesMutex);
         *performance_ = perf;
-        createModulesFromPerformance();
+        createModulesFromPerformance_Unlocked();
         // Configure effects from performance
         reverb_->setEnabled(performance_->effects.reverbEnable);
         reverb_->setSize(performance_->effects.reverbSize / 127.0f);
@@ -81,11 +83,26 @@ private:
     std::vector<float> finalLeftBuffer_;
     std::vector<float> finalRightBuffer_;
     
-    // Mutex for thread-safe access to modules_
-    std::mutex modulesMutex;
+    // Pre-allocated per-module buffers to avoid heap allocation in audio thread
+    // Each module gets 4 buffers: left, right, reverbLeft, reverbRight
+    static constexpr int kMaxModules = 16;
+    static constexpr int kMaxBufferSize = 4096;
+    struct ModuleBuffers {
+        std::vector<float> left;
+        std::vector<float> right;
+        std::vector<float> revLeft;
+        std::vector<float> revRight;
+        ModuleBuffers() : left(kMaxBufferSize, 0.0f), right(kMaxBufferSize, 0.0f), 
+                          revLeft(kMaxBufferSize, 0.0f), revRight(kMaxBufferSize, 0.0f) {}
+    };
+    std::array<ModuleBuffers, kMaxModules> moduleBuffers_;
+    
+    // Mutex for thread-safe access to modules_ (mutable to allow locking in const methods)
+    mutable std::mutex modulesMutex;
 
     // Helper methods
     void createModulesFromPerformance();
+    void createModulesFromPerformance_Unlocked(); // Internal version - caller must hold modulesMutex
     void routeMidiToModules(uint8_t status, uint8_t data1, uint8_t data2);
     uint8_t extractMidiChannel(uint8_t status) const;
 };

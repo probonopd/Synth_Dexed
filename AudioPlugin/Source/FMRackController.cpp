@@ -2,6 +2,7 @@
 #include <iostream>
 #include <atomic>
 #include <fstream>
+#include <cstring> // for std::memset
 
 FMRackController::FMRackController(float sampleRate)
 {
@@ -158,92 +159,58 @@ void FMRackController::setPerformance(const FMRack::Performance& newPerformance)
 
 FMRack::Performance* FMRackController::getPerformance()
 {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        return performance.get();
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in getPerformance: " << e.what() << std::endl;
-        return nullptr;
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in getPerformance" << std::endl;
-        return nullptr;
-    }
+    // Note: This returns a raw pointer after releasing the lock - modifications
+    // should go through setPerformance() for thread safety
+    std::lock_guard<std::mutex> lock(mutex);
+    return performance.get();
 }
 
 int FMRackController::getNumModules() const
 {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        return rack ? rack->getNumModules() : 0;
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in getNumModules: " << e.what() << std::endl;
-        return 0;
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in getNumModules" << std::endl;
-        return 0;
-    }
+    std::lock_guard<std::mutex> lock(mutex);
+    return rack ? rack->getNumModules() : 0;
 }
 
 const std::vector<std::unique_ptr<FMRack::Module>>& FMRackController::getModules() const
 {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        return rack->getModules();
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in getModules: " << e.what() << std::endl;
-        static std::vector<std::unique_ptr<FMRack::Module>> empty;
-        return empty;
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in getModules" << std::endl;
-        static std::vector<std::unique_ptr<FMRack::Module>> empty;
-        return empty;
-    }
+    // Note: This returns a reference after releasing the lock - caller must use getMutex() 
+    // to hold the lock while accessing the returned reference
+    std::lock_guard<std::mutex> lock(mutex);
+    static std::vector<std::unique_ptr<FMRack::Module>> empty;
+    if (!rack) return empty;
+    return rack->getModules();
 }
 
 FMRack::Module* FMRackController::getModule(int index)
 {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (!rack) return nullptr;
-        const auto& modules = rack->getModules();
-        if (index < 0 || index >= (int)modules.size()) return nullptr;
-        return modules[index].get();
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in getModule: " << e.what() << std::endl;
-        return nullptr;
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in getModule" << std::endl;
-        return nullptr;
-    }
+    // Note: This returns a raw pointer after releasing the lock - caller must use getMutex()
+    // to hold the lock while using the returned pointer
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return nullptr;
+    const auto& modules = rack->getModules();
+    if (index < 0 || index >= (int)modules.size()) return nullptr;
+    return modules[index].get();
 }
 
 void FMRackController::processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2)
 {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (rack)
-            rack->processMidiMessage(status, data1, data2);
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in processMidiMessage: " << e.what() << std::endl;
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in processMidiMessage" << std::endl;
-    }
+    // No try-catch in real-time audio path - exceptions shouldn't happen here
+    // and catching them adds overhead and can cause priority inversion
+    std::lock_guard<std::mutex> lock(mutex);
+    if (rack)
+        rack->processMidiMessage(status, data1, data2);
 }
 
 void FMRackController::processAudio(float* leftOut, float* rightOut, int numSamples)
 {
-    try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (rack)
-            rack->processAudio(leftOut, rightOut, numSamples);
-    } catch (const std::exception& e) {
-        std::cout << "[FMRackController] Exception in processAudio: " << e.what() << std::endl;
-        if (leftOut) std::fill(leftOut, leftOut + numSamples, 0.0f);
-        if (rightOut) std::fill(rightOut, rightOut + numSamples, 0.0f);
-    } catch (...) {
-        std::cout << "[FMRackController] Unknown exception in processAudio" << std::endl;
-        if (leftOut) std::fill(leftOut, leftOut + numSamples, 0.0f);
-        if (rightOut) std::fill(rightOut, rightOut + numSamples, 0.0f);
+    // No try-catch in real-time audio path - exceptions shouldn't happen here
+    std::lock_guard<std::mutex> lock(mutex);
+    if (rack) {
+        rack->processAudio(leftOut, rightOut, numSamples);
+    } else {
+        // Clear output if no rack
+        if (leftOut) std::memset(leftOut, 0, numSamples * sizeof(float));
+        if (rightOut) std::memset(rightOut, 0, numSamples * sizeof(float));
     }
 }
 
@@ -312,50 +279,116 @@ void FMRackController::setReverbSize(float size)
 
 void FMRackController::setNumModules(int num)
 {
-    std::cout << "[FMRackController] setNumModules(" << num << ") called" << std::endl;
-    if (performance) {
-        std::cout << "[FMRackController] setNumModules: performance exists, updating MIDI channels" << std::endl;
-        // Find the MIDI channel of the last active part to use for new parts
-        uint8_t lastActiveChannel = 1; // Default to 1
-        for (int j = 0; j < 16; ++j) {
-            if (performance->parts[j].midiChannel != 0) {
-                lastActiveChannel = performance->parts[j].midiChannel;
+    FMRack::Performance perfCopy;
+    bool hasPerformance = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (performance) {
+            // Find the MIDI channel of the last active part to use for new parts
+            uint8_t lastActiveChannel = 1; // Default to 1
+            for (int j = 0; j < 16; ++j) {
+                if (performance->parts[j].midiChannel != 0) {
+                    lastActiveChannel = performance->parts[j].midiChannel;
+                }
             }
+            for (int i = 0; i < 16; ++i) {
+                performance->parts[i].midiChannel = (i < num) ? lastActiveChannel : 0;
+            }
+            perfCopy = *performance;
+            hasPerformance = true;
         }
-        for (int i = 0; i < 16; ++i) {
-            performance->parts[i].midiChannel = (i < num) ? lastActiveChannel : 0;
-        }
-        // Debug: print all MIDI channels after setting
-        std::cout << "[FMRackController] setNumModules: MIDI channels after update: ";
-        for (int i = 0; i < 16; ++i) {
-            std::cout << performance->parts[i].midiChannel << " ";
-        }
-        std::cout << std::endl;
-        // Use our own setPerformance method which properly registers handlers
-        std::cout << "[FMRackController] setNumModules: calling FMRackController::setPerformance to ensure handlers are registered" << std::endl;
-        setPerformance(*performance);
-    } else {
-        std::cout << "[FMRackController] setNumModules: performance is nullptr" << std::endl;
     }
+    
+    // Call setPerformance outside the lock scope - it will acquire the lock internally
+    if (hasPerformance) {
+        setPerformance(perfCopy);
+    }
+    
+    // Call UI callback outside any lock
     if (onModulesChanged) {
-        std::cout << "[FMRackController] setNumModules: calling onModulesChanged()" << std::endl;
         onModulesChanged();
     }
 }
 
 void FMRackController::setDexedParam(uint8_t address, uint8_t value)
 {
-    std::cout << "[FMRackController] setDexedParam(" << static_cast<int>(address) << ", " << static_cast<int>(value) << ") called" << std::endl;
     std::lock_guard<std::mutex> lock(mutex);
-    if (!rack) { std::cout << "[FMRackController] setDexedParam: rack is nullptr" << std::endl; return; }
+    if (!rack) return;
     const auto& modules = rack->getModules();
-    std::cout << "[FMRackController] setDexedParam: modules.size()=" << modules.size() << std::endl;
-    if (modules.empty()) { std::cout << "[FMRackController] setDexedParam: modules is empty" << std::endl; return; }
+    if (modules.empty()) return;
     auto* dexed = modules[0]->getDexedEngine();
-    if (!dexed) { std::cout << "[FMRackController] setDexedParam: dexed is nullptr" << std::endl; return; }
-    std::cout << "[FMRackController] setDexedParam: calling dexed->setVoiceDataElement(" << (int)address << ", " << (int)value << ") and doRefreshVoice" << std::endl;
+    if (!dexed) return;
     dexed->setVoiceDataElement(address, value);
     dexed->doRefreshVoice();
+}
+
+uint8_t FMRackController::getDexedParamForModule(int moduleIndex, uint8_t address) const
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return 0;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) return 0;
+    auto* dexed = modules[moduleIndex]->getDexedEngine();
+    if (!dexed) return 0;
+    return dexed->getVoiceDataElement(address);
+}
+
+void FMRackController::setDexedParamForModule(int moduleIndex, uint8_t address, uint8_t value)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) return;
+    auto* dexed = modules[moduleIndex]->getDexedEngine();
+    if (!dexed) return;
+    dexed->setVoiceDataElement(address, value);
+    dexed->doRefreshVoice();
+}
+
+juce::String FMRackController::getVoiceNameForModule(int moduleIndex) const
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return {};
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) return {};
+    auto* dexed = modules[moduleIndex]->getDexedEngine();
+    if (!dexed) return {};
+    
+    // Voice name is at bytes 145-154 (10 bytes)
+    char nameBytes[11] = {0};
+    for (int i = 0; i < 10; ++i) {
+        nameBytes[i] = static_cast<char>(dexed->getVoiceDataElement(static_cast<uint8_t>(145 + i)));
+    }
+    return juce::String(nameBytes).trim();
+}
+
+void FMRackController::setVoiceNameForModule(int moduleIndex, const juce::String& name)
+{
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) return;
+    auto* dexed = modules[moduleIndex]->getDexedEngine();
+    if (!dexed) return;
+    
+    // Pad name to 10 chars with spaces
+    juce::String paddedName = name.substring(0, 10);
+    while (paddedName.length() < 10) paddedName += " ";
+    
+    for (int i = 0; i < 10; ++i) {
+        dexed->setVoiceDataElement(static_cast<uint8_t>(145 + i), 
+                                   static_cast<uint8_t>(static_cast<unsigned char>(paddedName[i])));
+    }
+}
+
+Dexed* FMRackController::getDexedEngineForModule(int moduleIndex)
+{
+    // Note: Caller MUST hold getMutex() lock while using the returned pointer!
+    // This is inherently unsafe but provided for compatibility with existing code.
+    if (!rack) return nullptr;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) return nullptr;
+    return modules[moduleIndex]->getDexedEngine();
 }
 
 void FMRackController::requestSingleVoiceDump(int midiChannel) {
@@ -374,18 +407,11 @@ void FMRackController::requestSingleVoiceDump(int midiChannel) {
     }
 }
 
-void FMRackController::onSingleVoiceDumpReceived(const std::vector<uint8_t>& data) {
-    std::cout << "[FMRackController] onSingleVoiceDumpReceived called, data size: " << data.size() << std::endl;
-    if (!data.empty()) {
-        std::cout << "[FMRackController] onSingleVoiceDumpReceived: first 32 bytes: ";
-        for (size_t i = 0; i < std::min<size_t>(32, data.size()); ++i) std::cout << std::hex << (int)data[i] << " ";
-        std::cout << std::dec << std::endl;
-        std::cout << "[FMRackController] onSingleVoiceDumpReceived: last 8 bytes: ";
-        for (size_t i = (data.size() > 8 ? data.size() - 8 : 0); i < data.size(); ++i) std::cout << std::hex << (int)data[i] << " ";
-        std::cout << std::dec << std::endl;
-    }
-    // Always handle incoming MIDI/SysEx here, no callback indirection
-    // ...existing MIDI/SysEx handling logic...
+void FMRackController::onSingleVoiceDumpReceived(const uint8_t* data, int len) {
+    // NOTE: All std::cout logging removed - this function is called from audio thread
+    // Handle incoming MIDI/SysEx here
+    (void)data;
+    (void)len;
 }
 
 void FMRackController::setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData) {

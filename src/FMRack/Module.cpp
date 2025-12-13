@@ -9,6 +9,9 @@
 extern bool debugEnabled;
 #define DEBUG_PRINT(x) do { if (debugEnabled) { std::cout << x << std::endl; } } while(0)
 
+// Maximum buffer size to pre-allocate - matches Rack::kMaxBufferSize
+static constexpr int kMaxModuleBufferSize = 4096;
+
 namespace FMRack {
 
 Module::Module(float sampleRate) 
@@ -16,20 +19,20 @@ Module::Module(float sampleRate)
       detune_(0), noteShift_(0), noteLimitLow_(0), noteLimitHigh_(127), reverbSend_(0.0f),
       monoMode_(false) {
     
-    tempBuffer_.resize(1024); // Buffer for Dexed output conversion
+    tempBuffer_.resize(kMaxModuleBufferSize); // Pre-allocate buffer for Dexed output conversion
 }
 
 Module::Module(float sampleRate, const Performance::PartConfig& config)
     : sampleRate_(sampleRate), midiChannel_(0), enabled_(false), volume_(1.0f), pan_(0.5f),
       detune_(0), noteShift_(0), noteLimitLow_(0), noteLimitHigh_(127), reverbSend_(0.0f),
       monoMode_(false) {
-    tempBuffer_.resize(1024);
+    tempBuffer_.resize(kMaxModuleBufferSize); // Pre-allocate buffer
     // Directly configure from performance, including voice loading
     configureFromPerformance(config);
 }
 
 void Module::configureFromPerformance(const Performance::PartConfig& config) {
-    partConfig_ = const_cast<Performance::PartConfig*>(&config);
+    // Note: We don't store the config pointer - it may be temporary
     midiChannel_ = config.midiChannel;
     enabled_ = (midiChannel_ > 0);
     
@@ -178,14 +181,18 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
         return;
     }
     
-    // Clear output buffers
-    std::fill(leftOut, leftOut + numSamples, 0.0f);
-    std::fill(rightOut, rightOut + numSamples, 0.0f);
-    
-    // Ensure temp buffer is large enough
-    if (tempBuffer_.size() < static_cast<size_t>(numSamples)) {
-        tempBuffer_.resize(numSamples);
+    // Safety check: don't exceed pre-allocated buffer size
+    if (numSamples > kMaxModuleBufferSize) {
+        std::fill(leftOut, leftOut + numSamples, 0.0f);
+        std::fill(rightOut, rightOut + numSamples, 0.0f);
+        std::fill(reverbSendLeft, reverbSendLeft + numSamples, 0.0f);
+        std::fill(reverbSendRight, reverbSendRight + numSamples, 0.0f);
+        return;
     }
+    
+    // Clear output buffers using memset for speed
+    std::memset(leftOut, 0, numSamples * sizeof(float));
+    std::memset(rightOut, 0, numSamples * sizeof(float));
     
     // Process each unison voice
     for (size_t voice = 0; voice < fmEngines_.size(); ++voice) {
@@ -243,20 +250,12 @@ void Module::processAudio(float* leftOut, float* rightOut, float* reverbSendLeft
 }
 
 void Module::processSysex(const uint8_t* data, int len) {
-    std::cout << "[FMRack::Module::processSysex] len=" << len << std::endl;
-    // Print all incoming MIDI/SysEx in FF FF FF... format
-    std::cout << "[MIDI IN] ";
-    for (int i = 0; i < len; ++i) {
-        std::cout << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
-        if (i < len - 1) std::cout << " ";
-    }
-    std::cout << std::dec << std::endl;
+    // NOTE: All std::cout logging removed - this function is called from audio thread
     // Only handle Yamaha/Dexed engine-specific SysEx here.
     // All MiniDexed performance parameter SysEx is now handled in Performance.
     // Yamaha SysEx: F0 43 1n 01 1B vv F7 (operator ON/OFF mask)
     if (len == 7 && data[0] == 0xF0 && data[1] == 0x43 && data[3] == 0x01 && data[4] == 0x1B && data[6] == 0xF7) {
         uint8_t opMask = data[5];
-        std::cout << "[SYSEX] Operator ON/OFF mask received: 0x" << std::hex << (int)opMask << std::dec << std::endl;
         for (auto& engine : fmEngines_) {
             engine->setOPAll(opMask);
         }
@@ -265,37 +264,16 @@ void Module::processSysex(const uint8_t* data, int len) {
     // Forward all other SysEx to all FM engines (Dexed instances)
     for (auto& engine : fmEngines_) {
         if (engine) {
-            std::cout << "[SYSEX] Forwarding SysEx to FM engine on MIDI channel " 
-                      << static_cast<int>(midiChannel_) << ", length: " << len << " bytes\n";
-            for (int i = 0; i < len; ++i) {
-                std::cout << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]) << " ";
-            }
             engine->midiDataHandler(midiChannel_, const_cast<uint8_t*>(data), len);
         }
     }
 }
 
-// Print any MIDI data received from the synth (Dexed) in FF FF FF... format
-// This should be called from the callback or handler that receives MIDI from Dexed
+// Handle MIDI data received from the synth (Dexed)
+// NOTE: All std::cout logging removed - this function may be called from audio thread
 void Module::onMidiFromDexed(const uint8_t* data, int len) {
-    std::cout << "[FMRack::Module::onMidiFromDexed] len=" << len << std::endl;
-    std::cout << "[MIDI FROM DEXED] ";
-    for (int i = 0; i < len; ++i) {
-        std::cout << std::uppercase << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
-        if (i < len - 1) std::cout << " ";    }
-    std::cout << std::dec << std::endl;
-    // Debug the detection logic
-    std::cout << "[FMRack::Module::onMidiFromDexed] Checking single voice dump detection:" << std::endl;
-    std::cout << "  len=" << len << " (expected 163)" << std::endl;
-    if (len >= 6) {
-        std::cout << "  data[0]=0x" << std::hex << (int)data[0] << " (expected 0xF0)" << std::endl;
-        std::cout << "  data[1]=0x" << std::hex << (int)data[1] << " (expected 0x43)" << std::endl;
-        std::cout << "  data[5]=0x" << std::hex << (int)data[5] << " (expected 0x1B)" << std::endl;
-        std::cout << std::dec;
-    }
-    // Always process single voice dump if detected
+    // Process single voice dump if detected
     if (len == 163 && data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
-        std::cout << "[FMRack::Module::onMidiFromDexed] Detected DX7 single voice dump, processing directly." << std::endl;
         for (auto& engine : fmEngines_) {
             if (engine) {
                 // Preserve current OPE bitmask
@@ -310,12 +288,9 @@ void Module::onMidiFromDexed(const uint8_t* data, int len) {
                 // Restore the OPE bitmask after loading the voice parameters
                 engine->setVoiceDataElement(155, currentOpeBitmask);
 
-                std::cout << "[FMRack::Module::onMidiFromDexed] Calling engine->doRefreshVoice()" << std::endl;
                 engine->doRefreshVoice();
             }
         }
-    } else {
-        std::cout << "[FMRack::Module::onMidiFromDexed] Single voice dump NOT detected." << std::endl;
     }
 }
 

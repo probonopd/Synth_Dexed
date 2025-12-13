@@ -190,24 +190,10 @@ VoiceEditorPanel::VoiceEditorPanel()
         voiceNameEditor.setInputRestrictions(10, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-_*<>()[]#'\"!?$%&,:;/\\");
         voiceNameEditor.setReadOnly(false);
         voiceNameEditor.onTextChange = [this]() {
-            std::cout << "[VoiceEditorPanel] voiceNameEditor.onTextChange, controller=" << controller << std::endl;
             juce::String newName = voiceNameEditor.getText().substring(0, 10);
-            // Pad with spaces to 10 chars
-            while (newName.length() < 10) newName += " ";
-            // Write to Dexed engine immediately
-            if (!controller) return;
-            auto rack = controller->getRack();
-            if (rack) {
-                const auto& modules = rack->getModules();
-                if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
-                    auto* dexed = modules[moduleIndex]->getDexedEngine();
-                    if (dexed) {
-                        for (int i = 0; i < 10; ++i) {
-                            const auto byte = static_cast<uint8_t>(static_cast<unsigned char>(newName[i]));
-                            dexed->setVoiceDataElement(static_cast<uint8_t>(145 + i), byte);
-                        }
-                    }
-                }
+            // Use thread-safe method instead of bypassing the mutex
+            if (controller) {
+                controller->setVoiceNameForModule(moduleIndex, newName);
             }
         };
     }
@@ -642,31 +628,12 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         return;
     }
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: syncing all operator sliders from Dexed engine" << std::endl;
-    // --- Show voice name from current Dexed engine ---
+    // --- Show voice name from current Dexed engine (thread-safe) ---
     if (controller) {
-        auto rack = controller->getRack();
-        if (rack) {
-            const auto& modules = rack->getModules();
-            if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
-                auto* dexed = modules[moduleIndex]->getDexedEngine();
-                if (dexed) {
-                    // Dexed voice name is at bytes 145-154 (10 bytes)
-                    uint8_t nameBytes[10] = {0};
-                    for (int i = 0; i < 10; ++i) nameBytes[i] = dexed->getVoiceDataElement(static_cast<uint8_t>(145 + i));
-                    std::string name(reinterpret_cast<const char*>(nameBytes), 10);
-                    // Remove leading/trailing spaces
-                    size_t first = name.find_first_not_of(' ');
-                    size_t last = name.find_last_not_of(' ');
-                    if (first != std::string::npos && last != std::string::npos)
-                        name = name.substr(first, last - first + 1);
-                    else
-                        name.clear();
-                    std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: Current voice name: '" << name << "'" << std::endl;
-                    if (!name.empty()) {
-                        voiceNameEditor.setText(juce::String(name), juce::dontSendNotification);
-                    }
-                }
-            }
+        juce::String voiceName = controller->getVoiceNameForModule(moduleIndex);
+        if (voiceName.isNotEmpty()) {
+            std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: Current voice name: '" << voiceName << "'" << std::endl;
+            voiceNameEditor.setText(voiceName, juce::dontSendNotification);
         }
     }
     uint8_t opeBitmask = getDexedParam(static_cast<uint8_t>(155));
@@ -927,21 +894,11 @@ void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
 // EnvelopeDisplay mouse hover
 uint8_t VoiceEditorPanel::getDexedParam(uint8_t address) const {
     if (!isInitialized) {
-        std::cout << "[VoiceEditorPanel::getDexedParam] called before isInitialized, skipping" << std::endl;
         return 0;
     }
-    std::cout << "[VoiceEditorPanel::getDexedParam] called with address=" << static_cast<int>(address) << ", moduleIndex=" << moduleIndex;
-    if (!controller) { std::cout << " [VoiceEditorPanel] getDexedParam: controller is null" << std::endl; return 0; }
-    auto rack = controller->getRack();
-    if (!rack) { std::cout << " [VoiceEditorPanel] getDexedParam: rack is null" << std::endl; return 0; }
-    const auto& modules = rack->getModules();
-    if (modules.empty() || moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) { std::cout << " [VoiceEditorPanel] getDexedParam: modules empty or bad index" << std::endl; return 0; }
-    auto* dexed = modules[moduleIndex]->getDexedEngine();
-    std::cout << ", module ptr=" << modules[moduleIndex].get() << std::endl;
-    if (!dexed) { std::cout << " [VoiceEditorPanel] getDexedParam: dexed is null" << std::endl; return 0; }
-    uint8_t v = dexed->getVoiceDataElement(address);
-    std::cout << "[VoiceEditorPanel] getDexedParam: address=" << static_cast<int>(address) << " value=" << static_cast<int>(v) << std::endl;
-    return v;
+    if (!controller) { return 0; }
+    // Use thread-safe method instead of bypassing the mutex
+    return controller->getDexedParamForModule(moduleIndex, address);
 }
 
 
@@ -1062,23 +1019,11 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
 
 void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
     if (!isInitialized) {
-        std::cout << "[VoiceEditorPanel::setDexedParam] called before isInitialized, skipping" << std::endl;
         return;
     }
-    std::cout << "[VoiceEditorPanel::setDexedParam] called, address=" << static_cast<int>(address) << ", value=" << static_cast<int>(value) << ", moduleIndex=" << moduleIndex << std::endl;
+    // Use thread-safe method instead of bypassing the mutex
     if (controller) {
-        auto rack = controller->getRack();
-        if (rack) {
-            const auto& modules = rack->getModules();
-            if (!modules.empty() && moduleIndex >= 0 && moduleIndex < static_cast<int>(modules.size())) {
-                auto* dexed = modules[moduleIndex]->getDexedEngine();
-                if (dexed) {
-                    dexed->setVoiceDataElement(address, value);
-                }
-            }
-        }
-    } else {
-        std::cout << "[VoiceEditorPanel::setDexedParam] controller is nullptr" << std::endl;
+        controller->setDexedParamForModule(moduleIndex, address, value);
     }
 }
 

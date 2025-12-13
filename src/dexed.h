@@ -453,6 +453,10 @@ class DEXED_API Dexed
     bool filter_enabled = true;
 #endif
     std::function<void(const uint8_t*, int)> midiOutCallback_;
+    
+    // Pre-allocated buffer for getSamples() to avoid heap allocation in audio thread
+    static constexpr int kMaxSamplesBuffer = 4096;
+    int32_t q32_buffer_[kMaxSamplesBuffer];
 };
 
 #ifdef USE_COMPRESSOR

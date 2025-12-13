@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 #include "FMRackController.h"
 #include <cstdio> // for std::tmpnam
+#include <cstring> // for std::memset
 #include <fstream>
 #include <sstream>
 #include <memory>
@@ -206,15 +207,21 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     try {
         logToGui("prepareToPlay called. sampleRate=" + juce::String(sampleRate) + ", samplesPerBlock=" + juce::String(samplesPerBlock));
         juce::Logger::writeToLog("[PluginProcessor] prepareToPlay called. sampleRate=" + juce::String(sampleRate) + ", samplesPerBlock=" + juce::String(samplesPerBlock));
-        std::cout << "[PluginProcessor] prepareToPlay called. sampleRate=" << sampleRate << ", samplesPerBlock=" << samplesPerBlock << std::endl;
+
+        // Pre-allocate audio buffers to avoid memory allocation in audio thread
+        // Allocate extra capacity for safety (some hosts may exceed samplesPerBlock)
+        int bufferCapacity = samplesPerBlock * 2;
+        if (bufferCapacity > (int)audioBufferLeft.size()) {
+            audioBufferLeft.resize(bufferCapacity);
+            audioBufferRight.resize(bufferCapacity);
+        }
+        lastPreparedBlockSize = samplesPerBlock;
 
         bool needRecreate = false;
         if (!controller) {
             needRecreate = true;
-            std::cout << "[PluginProcessor] Controller is null, will create new controller." << std::endl;
         } else {
             if (std::abs(lastSampleRate - (float)sampleRate) > 1.0f) {
-                std::cout << "[PluginProcessor] Sample rate changed (old=" << lastSampleRate << ", new=" << sampleRate << "), recreating controller." << std::endl;
                 needRecreate = true;
             }
         }
@@ -224,28 +231,24 @@ void AudioPluginAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
             std::unique_ptr<FMRack::Performance> oldPerf;
             if (cachedPerformance) {
                 oldPerf = std::make_unique<FMRack::Performance>(*cachedPerformance);
-                juce::Logger::writeToLog("[PluginProcessor] Using cachedPerformance for controller recreation. MIDI channels: " + juce::String(cachedPerformance->parts[0].midiChannel) + ", " + juce::String(cachedPerformance->parts[1].midiChannel) + ", ...");
+                juce::Logger::writeToLog("[PluginProcessor] Using cachedPerformance for controller recreation.");
             } else if (controller && controller->getPerformance()) {
                 oldPerf = std::make_unique<FMRack::Performance>(*controller->getPerformance());
             }
             controller = std::make_unique<FMRackController>((float)sampleRate);
             if (oldPerf) {
-                std::cout << "[PluginProcessor] Restoring previous performance after controller recreation." << std::endl;
-                juce::Logger::writeToLog("[PluginProcessor] Restoring previous performance after controller recreation. MIDI channels: " + juce::String(oldPerf->parts[0].midiChannel) + ", " + juce::String(oldPerf->parts[1].midiChannel) + ", ...");
+                juce::Logger::writeToLog("[PluginProcessor] Restoring previous performance after controller recreation.");
                 controller->setPerformance(*oldPerf);
             }
         } else {
             if (controller && controller->getPerformance()) {
-                std::cout << "[PluginProcessor] Calling setPerformance in prepareToPlay to ensure modules are created." << std::endl;
-                juce::Logger::writeToLog("[PluginProcessor] prepareToPlay: setPerformance MIDI channels: " + juce::String(controller->getPerformance()->parts[0].midiChannel) + ", " + juce::String(controller->getPerformance()->parts[1].midiChannel) + ", ...");
+                juce::Logger::writeToLog("[PluginProcessor] prepareToPlay: ensuring modules are created.");
                 controller->setPerformance(*controller->getPerformance());
             }
         }
     } catch (const std::exception& e) {
-        std::cout << "[PluginProcessor] Exception in prepareToPlay: " << e.what() << std::endl;
         juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in prepareToPlay: ") + e.what());
     } catch (...) {
-        std::cout << "[PluginProcessor] Unknown exception in prepareToPlay" << std::endl;
         juce::Logger::writeToLog("[PluginProcessor] Unknown exception in prepareToPlay");
     }
 }
@@ -292,18 +295,11 @@ bool AudioPluginAudioProcessor::isBusesLayoutSupported (const BusesLayout& layou
 void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
                                               juce::MidiBuffer& midiMessages)
 {
-    try {
-        juce::ScopedNoDenormals noDenormals;
-        process(buffer, midiMessages);
-    } catch (const std::exception& e) {
-        std::cout << "[PluginProcessor] Exception in processBlock: " << e.what() << std::endl;
-        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in processBlock: ") + e.what());
-        buffer.clear();
-    } catch (...) {
-        std::cout << "[PluginProcessor] Unknown exception in processBlock" << std::endl;
-        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in processBlock");
-        buffer.clear();
-    }
+    // No try-catch in real-time audio path - exceptions shouldn't happen here
+    // and catching them adds overhead. If there's a bug, let it crash cleanly
+    // so we can debug it rather than silently failing.
+    juce::ScopedNoDenormals noDenormals;
+    process(buffer, midiMessages);
 }
 
 // Add the double-precision overload
@@ -339,80 +335,59 @@ void AudioPluginAudioProcessor::processBlock (juce::AudioBuffer<double>& buffer,
 // Add the templated process implementation
 template <typename FloatType>
 void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, juce::MidiBuffer& midiMessages) {
-    try {
-        // juce::Logger::writeToLog("Process block. Samples: " + juce::String(buffer.getNumSamples()) + ", MIDI events: " + juce::String(midiMessages.getNumEvents()));
-        auto totalNumOutputChannels = getTotalNumOutputChannels();
-        auto numSamples = buffer.getNumSamples();
-        for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
-            buffer.clear (i, 0, numSamples);
+    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    auto numSamples = buffer.getNumSamples();
+    
+    // Clear output channels that don't have input
+    for (auto i = getTotalNumInputChannels(); i < totalNumOutputChannels; ++i)
+        buffer.clear (i, 0, numSamples);
 
-        // Route MIDI to controller
-        if (controller) {
-            for (const auto metadata : midiMessages) {
-                const auto msg = metadata.getMessage();
-                std::cout << "[PluginProcessor] MIDI event: status=0x" << std::hex << (int)msg.getRawData()[0] << ", size=" << std::dec << msg.getRawDataSize() << std::endl;
-                if (msg.isSysEx()) {
-                    std::cout << "[PluginProcessor] SysEx event: size=" << msg.getSysExDataSize() << std::endl;
-                    if (msg.getSysExDataSize() > 0) {
-                        std::cout << "[PluginProcessor] SysEx first 16 bytes: ";
-                        const uint8_t* d = msg.getSysExData();
-                        for (size_t i = 0; i < std::min<size_t>(16, msg.getSysExDataSize()); ++i) std::cout << std::hex << (int)d[i] << " ";
-                        std::cout << std::dec << std::endl;
-                        std::cout << "[PluginProcessor] SysEx last 8 bytes: ";
-                        for (size_t i = (msg.getSysExDataSize() > 8 ? msg.getSysExDataSize() - 8 : 0); i < msg.getSysExDataSize(); ++i) std::cout << std::hex << (int)d[i] << " ";
-                        std::cout << std::dec << std::endl;
-                    }
-                }
-                if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() || msg.isPitchWheel()) {
-                    controller->processMidiMessage(msg.getRawData()[0],
-                                                  msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
-                                                  msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
-                }
-                // --- Handle incoming SysEx: DX7 single voice dump (163 bytes) ---
-                if (msg.isSysEx() && msg.getSysExDataSize() == 163) {
-                    const uint8_t* data = msg.getSysExData();
-                    if (data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
-                        std::cout << "[PluginProcessor] Detected DX7 single voice dump (163 bytes), forwarding to controller->onSingleVoiceDumpReceived" << std::endl;
-                        std::vector<uint8_t> sysexData(data, data + 163);
-                        controller->onSingleVoiceDumpReceived(sysexData);
-                    }
-                }
+    // Safety check: ensure we have a controller
+    if (!controller) {
+        buffer.clear();
+        return;
+    }
+
+    // Route MIDI to controller (no std::cout in audio thread!)
+    for (const auto metadata : midiMessages) {
+        const auto msg = metadata.getMessage();
+        if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() || msg.isPitchWheel() || msg.isChannelPressure() || msg.isAftertouch()) {
+            controller->processMidiMessage(msg.getRawData()[0],
+                                          msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
+                                          msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
+        }
+        // Handle incoming SysEx: DX7 single voice dump (163 bytes)
+        // NOTE: No vector allocation here - pass pointer+length directly
+        if (msg.isSysEx() && msg.getSysExDataSize() == 163) {
+            const uint8_t* data = msg.getSysExData();
+            if (data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
+                controller->onSingleVoiceDumpReceived(data, 163);
             }
         }
-        // Render audio from controller
-        if (controller) {
-            std::vector<float> left(numSamples, 0.0f), right(numSamples, 0.0f);
-            try {
-                controller->processAudio(left.data(), right.data(), numSamples);
-            } catch (const std::exception& e) {
-                std::cout << "[PluginProcessor] Exception in controller->processAudio: " << e.what() << std::endl;
-                juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in controller->processAudio: ") + e.what());
-                std::fill(left.begin(), left.end(), 0.0f);
-                std::fill(right.begin(), right.end(), 0.0f);
-            } catch (...) {
-                std::cout << "[PluginProcessor] Unknown exception in controller->processAudio" << std::endl;
-                juce::Logger::writeToLog("[PluginProcessor] Unknown exception in controller->processAudio");
-                std::fill(left.begin(), left.end(), 0.0f);
-                std::fill(right.begin(), right.end(), 0.0f);
-            }
-            for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
-                FloatType* out = buffer.getWritePointer(ch);
-                const float* src = (ch == 0) ? left.data() : right.data();
-                for (int i = 0; i < numSamples; ++i) {
-                    out[i] = src[i];
-                }
-            }
-        } else {
-            buffer.clear();
+    }
+
+    // Render audio using pre-allocated buffers
+    // Ensure buffers are large enough (should be handled in prepareToPlay, but check for safety)
+    if (numSamples > (int)audioBufferLeft.size()) {
+        // This shouldn't happen, but handle it gracefully without allocating
+        buffer.clear();
+        return;
+    }
+
+    // Clear the pre-allocated buffers (use memset for speed)
+    std::memset(audioBufferLeft.data(), 0, numSamples * sizeof(float));
+    std::memset(audioBufferRight.data(), 0, numSamples * sizeof(float));
+
+    // Process audio
+    controller->processAudio(audioBufferLeft.data(), audioBufferRight.data(), numSamples);
+
+    // Copy to output buffer
+    for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
+        FloatType* out = buffer.getWritePointer(ch);
+        const float* src = (ch == 0) ? audioBufferLeft.data() : audioBufferRight.data();
+        for (int i = 0; i < numSamples; ++i) {
+            out[i] = static_cast<FloatType>(src[i]);
         }
-    } catch (const std::exception& e) {
-        std::cout << "[PluginProcessor] Exception in process<>: " << e.what() << std::endl;
-        juce::Logger::writeToLog(juce::String("[PluginProcessor] Exception in process<>: ") + e.what());
-        buffer.clear();
-    } catch (...) {
-        std::cout << "[PluginProcessor] Unknown exception in process<>" << std::endl;
-        juce::Logger::writeToLog("[PluginProcessor] Unknown exception in process<>");
-        buffer.clear();
     }
 }
 
