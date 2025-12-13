@@ -4,6 +4,7 @@
 #include <array>
 #include <memory>
 #include <string>
+#include <future>
 #include "Performance.h"
 #include "AudioEffectPlateReverb.h"
 #include "Module.h"
@@ -96,6 +97,14 @@ private:
                           revLeft(kMaxBufferSize, 0.0f), revRight(kMaxBufferSize, 0.0f) {}
     };
     std::array<ModuleBuffers, kMaxModules> moduleBuffers_;
+    
+    // Pre-allocated futures array to avoid heap allocation in audio thread
+    // Note: std::future still has internal allocation from std::async, but this avoids vector reallocation
+    std::array<std::future<void>, kMaxModules> moduleFutures_;
+    
+    // Pre-allocated buffer for SysEx responses to avoid heap allocation
+    static constexpr int kMaxSysexResponseSize = 256;
+    std::array<uint8_t, kMaxSysexResponseSize> sysexResponseBuffer_;
     
     // Mutex for thread-safe access to modules_ (mutable to allow locking in const methods)
     mutable std::mutex modulesMutex;

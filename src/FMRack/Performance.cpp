@@ -369,116 +369,104 @@ static int8_t decode_signed_14bit(uint8_t msb, uint8_t lsb) {
     return static_cast<int8_t>(midi14);
 }
 
-bool Performance::handleSysex(const uint8_t* data, int len, std::vector<uint8_t>& response, int partIndex) {
-    std::cout << "[PERFORMANCE] MiniDexed SysEx received, length: " << len << " bytes, partIndex: " << partIndex << "\n";
-
+// Fixed-buffer version to avoid heap allocation in audio thread
+bool Performance::handleSysex(const uint8_t* data, int len, uint8_t* response, int maxResponseLen, int& responseLen, int partIndex) {
+    responseLen = 0;
+    
     if (len < 5 || data[0] != 0xF0 || data[1] != 0x7D || data[len-1] != 0xF7) return false;
     uint8_t cmd = data[2];
-    std::cout << "[PERFORMANCE] MiniDexed command: " << std::hex << static_cast<int>(cmd) << " (partIndex: " << partIndex << ")\n";
+    
+    // Helper to add bytes to fixed buffer
+    auto addByte = [&](uint8_t b) -> bool {
+        if (responseLen < maxResponseLen) {
+            response[responseLen++] = b;
+            return true;
+        }
+        return false; // Buffer overflow
+    };
+    
+    auto addParam = [&](uint16_t p, uint16_t v) -> bool {
+        return addByte((p >> 8) & 0x7F) && addByte(p & 0x7F) &&
+               addByte((v >> 8) & 0x7F) && addByte(v & 0x7F);
+    };
+    
     // Global GET
     if (cmd == 0x10 && partIndex == -1) {
-        std::cout << "[PERFORMANCE] Global GET command received\n";
-        response = {0xF0, 0x7D, 0x20};
+        addByte(0xF0); addByte(0x7D); addByte(0x20);
         auto& eff = effects;
-        auto add = [&](uint16_t p, uint16_t v) {
-            response.push_back((p >> 8) & 0x7F); response.push_back(p & 0x7F);
-            response.push_back((v >> 8) & 0x7F); response.push_back(v & 0x7F);
-        };
-        add(0x0000, eff.compressorEnable ? 1 : 0);
-        add(0x0001, eff.reverbEnable ? 1 : 0);
-        add(0x0002, eff.reverbSize);
-        add(0x0003, eff.reverbHighDamp);
-        add(0x0004, eff.reverbLowDamp);
-        add(0x0005, eff.reverbLowPass);
-        add(0x0006, eff.reverbDiffusion);
-        add(0x0007, eff.reverbLevel);
-        response.push_back(0xF7);
+        addParam(0x0000, eff.compressorEnable ? 1 : 0);
+        addParam(0x0001, eff.reverbEnable ? 1 : 0);
+        addParam(0x0002, eff.reverbSize);
+        addParam(0x0003, eff.reverbHighDamp);
+        addParam(0x0004, eff.reverbLowDamp);
+        addParam(0x0005, eff.reverbLowPass);
+        addParam(0x0006, eff.reverbDiffusion);
+        addParam(0x0007, eff.reverbLevel);
+        addByte(0xF7);
         return true;
     }
+    
     // TG GET
     if (cmd == 0x11 && len >= 5 && partIndex >= 0 && partIndex < (int)parts.size()) {
-        std::cout << "[PERFORMANCE] TG GET command received for part " << partIndex << "\n";
-        response = {0xF0, 0x7D, 0x21, static_cast<uint8_t>(partIndex)};
+        addByte(0xF0); addByte(0x7D); addByte(0x21); addByte(static_cast<uint8_t>(partIndex));
         const auto& p = parts[partIndex];
-        auto add = [&](uint16_t param, uint16_t value) {
-            response.push_back((param >> 8) & 0x7F); response.push_back(param & 0x7F);
-            response.push_back((value >> 8) & 0x7F); response.push_back(value & 0x7F);
-        };
-        add(0x0000, p.bankNumber);
-        add(0x0001, p.voiceNumber);
-        add(0x0002, p.midiChannel);
-        add(0x0003, p.volume);
-        add(0x0004, p.pan);
-        // Detune (signed)
+        addParam(0x0000, p.bankNumber);
+        addParam(0x0001, p.voiceNumber);
+        addParam(0x0002, p.midiChannel);
+        addParam(0x0003, p.volume);
+        addParam(0x0004, p.pan);
         uint8_t msb, lsb;
         encode_signed_14bit(p.detune, msb, lsb);
-        add(0x0005, (msb << 8) | lsb);
-        add(0x0006, p.cutoff);
-        add(0x0007, p.resonance);
-        add(0x0008, p.noteLimitLow);
-        add(0x0009, p.noteLimitHigh);
-        // NoteShift (signed)
+        addParam(0x0005, (msb << 8) | lsb);
+        addParam(0x0006, p.cutoff);
+        addParam(0x0007, p.resonance);
+        addParam(0x0008, p.noteLimitLow);
+        addParam(0x0009, p.noteLimitHigh);
         encode_signed_14bit(p.noteShift, msb, lsb);
-        add(0x000A, (msb << 8) | lsb);
-        add(0x000B, p.reverbSend);
-        add(0x000C, p.pitchBendRange);
-        add(0x000D, p.pitchBendStep);
-        add(0x000E, p.portamentoMode);
-        add(0x000F, p.portamentoGlissando);
-        add(0x0010, p.portamentoTime);
-        add(0x0011, p.monoMode);
-        add(0x0012, p.modulationWheelRange);
-        add(0x0013, p.modulationWheelTarget);
-        add(0x0014, p.footControlRange);
-        add(0x0015, p.footControlTarget);
-        add(0x0016, p.breathControlRange);
-        add(0x0017, p.breathControlTarget);
-        add(0x0018, p.aftertouchRange);
-        add(0x0019, p.aftertouchTarget);
-        response.push_back(0xF7);
+        addParam(0x000A, (msb << 8) | lsb);
+        addParam(0x000B, p.reverbSend);
+        addParam(0x000C, p.pitchBendRange);
+        addParam(0x000D, p.pitchBendStep);
+        addParam(0x000E, p.portamentoMode);
+        addParam(0x000F, p.portamentoGlissando);
+        addParam(0x0010, p.portamentoTime);
+        addParam(0x0011, p.monoMode);
+        addParam(0x0012, p.modulationWheelRange);
+        addParam(0x0013, p.modulationWheelTarget);
+        addParam(0x0014, p.footControlRange);
+        addParam(0x0015, p.footControlTarget);
+        addParam(0x0016, p.breathControlRange);
+        addParam(0x0017, p.breathControlTarget);
+        addParam(0x0018, p.aftertouchRange);
+        addParam(0x0019, p.aftertouchTarget);
+        addByte(0xF7);
         return true;
     }
-    // Global SET
-    if (cmd == 0x20 /* && partIndex == -1 */) { // Ignore partIndex for global
-        std::cout << "[PERFORMANCE] Global SET command received\n";
+    
+    // Global SET (no response needed)
+    if (cmd == 0x20) {
         int offset = 3;
         while (offset + 3 < len - 1) {
             uint16_t param = (data[offset] << 8) | data[offset+1];
             uint16_t value = (data[offset+2] << 8) | data[offset+3];
             offset += 4;
             switch (param) {
-                case 0x0000:
-                    if (debugEnabled) std::cout << "Setting CompressorEnable to " << (value != 0) << std::endl;
-                    effects.compressorEnable = (value != 0); break;
-                case 0x0001:
-                    if (debugEnabled) std::cout << "Setting ReverbEnable to " << (value != 0) << std::endl;
-                    effects.reverbEnable = (value != 0); break;
-                case 0x0002:
-                    if (debugEnabled) std::cout << "Setting ReverbSize to " << (value & 0x7F) << std::endl;
-                    effects.reverbSize = value & 0x7F; break;
-                case 0x0003:
-                    if (debugEnabled) std::cout << "Setting ReverbHighDamp to " << (value & 0x7F) << std::endl;
-                    effects.reverbHighDamp = value & 0x7F; break;
-                case 0x0004:
-                    if (debugEnabled) std::cout << "Setting ReverbLowDamp to " << (value & 0x7F) << std::endl;
-                    effects.reverbLowDamp = value & 0x7F; break;
-                case 0x0005:
-                    if (debugEnabled) std::cout << "Setting ReverbLowPass to " << (value & 0x7F) << std::endl;
-                    effects.reverbLowPass = value & 0x7F; break;
-                case 0x0006:
-                    if (debugEnabled) std::cout << "Setting ReverbDiffusion to " << (value & 0x7F) << std::endl;
-                    effects.reverbDiffusion = value & 0x7F; break;
-                case 0x0007:
-                    if (debugEnabled) std::cout << "Setting ReverbLevel to " << (value & 0x7F) << std::endl;
-                    effects.reverbLevel = value & 0x7F; break;
+                case 0x0000: effects.compressorEnable = (value != 0); break;
+                case 0x0001: effects.reverbEnable = (value != 0); break;
+                case 0x0002: effects.reverbSize = value & 0x7F; break;
+                case 0x0003: effects.reverbHighDamp = value & 0x7F; break;
+                case 0x0004: effects.reverbLowDamp = value & 0x7F; break;
+                case 0x0005: effects.reverbLowPass = value & 0x7F; break;
+                case 0x0006: effects.reverbDiffusion = value & 0x7F; break;
+                case 0x0007: effects.reverbLevel = value & 0x7F; break;
                 default: break;
             }
         }
         return true;
     }
-    // TG SET
+    
+    // TG SET (no response needed)
     if (cmd == 0x21 && len >= 8 && partIndex >= 0 && partIndex < (int)parts.size()) {
-        std::cout << "[PERFORMANCE] TG SET command received for part " << partIndex << "\n";
         int offset = 4;
         auto& p = parts[partIndex];
         while (offset + 3 < len - 1) {
@@ -486,93 +474,38 @@ bool Performance::handleSysex(const uint8_t* data, int len, std::vector<uint8_t>
             uint16_t value = (data[offset+2] << 8) | data[offset+3];
             offset += 4;
             switch (param) {
-                case 0x0000:
-                    if (debugEnabled) std::cout << "Setting BankNumber to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.bankNumber = value & 0x7F; break;
-                case 0x0001:
-                    if (debugEnabled) std::cout << "Setting VoiceNumber to " << (value & 0x1F) << " (part " << partIndex << ")" << std::endl;
-                    p.voiceNumber = value & 0x1F; break;
-                case 0x0002:
-                    if (debugEnabled) std::cout << "Setting MIDIChannel to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.midiChannel = value & 0x7F; break;
-                case 0x0003:
-                    if (debugEnabled) std::cout << "Setting Volume to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.volume = value & 0x7F; break;
-                case 0x0004:
-                    if (debugEnabled) std::cout << "Setting Pan to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.pan = value & 0x7F; break;
-                case 0x0005: {
-                    int8_t detune = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F);
-                    if (debugEnabled) std::cout << "Setting Detune to " << static_cast<int>(detune) << " (part " << partIndex << ")" << std::endl;
-                    p.detune = detune; break;
-                }
-                case 0x0006:
-                    if (debugEnabled) std::cout << "Setting Cutoff to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.cutoff = value & 0x7F; break;
-                case 0x0007:
-                    if (debugEnabled) std::cout << "Setting Resonance to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.resonance = value & 0x7F; break;
-                case 0x0008:
-                    if (debugEnabled) std::cout << "Setting NoteLimitLow to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.noteLimitLow = value & 0x7F; break;
-                case 0x0009:
-                    if (debugEnabled) std::cout << "Setting NoteLimitHigh to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.noteLimitHigh = value & 0x7F; break;
-                case 0x000A: {
-                    int8_t noteShift = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F);
-                    if (debugEnabled) std::cout << "Setting NoteShift to " << static_cast<int>(noteShift) << " (part " << partIndex << ")" << std::endl;
-                    p.noteShift = noteShift; break;
-                }
-                case 0x000B:
-                    if (debugEnabled) std::cout << "Setting ReverbSend to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.reverbSend = value & 0x7F; break;
-                case 0x000C:
-                    if (debugEnabled) std::cout << "Setting PitchBendRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.pitchBendRange = value & 0x7F; break;
-                case 0x000D:
-                    if (debugEnabled) std::cout << "Setting PitchBendStep to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.pitchBendStep = value & 0x7F; break;
-                case 0x000E:
-                    if (debugEnabled) std::cout << "Setting PortamentoMode to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.portamentoMode = value & 0x7F; break;
-                case 0x000F:
-                    if (debugEnabled) std::cout << "Setting PortamentoGlissando to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.portamentoGlissando = value & 0x7F; break;
-                case 0x0010:
-                    if (debugEnabled) std::cout << "Setting PortamentoTime to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.portamentoTime = value & 0x7F; break;
-                case 0x0011:
-                    if (debugEnabled) std::cout << "Setting MonoMode to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.monoMode = value & 0x7F; break;
-                case 0x0012:
-                    if (debugEnabled) std::cout << "Setting ModulationWheelRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.modulationWheelRange = value & 0x7F; break;
-                case 0x0013:
-                    if (debugEnabled) std::cout << "Setting ModulationWheelTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.modulationWheelTarget = value & 0x7F; break;
-                case 0x0014:
-                    if (debugEnabled) std::cout << "Setting FootControlRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.footControlRange = value & 0x7F; break;
-                case 0x0015:
-                    if (debugEnabled) std::cout << "Setting FootControlTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.footControlTarget = value & 0x7F; break;
-                case 0x0016:
-                    if (debugEnabled) std::cout << "Setting BreathControlRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.breathControlRange = value & 0x7F; break;
-                case 0x0017:
-                    if (debugEnabled) std::cout << "Setting BreathControlTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.breathControlTarget = value & 0x7F; break;
-                case 0x0018:
-                    if (debugEnabled) std::cout << "Setting AftertouchRange to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.aftertouchRange = value & 0x7F; break;
-                case 0x0019:
-                    if (debugEnabled) std::cout << "Setting AftertouchTarget to " << (value & 0x7F) << " (part " << partIndex << ")" << std::endl;
-                    p.aftertouchTarget = value & 0x7F; break;
+                case 0x0000: p.bankNumber = value & 0x7F; break;
+                case 0x0001: p.voiceNumber = value & 0x1F; break;
+                case 0x0002: p.midiChannel = value & 0x7F; break;
+                case 0x0003: p.volume = value & 0x7F; break;
+                case 0x0004: p.pan = value & 0x7F; break;
+                case 0x0005: p.detune = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F); break;
+                case 0x0006: p.cutoff = value & 0x7F; break;
+                case 0x0007: p.resonance = value & 0x7F; break;
+                case 0x0008: p.noteLimitLow = value & 0x7F; break;
+                case 0x0009: p.noteLimitHigh = value & 0x7F; break;
+                case 0x000A: p.noteShift = decode_signed_14bit((value >> 8) & 0x7F, value & 0x7F); break;
+                case 0x000B: p.reverbSend = value & 0x7F; break;
+                case 0x000C: p.pitchBendRange = value & 0x7F; break;
+                case 0x000D: p.pitchBendStep = value & 0x7F; break;
+                case 0x000E: p.portamentoMode = value & 0x7F; break;
+                case 0x000F: p.portamentoGlissando = value & 0x7F; break;
+                case 0x0010: p.portamentoTime = value & 0x7F; break;
+                case 0x0011: p.monoMode = value & 0x7F; break;
+                case 0x0012: p.modulationWheelRange = value & 0x7F; break;
+                case 0x0013: p.modulationWheelTarget = value & 0x7F; break;
+                case 0x0014: p.footControlRange = value & 0x7F; break;
+                case 0x0015: p.footControlTarget = value & 0x7F; break;
+                case 0x0016: p.breathControlRange = value & 0x7F; break;
+                case 0x0017: p.breathControlTarget = value & 0x7F; break;
+                case 0x0018: p.aftertouchRange = value & 0x7F; break;
+                case 0x0019: p.aftertouchTarget = value & 0x7F; break;
                 default: break;
             }
         }
         return true;
     }
+    
     return false;
 }
 

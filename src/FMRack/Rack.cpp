@@ -272,25 +272,24 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
             std::memset(moduleBuffers_[i].revRight.data(), 0, numSamples * sizeof(float));
         }
 
-        // Launch parallel processing for each module
-        // Note: std::async still allocates, but this is much less than before
-        std::vector<std::future<void>> futures;
-        futures.reserve(moduleCount);
-        
+        // Launch parallel processing for each module using pre-allocated futures array
+        // Note: std::async still has internal allocation, but we avoid vector allocation
         for (size_t i = 0; i < moduleCount; ++i) {
             auto& mbuf = moduleBuffers_[i];
             auto* module = modules_[i].get();
-            futures.push_back(std::async(std::launch::async, [module, &mbuf, numSamples]() {
+            moduleFutures_[i] = std::async(std::launch::async, [module, &mbuf, numSamples]() {
                 module->processAudio(
                     mbuf.left.data(), mbuf.right.data(),
                     mbuf.revLeft.data(), mbuf.revRight.data(),
                     numSamples
                 );
-            }));
+            });
         }
         // Wait for all modules to finish
-        for (auto& fut : futures) {
-            fut.get();
+        for (size_t i = 0; i < moduleCount; ++i) {
+            if (moduleFutures_[i].valid()) {
+                moduleFutures_[i].get();
+            }
         }
         // Accumulate results
         for (size_t m = 0; m < moduleCount; ++m) {
@@ -387,9 +386,10 @@ void Rack::routeSysexToModules(const uint8_t* data, int len, uint8_t sysex_chann
     
     // Only handle MiniDexed (0x7D) SysEx in Performance
     if (len >= 3 && data[1] == 0x7D && performance_) {
-        std::vector<uint8_t> response;
-        if (performance_->handleSysex(data, len, response)) {
-            // TODO: Send response via MIDI output here (if !response.empty())
+        int responseLen = 0;
+        if (performance_->handleSysex(data, len, sysexResponseBuffer_.data(), 
+                                       kMaxSysexResponseSize, responseLen, -1)) {
+            // TODO: Send response via MIDI output here (if responseLen > 0)
             return;
         }
     }

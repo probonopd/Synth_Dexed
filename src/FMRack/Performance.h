@@ -101,7 +101,8 @@ public:
     
     // Handle MiniDexed SysEx (global or TG)
     // partIndex: -1 for global, 0..7 for TG
-    bool handleSysex(const uint8_t* data, int len, std::vector<uint8_t>& response, int partIndex = -1);
+    // Returns true if handled, responseLen is set to actual response size (0 for SET commands)
+    bool handleSysex(const uint8_t* data, int len, uint8_t* response, int maxResponseLen, int& responseLen, int partIndex = -1);
 
     // Set voice data and name for a part using VoiceData helper
     void setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData);
