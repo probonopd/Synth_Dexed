@@ -237,20 +237,21 @@ void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
     if (!algorithmSvg || svgDrawArea.isEmpty())
         return;
 
-    auto svgBounds = algorithmSvg->getDrawableBounds();
-    if (svgBounds.isEmpty())
-        return;
+    // Use the fixed viewBox dimensions (all SVGs have viewBox="0 0 80 520")
+    // This ensures consistent positioning regardless of actual content bounds
+    constexpr float svgViewBoxWidth = 80.0f;
+    constexpr float svgViewBoxHeight = 520.0f;
 
     // Scale to fit the SVG draw area while maintaining aspect ratio
-    float scaleX = svgDrawArea.getWidth() / svgBounds.getWidth();
-    float scaleY = svgDrawArea.getHeight() / svgBounds.getHeight();
+    float scaleX = svgDrawArea.getWidth() / svgViewBoxWidth;
+    float scaleY = svgDrawArea.getHeight() / svgViewBoxHeight;
     float scale = std::min(scaleX, scaleY);
 
     // Center the SVG in the draw area
-    float scaledWidth = svgBounds.getWidth() * scale;
-    float scaledHeight = svgBounds.getHeight() * scale;
-    float offsetX = svgDrawArea.getX() + (svgDrawArea.getWidth() - scaledWidth) / 2.0f - svgBounds.getX() * scale;
-    float offsetY = svgDrawArea.getY() + (svgDrawArea.getHeight() - scaledHeight) / 2.0f - svgBounds.getY() * scale;
+    float scaledWidth = svgViewBoxWidth * scale;
+    float scaledHeight = svgViewBoxHeight * scale;
+    float offsetX = svgDrawArea.getX() + (svgDrawArea.getWidth() - scaledWidth) / 2.0f;
+    float offsetY = svgDrawArea.getY() + (svgDrawArea.getHeight() - scaledHeight) / 2.0f;
 
     auto transform = juce::AffineTransform::scale(scale)
                          .translated(offsetX, offsetY);
@@ -823,9 +824,9 @@ void VoiceEditorPanel::OperatorSliders::resized()
     // Leave space for the SVG algorithm diagram (drawn by parent)
     bounds.removeFromLeft(100); // SVG column width
 
-    // Envelope and keyboard scaling widgets on the right
+    // Envelope and keyboard scaling widgets on the right (side by side horizontally)
     auto widgetArea = bounds.removeFromRight(256);
-    auto envBounds = widgetArea.removeFromTop(widgetArea.getHeight() / 2);
+    auto envBounds = widgetArea.removeFromLeft(widgetArea.getWidth() / 2);
     envWidget.setBounds(envBounds.reduced(4));
     ksWidget.setBounds(widgetArea.reduced(4));
 
