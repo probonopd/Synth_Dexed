@@ -660,6 +660,20 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
         return;
     }
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: syncing all operator sliders from Dexed engine" << std::endl;
+
+    // --- Sync algorithm selector + diagram from current Dexed voice ---
+    // DX7 algorithm is stored at voice data element 134 (0..31). We must update UI without
+    // returning the value to the engine (so dontSendNotification).
+    {
+        const int algoIdx = static_cast<int>(getDexedParam(static_cast<uint8_t>(134)));
+        const int clampedAlgo = juce::jlimit(0, 31, algoIdx);
+        if (clampedAlgo != currentAlgorithm) {
+            currentAlgorithm = clampedAlgo;
+            algorithmSelector.setSelectedId(currentAlgorithm + 1, juce::dontSendNotification);
+            loadAlgorithmSvg(currentAlgorithm);
+        }
+    }
+
     // --- Show voice name from current Dexed engine (thread-safe) ---
     if (controller) {
         juce::String voiceName = controller->getVoiceNameForModule(moduleIndex);
@@ -672,10 +686,13 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
     int numOps = static_cast<int>(operators.size());
     for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
         auto& op = operators[uiRowIdx];
-        // Operators are displayed in reverse order (OP6 at top), so use the operatorIndex
-        // assigned during layout to map UI rows back to Dexed operator numbering.
-        const int dexedOpIdx = 5 - op->operatorIndex; // 0=OP1 .. 5=OP6
-        std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: OP" << (dexedOpIdx+1) << " (UI row " << uiRowIdx << ", operatorIndex=" << op->operatorIndex << ")" << std::endl;
+        // operatorIndex is the UI label number minus 1: 0=OP1 label, 5=OP6 label.
+        // But Dexed voice data stores operators in REVERSE order:
+        //   OP6 at bytes 0-20 (dexedOpIdx=0), OP1 at bytes 105-125 (dexedOpIdx=5).
+        // The opSwitch bitmask also follows this: bit 0=OP6, bit 5=OP1.
+        // So we need: dexedOpIdx = 5 - operatorIndex
+        const int dexedOpIdx = 5 - op->operatorIndex;
+        std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: OP" << (op->operatorIndex+1) << " (UI row " << uiRowIdx << ", dexedOpIdx=" << dexedOpIdx << ")" << std::endl;
         // Set operator enable/disable (OPE slider)
         bool opEnabled = (opeBitmask & (1 << dexedOpIdx)) != 0;
         const bool oldOpeValue = op->opeButton.getToggleState();
@@ -729,6 +746,7 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
     for (int i = 0; i < 4; ++i) pegLevels.push_back(getDexedParam(static_cast<uint8_t>(128 + i)) / 99.0f); // Example
     pegEnvelopeWidget.setEnvelope(pegRates, pegLevels);
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: calling repaint() to update UI" << std::endl;
+    resized();
     repaint();
     std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: completed" << std::endl;
 }
@@ -824,14 +842,15 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders()
     // Operator controls live in the OperatorSliders component, but the actual writes must go through
     // VoiceEditorPanel::setDexedParam(), using an operator-specific address.
     // We rely on VoiceEditorPanel::operatorSliderParamOffsets (built from VCED.json) for the per-operator
-    // offsets, and operatorIndex for which operator row this instance represents (0=OP1 .. 5=OP6).
+    // offsets, and operatorIndex for which operator row this instance represents.
+    //
+    // operatorIndex is the UI label number minus 1: 0=OP1 label, 5=OP6 label.
+    // But Dexed voice data stores operators in REVERSE order:
+    //   OP6 at bytes 0-20 (dexedOpIdx=0), OP1 at bytes 105-125 (dexedOpIdx=5).
+    // The opSwitch bitmask also follows this: bit 0=OP6, bit 5=OP1.
+    // So we need: dexedOpIdx = 5 - operatorIndex
 
-    // UI shows operators reversed (OP6 at top), but Dexed parameter layout is OP1..OP6.
-    // operatorIndex: 0=OP1 .. 5=OP6
-    // dexedOperatorIndex must match the voice data order (0=OP1 .. 5=OP6).
-    const int dexedOperatorIndex = 5 - operatorIndex;
-
-    auto sendOperatorParam = [this, dexedOperatorIndex](const juce::String& key, uint8_t value)
+    auto sendOperatorParam = [this](const juce::String& key, uint8_t value)
     {
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
             if (!parent->isInitialized)
@@ -839,20 +858,24 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders()
             auto it = VoiceEditorPanel::operatorSliderParamOffsets.find(key);
             if (it == VoiceEditorPanel::operatorSliderParamOffsets.end())
                 return;
-            const uint8_t paramAddress = static_cast<uint8_t>(dexedOperatorIndex * 21 + it->second);
+            // Convert UI operatorIndex to Dexed data index
+            const int dexedOpIdx = 5 - operatorIndex;
+            const uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             parent->setDexedParam(paramAddress, value);
         }
     };
 
     // OPE is stored as a bitmask at address 155 for the whole voice.
-    opeButton.onClick = [this, dexedOperatorIndex]()
+    opeButton.onClick = [this]()
     {
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
             if (!parent->isInitialized)
                 return;
             const uint8_t opeAddr = static_cast<uint8_t>(155);
             uint8_t mask = parent->getDexedParam(opeAddr);
-            const uint8_t bit = static_cast<uint8_t>(1u << dexedOperatorIndex);
+            // Convert UI operatorIndex to Dexed bit position
+            const int dexedOpIdx = 5 - operatorIndex;
+            const uint8_t bit = static_cast<uint8_t>(1u << dexedOpIdx);
             if (opeButton.getToggleState())
                 mask = static_cast<uint8_t>(mask | bit);
             else
@@ -1094,6 +1117,11 @@ void VoiceEditorPanel::setModuleIndex(int idx) {
     moduleIndex = idx;
     std::cout << "[VoiceEditorPanel::setModuleIndex] moduleIndex set to " << idx << std::endl;
     initializeIfReady();
+    // When re-targeting the editor to a different module (or reopening), immediately pull
+    // current state from the engine so UI reflects reality (e.g., OPE bitmask).
+    if (isInitialized) {
+        syncAllOperatorSlidersWithDexed();
+    }
 }
 
 void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& data) {
