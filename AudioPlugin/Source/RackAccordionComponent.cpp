@@ -407,7 +407,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     addAndMakeVisible(mainPartGroup); // NEW
 
     // Remove setSize() calls from all sliders, as their size is set in resized().
-    unisonVoicesSlider.setLabelText("Unison Voices");
+    unisonVoicesSlider.setLabelText("Voices");
     addAndMakeVisible(unisonVoicesSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     unisonVoicesSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -424,7 +424,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     unisonDetuneSlider.getSlider().setRange(0.0, 1.0, 0.001);
     unisonDetuneSlider.getSlider().setValue(unisonCentsToUiNorm(0.0f));
 
-    unisonPanSlider.setLabelText("Unison Pan");
+    unisonPanSlider.setLabelText("Spread");
     addAndMakeVisible(unisonPanSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     unisonPanSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -432,7 +432,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     unisonPanSlider.getSlider().setRange(0.0, 1.0, 0.01);
     unisonPanSlider.getSlider().setValue(0.5);
 
-    midiChannelSlider.setLabelText("Channel");
+    midiChannelSlider.setLabelText("Ch");
     addAndMakeVisible(midiChannelSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     midiChannelSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -440,14 +440,14 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     midiChannelSlider.getSlider().setRange(1, 16, 1);
     midiChannelSlider.getSlider().setValue(idx + 1); // Default to 1-based index
 
-    reverbSendSlider.setLabelText("Reverb Send");
+    reverbSendSlider.setLabelText("Reverb");
     addAndMakeVisible(reverbSendSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     reverbSendSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
     reverbSendSlider.setNumDecimalPlacesToDisplay(0);
     reverbSendSlider.getSlider().setRange(0, 99, 1);
 
-    volumeSlider.setLabelText("Volume");
+    volumeSlider.setLabelText("Vol");
     addAndMakeVisible(volumeSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     volumeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -461,7 +461,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     panSlider.setNumDecimalPlacesToDisplay(0);
     panSlider.getSlider().setRange(0, 127, 1);
 
-    detuneSlider.setLabelText("Detune");
+    detuneSlider.setLabelText("Fine");
     addAndMakeVisible(detuneSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     detuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -493,7 +493,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     noteShiftSlider.getSlider().setRange(-24, 24, 1);
 
     // Pitch Bend
-    pitchBendRangeSlider.setLabelText("PB Range");
+    pitchBendRangeSlider.setLabelText("Bend");
     addAndMakeVisible(pitchBendRangeSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     pitchBendRangeSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -520,7 +520,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     addAndMakeVisible(monoModeButton);
 
     // Misc
-    velocityScaleSlider.setLabelText("Velocity");
+    velocityScaleSlider.setLabelText("Vel");
     addAndMakeVisible(velocityScaleSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     velocityScaleSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
@@ -546,7 +546,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     filterCutoffSlider.getSlider().setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     filterCutoffSlider.getSlider().setRange(0, 127, 1);
 
-    filterResonanceSlider.setLabelText("Resonance");
+    filterResonanceSlider.setLabelText("Reso");
     addAndMakeVisible(filterResonanceSlider);
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     filterResonanceSlider.getSlider().setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -933,117 +933,145 @@ void ModuleTabComponent::updateFromModule()
 
 void ModuleTabComponent::resized()
 {
-        const int outerMargin = 12;
-        const int columnGap = 14;
-        const int rowGap = 14;
-        const int controlGap = 12;
-        const int buttonHeight = 26;
-        const int meterWidth = 36;
+    const int outerMargin = 6;
+    const int groupGap = 6;
+    const int rowGap = 6;
+    const int controlGap = 4;
+    const int buttonHeight = 22;
+    const int meterWidth = 28;
+    const int toggleWidth = 50;
 
-        juce::Rectangle<int> area = getLocalBounds().reduced(outerMargin);
+    juce::Rectangle<int> area = getLocalBounds().reduced(outerMargin);
 
-        auto meterArea = area.removeFromRight(meterWidth);
-        if (volumeMeter)
-                volumeMeter->setBounds(meterArea);
+    // Volume meter on the right
+    auto meterArea = area.removeFromRight(meterWidth);
+    if (volumeMeter)
+        volumeMeter->setBounds(meterArea);
+    area.removeFromRight(groupGap);
 
-        constexpr int columnCount = 3;
-        const int minColumnWidth = 260;
-        const int totalGapWidth = columnGap * (columnCount - 1);
-        const int columnWidth = juce::jmax(minColumnWidth, (area.getWidth() - totalGapWidth) / columnCount);
-        const int totalWidthUsed = columnWidth * columnCount + totalGapWidth;
-        const int offsetX = juce::jmax(0, (area.getWidth() - totalWidthUsed) / 2);
+    // Calculate slider dimensions based on available height
+    // We want 2 rows of controls
+    const int availableHeight = area.getHeight();
+    const int rowHeight = (availableHeight - rowGap) / 2;
+    const int sliderHeight = juce::jlimit(50, 90, rowHeight - kGroupLabelOffset - kContentPadding * 2 - kSliderLabelHeight - kSliderLabelGap);
+    const int sliderRowHeight = sliderHeight + kSliderLabelGap + kSliderLabelHeight;
 
-        const int sliderHeight = juce::jlimit(80, 150, area.getHeight() / 4);
-        const int sliderRowHeight = sliderHeight + kSliderLabelGap + kSliderLabelHeight;
+    // === ROW 1: Voice | Main | Filter ===
+    auto row1 = area.removeFromTop(rowHeight);
+    
+    // Voice group (buttons) - fixed width
+    const int voiceWidth = 180;
+    auto voiceArea = row1.removeFromLeft(voiceWidth);
+    voiceGroup.setBounds(voiceArea);
+    auto voiceContent = makeGroupContentBounds(voiceArea, buttonHeight);
+    {
+        const int buttonCount = 3;
+        const int buttonSpacing = 4;
+        const int availWidth = voiceContent.getWidth() - buttonSpacing * (buttonCount - 1);
+        const int buttonWidth = availWidth / buttonCount;
+        int x = voiceContent.getX();
+        const int y = voiceContent.getCentreY() - buttonHeight / 2;
+        loadVoiceButton.setBounds(x, y, buttonWidth, buttonHeight);
+        x += buttonWidth + buttonSpacing;
+        browsePatchesButton.setBounds(x, y, buttonWidth, buttonHeight);
+        x += buttonWidth + buttonSpacing;
+        openVoiceEditorButton.setBounds(x, y, buttonWidth, buttonHeight);
+    }
+    row1.removeFromLeft(groupGap);
 
-        struct ColumnState { int x = 0; int width = 0; int y = 0; };
-        ColumnState columns[columnCount]{};
-        int currentX = area.getX() + offsetX;
-        for (int i = 0; i < columnCount; ++i)
-        {
-                columns[i].x = currentX;
-                columns[i].width = columnWidth;
-                columns[i].y = area.getY();
-                currentX += columnWidth + columnGap;
-        }
+    // Main group (Vol, Pan, Fine, Reverb) - takes most space
+    const int filterWidth = 140;
+    auto mainArea = row1.removeFromLeft(row1.getWidth() - filterWidth - groupGap);
+    mainPartGroup.setBounds(mainArea);
+    auto mainContent = makeGroupContentBounds(mainArea, sliderRowHeight);
+    layoutLabeledSliderRow(mainContent.withHeight(sliderHeight),
+                          { &volumeSlider, &panSlider, &detuneSlider, &reverbSendSlider },
+                          sliderHeight, controlGap);
+    row1.removeFromLeft(groupGap);
 
-        auto placeGroup = [&](int columnIndex, juce::GroupComponent& group, int contentHeight)
-        {
-                auto& column = columns[columnIndex];
-                const int groupHeight = contentHeight + kGroupLabelOffset + kContentPadding * 2;
-                juce::Rectangle<int> bounds(column.x, column.y, column.width, groupHeight);
-                group.setBounds(bounds);
-                column.y = bounds.getBottom() + rowGap;
-                return makeGroupContentBounds(bounds, contentHeight);
-        };
+    // Filter group
+    auto filterArea = row1;
+    filterGroup.setBounds(filterArea);
+    auto filterContent = makeGroupContentBounds(filterArea, sliderRowHeight);
+    // Toggle at top
+    juce::Rectangle<int> filterToggleRow(filterContent.getX(), filterContent.getY(), filterContent.getWidth(), buttonHeight);
+    filterEnabledButton.setBounds(filterToggleRow.removeFromRight(toggleWidth));
+    filterEnabledLabel.setBounds(filterToggleRow);
+    filterEnabledLabel.setJustificationType(juce::Justification::centredLeft);
+    // Sliders below
+    juce::Rectangle<int> filterSliderArea(filterContent.getX(), filterContent.getY() + buttonHeight + 4, 
+                                           filterContent.getWidth(), sliderHeight);
+    layoutLabeledSliderRow(filterSliderArea, { &filterCutoffSlider, &filterResonanceSlider }, sliderHeight, controlGap);
 
-        auto layoutVoiceButtons = [&](const juce::Rectangle<int>& content)
-        {
-                const int buttonCount = 3;
-                const int buttonSpacing = controlGap;
-            const int availableWidth = content.getWidth() - buttonSpacing * (buttonCount - 1);
-            const int buttonWidth = buttonCount > 0 ? availableWidth / buttonCount : availableWidth;
-            const int totalWidth = buttonWidth * buttonCount + buttonSpacing * (buttonCount - 1);
-            int startX = content.getX() + juce::jmax(0, (content.getWidth() - totalWidth) / 2);
-            const int buttonY = content.getCentreY() - buttonHeight / 2;
+    area.removeFromTop(rowGap);
 
-            loadVoiceButton.setBounds(startX, buttonY, buttonWidth, buttonHeight);
-            startX += buttonWidth + buttonSpacing;
-            browsePatchesButton.setBounds(startX, buttonY, buttonWidth, buttonHeight);
-            startX += buttonWidth + buttonSpacing;
-            openVoiceEditorButton.setBounds(startX, buttonY, buttonWidth, buttonHeight);
-        };
+    // === ROW 2: Unison | Note Range | MIDI & Pitch | Portamento & Mono ===
+    auto row2 = area;
+    
+    // Calculate widths for 4 sections
+    const int totalWidth = row2.getWidth();
+    const int sectionWidth = (totalWidth - groupGap * 3) / 4;
 
-        auto voiceContent = placeGroup(0, voiceGroup, buttonHeight);
-        layoutVoiceButtons(voiceContent);
+    // Unison group
+    auto unisonArea = row2.removeFromLeft(sectionWidth);
+    unisonGroup.setBounds(unisonArea);
+    auto unisonContent = makeGroupContentBounds(unisonArea, sliderRowHeight);
+    layoutLabeledSliderRow(unisonContent.withHeight(sliderHeight),
+                          { &unisonVoicesSlider, &unisonDetuneSlider, &unisonPanSlider },
+                          sliderHeight, controlGap);
+    row2.removeFromLeft(groupGap);
 
-        auto unisonContent = placeGroup(0, unisonGroup, sliderRowHeight);
-        layoutLabeledSliderRow(unisonContent.withHeight(sliderHeight),
-                              { &unisonVoicesSlider, &unisonDetuneSlider, &unisonPanSlider },
-                              sliderHeight,
-                              controlGap);
+    // Note Range group
+    auto noteRangeArea = row2.removeFromLeft(sectionWidth);
+    noteRangeGroup.setBounds(noteRangeArea);
+    auto noteRangeContent = makeGroupContentBounds(noteRangeArea, sliderRowHeight);
+    layoutLabeledSliderRow(noteRangeContent.withHeight(sliderHeight),
+                          { &noteLimitLowSlider, &noteLimitHighSlider, &noteShiftSlider },
+                          sliderHeight, controlGap);
+    row2.removeFromLeft(groupGap);
 
-        auto midiPitchContent = placeGroup(0, midiPitchGroup, sliderRowHeight);
-        layoutLabeledSliderRow(midiPitchContent.withHeight(sliderHeight),
-                              { &midiChannelSlider, &pitchBendRangeSlider, &masterTuneSlider },
-                              sliderHeight,
-                              controlGap);
+    // MIDI & Pitch group
+    auto midiPitchArea = row2.removeFromLeft(sectionWidth);
+    midiPitchGroup.setBounds(midiPitchArea);
+    auto midiPitchContent = makeGroupContentBounds(midiPitchArea, sliderRowHeight);
+    layoutLabeledSliderRow(midiPitchContent.withHeight(sliderHeight),
+                          { &midiChannelSlider, &pitchBendRangeSlider, &masterTuneSlider, &velocityScaleSlider },
+                          sliderHeight, controlGap);
+    row2.removeFromLeft(groupGap);
 
-        auto mainPartContent = placeGroup(1, mainPartGroup, sliderRowHeight);
-        layoutLabeledSliderRow(mainPartContent.withHeight(sliderHeight),
-                              { &volumeSlider, &panSlider, &detuneSlider, &reverbSendSlider, &velocityScaleSlider },
-                              sliderHeight,
-                              controlGap);
+    // Portamento & Mono group
+    auto portaMonoArea = row2;
+    portaMonoGroup.setBounds(portaMonoArea);
+    auto portaMonoContent = makeGroupContentBounds(portaMonoArea, sliderRowHeight);
+    
+    // Two toggle rows stacked, with slider between
+    const int toggleRowH = 18;
+    const int innerGap = 2;
+    
+    // Portamento toggle at top
+    juce::Rectangle<int> portaRow(portaMonoContent.getX(), portaMonoContent.getY(), 
+                                   portaMonoContent.getWidth(), toggleRowH);
+    portamentoModeButton.setBounds(portaRow.removeFromRight(toggleWidth));
+    portamentoModeLabel.setBounds(portaRow);
+    portamentoModeLabel.setJustificationType(juce::Justification::centredLeft);
+    
+    // Time slider in middle
+    int sliderY = portaMonoContent.getY() + toggleRowH + innerGap;
+    int remainingH = portaMonoContent.getHeight() - toggleRowH * 2 - innerGap * 2;
+    int actualSliderH = juce::jmin(sliderHeight, remainingH - kSliderLabelHeight);
+    juce::Rectangle<int> timeSliderArea(portaMonoContent.getX(), sliderY, 
+                                         portaMonoContent.getWidth(), actualSliderH);
+    layoutLabeledSliderRow(timeSliderArea, { &portamentoTimeSlider }, actualSliderH, controlGap);
+    
+    // Mono toggle at bottom
+    juce::Rectangle<int> monoRow(portaMonoContent.getX(), 
+                                  portaMonoContent.getBottom() - toggleRowH,
+                                  portaMonoContent.getWidth(), toggleRowH);
+    monoModeButton.setBounds(monoRow.removeFromRight(toggleWidth));
+    monoModeLabel.setBounds(monoRow);
+    monoModeLabel.setJustificationType(juce::Justification::centredLeft);
 
-        auto noteRangeContent = placeGroup(1, noteRangeGroup, sliderRowHeight);
-        layoutLabeledSliderRow(noteRangeContent.withHeight(sliderHeight),
-                              { &noteLimitLowSlider, &noteLimitHighSlider, &noteShiftSlider },
-                              sliderHeight,
-                              controlGap);
-
-        const int filterContentHeight = buttonHeight + rowGap + sliderRowHeight;
-        auto filterContent = placeGroup(2, filterGroup, filterContentHeight);
-        juce::Rectangle<int> filterToggleRow(filterContent.getX(), filterContent.getY(), filterContent.getWidth(), buttonHeight);
-        layoutToggleRow(filterEnabledLabel, filterEnabledButton, filterToggleRow, 80);
-        juce::Rectangle<int> filterSliderRow(filterContent.getX(), filterToggleRow.getBottom() + rowGap, filterContent.getWidth(), sliderHeight);
-        layoutLabeledSliderRow(filterSliderRow,
-                              { &filterCutoffSlider, &filterResonanceSlider },
-                              sliderHeight,
-                              controlGap);
-
-        const int portaContentHeight = buttonHeight + rowGap + sliderRowHeight + rowGap + buttonHeight;
-        auto portaContent = placeGroup(2, portaMonoGroup, portaContentHeight);
-        juce::Rectangle<int> portaRow(portaContent.getX(), portaContent.getY(), portaContent.getWidth(), buttonHeight);
-        layoutToggleRow(portamentoModeLabel, portamentoModeButton, portaRow, 80);
-        juce::Rectangle<int> portaSliderRow(portaContent.getX(), portaRow.getBottom() + rowGap, portaContent.getWidth(), sliderHeight);
-        layoutLabeledSliderRow(portaSliderRow,
-                              { &portamentoTimeSlider },
-                              sliderHeight,
-                              controlGap);
-        juce::Rectangle<int> monoRow(portaContent.getX(), portaSliderRow.getBottom() + rowGap, portaContent.getWidth(), buttonHeight);
-        layoutToggleRow(monoModeLabel, monoModeButton, monoRow, 80);
-
-        updateFromModule();
+    updateFromModule();
 }
 
 void ModuleTabComponent::loadVoiceFile(const juce::File& file)

@@ -49,11 +49,12 @@ void VoiceBrowserComponent::paint(juce::Graphics& g) {
 
 void VoiceBrowserComponent::resized() {
     auto area = getLocalBounds().reduced(8);
-    searchBox.setBounds(area.removeFromTop(24));
-    voiceListBox.setBounds(area.removeFromTop(200));
-    // Previously reserved row for MIDI dropdown.
-    area.removeFromTop(24);
-    // Buttons removed - voices are loaded automatically when clicked
+    searchBox.setBounds(area.removeFromTop(28));
+    area.removeFromTop(4);
+    // Voice list takes most of the space
+    auto listHeight = juce::jmax(150, area.getHeight() - 50);
+    voiceListBox.setBounds(area.removeFromTop(listHeight));
+    area.removeFromTop(4);
     statusLabel.setBounds(area.removeFromTop(20));
     bankLabel.setBounds(area.removeFromTop(20));
 }

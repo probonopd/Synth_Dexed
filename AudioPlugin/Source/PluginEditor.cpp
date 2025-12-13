@@ -113,20 +113,21 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
         // Make the editor resizable
         setResizable(true, true);
-        constrainer.setMinimumSize(1000, 700);
-        constrainer.setMaximumSize(1600, 1200);
+        constrainer.setMinimumSize(1000, 420);
+        constrainer.setMaximumSize(1800, 1000);
         addAndMakeVisible(resizer);
 
-        setSize (1000, 600);
+        setSize (1100, 480);
 
-        // Set up log text box
+        // Set up log text box (hidden by default for cleaner UI)
         logTextBox.setMultiLine(true);
         logTextBox.setReadOnly(true);
         logTextBox.setScrollbarsShown(true);
-    logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
-    logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
-    logTextBox.setFont(juce::Font(juce::FontOptions(12.0f)));
-        addAndMakeVisible(logTextBox);
+        logTextBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222));
+        logTextBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
+        logTextBox.setFont(juce::Font(juce::FontOptions(12.0f)));
+        // Log box is hidden by default - use Options menu to show it
+        logTextBox.setVisible(false);
         juce::Logger::writeToLog("[PluginEditor] After addAndMakeVisible(logTextBox)");
         logTextBox.insertTextAtCaret("[PluginEditor] Constructor started\n");
 
@@ -214,10 +215,10 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         };
 
         setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", reverbSizeAttachment);
-        setupSlider(reverbHighDampSlider, reverbHighDampLabel, "High Damp", "reverbHighDamp", reverbHighDampAttachment);
-        setupSlider(reverbLowDampSlider, reverbLowDampLabel, "Low Damp", "reverbLowDamp", reverbLowDampAttachment);
-        setupSlider(reverbLowPassSlider, reverbLowPassLabel, "Low Pass", "reverbLowPass", reverbLowPassAttachment);
-        setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diffusion", "reverbDiffusion", reverbDiffusionAttachment);
+        setupSlider(reverbHighDampSlider, reverbHighDampLabel, "HiDamp", "reverbHighDamp", reverbHighDampAttachment);
+        setupSlider(reverbLowDampSlider, reverbLowDampLabel, "LoDamp", "reverbLowDamp", reverbLowDampAttachment);
+        setupSlider(reverbLowPassSlider, reverbLowPassLabel, "LoPass", "reverbLowPass", reverbLowPassAttachment);
+        setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diff", "reverbDiffusion", reverbDiffusionAttachment);
         setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", reverbLevelAttachment);
 
         resized(); // Force layout after construction
@@ -277,25 +278,28 @@ void AudioPluginAudioProcessorEditor::resized()
     const int resizerSize = 16;
     resizer.setBounds(getWidth() - resizerSize, getHeight() - resizerSize, resizerSize, resizerSize);
 
-    const int outerMargin = 12;
-    const int sectionGap = 12;
-    const int controlGap = 8;
-    const int topButtonHeight = 30;
-    const int logHeight = juce::jlimit(100, 180, getHeight() / 4);
+    const int outerMargin = 8;
+    const int sectionGap = 8;
+    const int controlGap = 6;
+    const int topButtonHeight = 28;
 
     auto layoutBounds = getLocalBounds().reduced(outerMargin);
 
-    auto logArea = layoutBounds.removeFromBottom(logHeight);
-    logArea = logArea.withTrimmedRight(resizerSize).reduced(0, 4);
-    logTextBox.setBounds(logArea);
-
-    layoutBounds.removeFromBottom(sectionGap);
+    // Only show log box if visible (can be toggled via Options menu)
+    if (logTextBox.isVisible())
+    {
+        const int logHeight = juce::jlimit(80, 120, getHeight() / 5);
+        auto logArea = layoutBounds.removeFromBottom(logHeight);
+        logArea = logArea.withTrimmedRight(resizerSize).reduced(0, 2);
+        logTextBox.setBounds(logArea);
+        layoutBounds.removeFromBottom(sectionGap);
+    }
 
     auto topRow = layoutBounds.removeFromTop(topButtonHeight);
     layoutBounds.removeFromTop(sectionGap);
 
-    const int largeButtonWidth = juce::jlimit(140, 200, topRow.getWidth() / 4 * 2);
-    const int smallButtonWidth = 32;
+    const int largeButtonWidth = juce::jlimit(120, 160, topRow.getWidth() / 5);
+    const int smallButtonWidth = 28;
 
     auto alignButton = [&](juce::Rectangle<int> area)
     {
@@ -314,14 +318,15 @@ void AudioPluginAudioProcessorEditor::resized()
     auto removeBounds = topRow.removeFromRight(smallButtonWidth);
     removeModuleButton.setBounds(alignButton(removeBounds));
 
-    const int spacing = 14;
+    const int spacing = 10;
     int availableWidth = layoutBounds.getWidth();
-    int effectsWidth = juce::jmax(280, availableWidth / 3);
+    // Global Effects panel - compact width
+    int effectsWidth = juce::jlimit(160, 200, availableWidth / 5);
     int rackWidth = availableWidth - effectsWidth - spacing;
 
-    if (rackWidth < 420)
+    if (rackWidth < 700)
     {
-        rackWidth = juce::jmax(420, availableWidth - effectsWidth - spacing);
+        rackWidth = juce::jmax(700, availableWidth - effectsWidth - spacing);
         effectsWidth = availableWidth - rackWidth - spacing;
     }
 
@@ -337,47 +342,36 @@ void AudioPluginAudioProcessorEditor::resized()
     auto effectsArea = layoutBounds;
     effectsGroup.setBounds(effectsArea);
 
-    const int groupPadding = 12;
-    const int groupLabelOffset = 24;
-    const int toggleHeight = 26;
-    const int rowGap = 18;
-    const int columnGapRotary = 16;
+    const int groupPadding = 6;
+    const int groupLabelOffset = 18;
+    const int toggleHeight = 20;
+    const int rowGap = 6;
+    const int columnGapRotary = 4;
 
     auto effectsContent = effectsArea.reduced(groupPadding).withTrimmedTop(groupLabelOffset);
 
+    // Toggles row - stacked vertically for narrow panel
     auto toggleRow = effectsContent.removeFromTop(toggleHeight);
-    int toggleWidth = juce::jmax(70, (toggleRow.getWidth() - columnGapRotary) / 2);
-    if (toggleWidth * 2 + columnGapRotary > toggleRow.getWidth())
-        toggleWidth = juce::jmax(40, (toggleRow.getWidth() - columnGapRotary) / 2);
-    const int toggleTotalWidth = toggleWidth * 2 + columnGapRotary;
-    const int toggleStartX = toggleRow.getX() + juce::jmax(0, (toggleRow.getWidth() - toggleTotalWidth) / 2);
-
-    juce::Rectangle<int> compressorBounds(toggleStartX, toggleRow.getCentreY() - toggleHeight / 2, toggleWidth, toggleHeight);
-    juce::Rectangle<int> reverbBounds = compressorBounds.translated(toggleWidth + columnGapRotary, 0);
-
-    compressorEnableButton.setBounds(compressorBounds);
-    reverbEnableButton.setBounds(reverbBounds);
+    compressorEnableButton.setBounds(toggleRow.removeFromLeft(toggleRow.getWidth() / 2 - 2));
+    toggleRow.removeFromLeft(4);
+    reverbEnableButton.setBounds(toggleRow);
 
     effectsContent.removeFromTop(rowGap);
 
+    // Calculate slider layout - 3 columns x 2 rows for compact display
     const int verticalColumns = 3;
-    const int verticalRows = 2;
-    const int availableGridWidth = juce::jmax(0, effectsContent.getWidth() - columnGapRotary * (verticalColumns - 1));
-    juce::ignoreUnused(availableGridWidth);
-    const int availableGridHeight = juce::jmax(0, effectsContent.getHeight() - rowGap * (verticalRows - 1) - kVerticalSliderLabelHeight * verticalRows);
-    juce::ignoreUnused(availableGridHeight);
-    int verticalSliderHeight = juce::jlimit(80, 150, effectsContent.getHeight() / 4);
+    int verticalSliderHeight = juce::jlimit(40, 70, (effectsContent.getHeight() - rowGap) / 2 - kVerticalSliderLabelHeight);
     if (verticalSliderHeight <= 0)
-        verticalSliderHeight = 80;
+        verticalSliderHeight = 40;
 
     layoutVerticalSliderGrid(effectsContent,
                              {
                                  { &reverbSizeSlider, &reverbSizeLabel },
+                                 { &reverbLevelSlider, &reverbLevelLabel },
+                                 { &reverbDiffusionSlider, &reverbDiffusionLabel },
                                  { &reverbHighDampSlider, &reverbHighDampLabel },
                                  { &reverbLowDampSlider, &reverbLowDampLabel },
-                                 { &reverbLowPassSlider, &reverbLowPassLabel },
-                                 { &reverbDiffusionSlider, &reverbDiffusionLabel },
-                                 { &reverbLevelSlider, &reverbLevelLabel }
+                                 { &reverbLowPassSlider, &reverbLowPassLabel }
                              },
                              verticalColumns,
                              verticalSliderHeight,
@@ -497,7 +491,7 @@ void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
         // convenience, but release ownership to the window.
         voiceEditorWindow->setContentOwned(voiceEditorPanel.release(), true);
         voiceEditorWindow->setUsingNativeTitleBar(true);
-        voiceEditorWindow->centreWithSize(1000, 600);
+        voiceEditorWindow->centreWithSize(1000, 680);
         voiceEditorWindow->setResizable(true, false);
     }
 
@@ -578,6 +572,7 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int /*moduleIndex*/)
 
         voiceBrowserWindow->setUsingNativeTitleBar(true);
         voiceBrowserWindow->setResizable(true, false);
+        voiceBrowserWindow->setResizeLimits(500, 350, 1200, 800);
         voiceBrowserWindow->setContentNonOwned(voiceBrowser.get(), true);
         voiceBrowserWindow->centreWithSize(600, 400);
     }
