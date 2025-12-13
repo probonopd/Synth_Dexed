@@ -23,18 +23,22 @@ public:
     void parseVoiceList(const juce::String& json);
     void filterVoices();
     void loadVoiceList();
-    void downloadVoiceSyx(int index);    void sendVoiceSyx(const juce::MemoryBlock& syx, int midiChannel);
+    void downloadVoiceSyx(int index);
+    void sendVoiceSyx(const juce::MemoryBlock& syx, int midiChannel);
     void downloadBankInfo(int index);
     juce::File getCacheDir() const;
     juce::File getVoiceListCacheFile() const;
     juce::File getVoiceSyxCacheFile(const juce::String& url) const;
-    juce::File getVoiceJsonCacheFile(const juce::String& url) const;    std::function<void()> onClose; // Callback when window should be closed
+    juce::File getVoiceJsonCacheFile(const juce::String& url) const;
+
+    std::function<void()> onClose; // Callback when window should be closed
     std::function<void(const std::vector<uint8_t>&)> onVoiceLoaded; // Callback when voice should be loaded into FM engine
 
 private:
     juce::TextEditor searchBox;
     juce::ListBox voiceListBox;
-    juce::ComboBox channelCombo;
+    // Channel/module selection has been removed: the host/editor decides which module to load into
+    // (the currently active tab).
     // Buttons removed - voices are loaded automatically when clicked
     juce::Label statusLabel;
     juce::Label bankLabel;

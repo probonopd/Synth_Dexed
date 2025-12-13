@@ -28,12 +28,8 @@ VoiceBrowserComponent::VoiceBrowserComponent() {
     voiceListBox.setModel(this);
     voiceListBox.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
 
-    addAndMakeVisible(channelCombo);
-    channelCombo.setColour(juce::ComboBox::textColourId, juce::Colours::white);
-    channelCombo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
-    for (int i = 1; i <= 16; ++i) channelCombo.addItem("MIDI " + juce::String(i), i);
-    channelCombo.addItem("Omni", 17);
-    channelCombo.setSelectedId(1);    // Buttons removed - voices are loaded automatically when clicked
+    // No channel/module dropdown: voice is always loaded into the module represented
+    // by the currently active tab in the main editor.
 
     addAndMakeVisible(statusLabel);
     statusLabel.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -55,8 +51,8 @@ void VoiceBrowserComponent::resized() {
     auto area = getLocalBounds().reduced(8);
     searchBox.setBounds(area.removeFromTop(24));
     voiceListBox.setBounds(area.removeFromTop(200));
-    auto row = area.removeFromTop(24);
-    channelCombo.setBounds(row.removeFromLeft(100));
+    // Previously reserved row for MIDI dropdown.
+    area.removeFromTop(24);
     // Buttons removed - voices are loaded automatically when clicked
     statusLabel.setBounds(area.removeFromTop(20));
     bankLabel.setBounds(area.removeFromTop(20));
@@ -318,8 +314,7 @@ void VoiceBrowserComponent::downloadVoiceSyx(int index) {
             juce::MemoryBlock syx;
             if (cacheFile.loadFileAsData(syx) && syx.getSize() > 0) {
                 setStatus("Loaded from cache: " + voiceName + " (" + juce::String(syx.getSize()) + " bytes)");
-                int midiChannel = channelCombo.getSelectedId();
-                sendVoiceSyx(syx, midiChannel);
+                sendVoiceSyx(syx, 1);
                 return;
             } else {
                 // Cache file exists but is corrupted, delete it
@@ -344,8 +339,7 @@ void VoiceBrowserComponent::downloadVoiceSyx(int index) {
                 cacheFile.create();
                 cacheFile.replaceWithData(syx.getData(), syx.getSize());
                 setStatus("Downloaded: " + voiceName + " (" + juce::String(syx.getSize()) + " bytes)");
-                int midiChannel = channelCombo.getSelectedId();
-                sendVoiceSyx(syx, midiChannel);
+                sendVoiceSyx(syx, 1);
             } else {
                 setStatus("Downloaded invalid data for " + voiceName, true);
             }
@@ -424,7 +418,7 @@ void VoiceBrowserComponent::sendVoiceSyx(const juce::MemoryBlock& syx, int /*mid
         if (onVoiceLoaded) {
             onVoiceLoaded(dexedVoice);
             juce::String voiceName = VoiceData::extractDX7VoiceName(dexedVoice);
-            setStatus("Voice loaded: " + voiceName + " into module: " + juce::String(channelCombo.getSelectedId() + 1), false);
+            setStatus("Voice loaded: " + voiceName, false);
         } else {
             setStatus("No voice loading callback available", true);
         }
