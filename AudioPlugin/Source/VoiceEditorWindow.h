@@ -14,4 +14,5 @@ public:
     
 private:
     AudioPluginAudioProcessorEditor* editorOwner;
+    juce::ComponentBoundsConstrainer constrainer;
 };

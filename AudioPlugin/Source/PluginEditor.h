@@ -6,6 +6,7 @@
 #include "VoiceEditorPanel.h" // Added to include the VoiceEditorPanel
 #include "VoiceEditorWindow.h" // Include the custom VoiceEditorWindow class
 #include "VoiceBrowserComponent.h"
+#include "FMRackVerticalSlider.h" // Custom vertical slider class
 #include <juce_gui_basics/juce_gui_basics.h> // Added for GUI elements
 #include <memory> // Added for std::unique_ptr
 
@@ -73,17 +74,17 @@ private:
     juce::GroupComponent effectsGroup;
     juce::ToggleButton compressorEnableButton{ "Compressor" };
     juce::ToggleButton reverbEnableButton{ "Reverb" };
-    juce::Slider reverbSizeSlider;
+    FMRackVerticalSlider reverbSizeSlider;
     juce::Label reverbSizeLabel;
-    juce::Slider reverbHighDampSlider;
+    FMRackVerticalSlider reverbHighDampSlider;
     juce::Label reverbHighDampLabel;
-    juce::Slider reverbLowDampSlider;
+    FMRackVerticalSlider reverbLowDampSlider;
     juce::Label reverbLowDampLabel;
-    juce::Slider reverbLowPassSlider;
+    FMRackVerticalSlider reverbLowPassSlider;
     juce::Label reverbLowPassLabel;
-    juce::Slider reverbDiffusionSlider;
+    FMRackVerticalSlider reverbDiffusionSlider;
     juce::Label reverbDiffusionLabel;
-    juce::Slider reverbLevelSlider;
+    FMRackVerticalSlider reverbLevelSlider;
     juce::Label reverbLevelLabel;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> compressorEnableAttachment;

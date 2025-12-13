@@ -14,6 +14,8 @@ namespace
     };
 
     constexpr int kRotaryLabelHeight = 18;
+    constexpr int kVerticalSliderWidth = 40;
+    constexpr int kVerticalSliderLabelHeight = 16;
 
     void layoutRotarySliderGrid(const juce::Rectangle<int>& area,
                                 const std::initializer_list<SliderLabelPair>& controls,
@@ -55,6 +57,47 @@ namespace
             ++index;
         }
     }
+
+    void layoutVerticalSliderGrid(const juce::Rectangle<int>& area,
+                                  const std::initializer_list<SliderLabelPair>& controls,
+                                  int columns,
+                                  int sliderHeight,
+                                  int rowGap,
+                                  int columnGap)
+    {
+        if (controls.size() == 0 || columns <= 0)
+            return;
+
+        const int totalControls = static_cast<int>(controls.size());
+        const int rows = (totalControls + columns - 1) / columns;
+
+        const int totalWidth = columns * kVerticalSliderWidth + (columns - 1) * columnGap;
+        const int totalHeight = rows * (sliderHeight + kVerticalSliderLabelHeight) + (rows - 1) * rowGap;
+
+        const int startX = area.getX() + juce::jmax(0, (area.getWidth() - totalWidth) / 2);
+        const int startY = area.getY() + juce::jmax(0, (area.getHeight() - totalHeight) / 2);
+
+        int index = 0;
+        for (auto control : controls)
+        {
+            const int row = index / columns;
+            const int column = index % columns;
+
+            const int x = startX + column * (kVerticalSliderWidth + columnGap);
+            const int y = startY + row * (sliderHeight + kVerticalSliderLabelHeight + rowGap);
+
+            if (control.slider != nullptr)
+                control.slider->setBounds(x, y, kVerticalSliderWidth, sliderHeight);
+
+            if (control.label != nullptr)
+            {
+                control.label->setJustificationType(juce::Justification::centred);
+                control.label->setBounds(x, y + sliderHeight, kVerticalSliderWidth, kVerticalSliderLabelHeight);
+            }
+
+            ++index;
+        }
+    }
 }
 
 //==============================================================================
@@ -70,7 +113,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
         // Make the editor resizable
         setResizable(true, true);
-        constrainer.setMinimumSize(800, 500);
+        constrainer.setMinimumSize(1000, 700);
         constrainer.setMaximumSize(1600, 1200);
         addAndMakeVisible(resizer);
 
@@ -162,11 +205,11 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
         auto setupSlider = [this](juce::Slider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment) {
             addAndMakeVisible(slider);
-            slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-            slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
+            // Set text box style for global effects (no text box)
+            slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
             addAndMakeVisible(label);
             label.setText(labelText, juce::dontSendNotification);
-            label.attachToComponent(&slider, true);
+            label.setJustificationType(juce::Justification::centred);
             attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.treeState, paramID, slider);
         };
 
@@ -323,29 +366,29 @@ void AudioPluginAudioProcessorEditor::resized()
 
     effectsContent.removeFromTop(rowGap);
 
-    const int rotaryColumns = 3;
-    const int rotaryRows = 2;
-    const int availableGridWidth = juce::jmax(0, effectsContent.getWidth() - columnGapRotary * (rotaryColumns - 1));
-    const int availableGridHeight = juce::jmax(0, effectsContent.getHeight() - rowGap * (rotaryRows - 1) - kRotaryLabelHeight * rotaryRows);
-    const int widthLimitedSize = rotaryColumns > 0 ? availableGridWidth / rotaryColumns : availableGridWidth;
-    const int heightLimitedSize = rotaryRows > 0 ? availableGridHeight / rotaryRows : availableGridHeight;
-    int rotarySize = juce::jmin(110, juce::jmin(widthLimitedSize, heightLimitedSize));
-    if (rotarySize <= 0)
-        rotarySize = 70;
+    const int verticalColumns = 3;
+    const int verticalRows = 2;
+    const int availableGridWidth = juce::jmax(0, effectsContent.getWidth() - columnGapRotary * (verticalColumns - 1));
+    const int availableGridHeight = juce::jmax(0, effectsContent.getHeight() - rowGap * (verticalRows - 1) - kVerticalSliderLabelHeight * verticalRows);
+    const int widthLimitedHeight = verticalColumns > 0 ? availableGridWidth / verticalColumns : availableGridWidth;
+    const int heightLimitedHeight = verticalRows > 0 ? availableGridHeight / verticalRows : availableGridHeight;
+    int verticalSliderHeight = juce::jlimit(80, 150, effectsContent.getHeight() / 4);
+    if (verticalSliderHeight <= 0)
+        verticalSliderHeight = 80;
 
-    layoutRotarySliderGrid(effectsContent,
-                           {
-                               { &reverbSizeSlider, &reverbSizeLabel },
-                               { &reverbHighDampSlider, &reverbHighDampLabel },
-                               { &reverbLowDampSlider, &reverbLowDampLabel },
-                               { &reverbLowPassSlider, &reverbLowPassLabel },
-                               { &reverbDiffusionSlider, &reverbDiffusionLabel },
-                               { &reverbLevelSlider, &reverbLevelLabel }
-                           },
-                           rotaryColumns,
-                           rotarySize,
-                           rowGap,
-                           columnGapRotary);
+    layoutVerticalSliderGrid(effectsContent,
+                             {
+                                 { &reverbSizeSlider, &reverbSizeLabel },
+                                 { &reverbHighDampSlider, &reverbHighDampLabel },
+                                 { &reverbLowDampSlider, &reverbLowDampLabel },
+                                 { &reverbLowPassSlider, &reverbLowPassLabel },
+                                 { &reverbDiffusionSlider, &reverbDiffusionLabel },
+                                 { &reverbLevelSlider, &reverbLevelLabel }
+                             },
+                             verticalColumns,
+                             verticalSliderHeight,
+                             rowGap,
+                             columnGapRotary);
 
     if (voiceEditorWindow)
         voiceEditorWindow->setBounds(100, 100, 800, 600);

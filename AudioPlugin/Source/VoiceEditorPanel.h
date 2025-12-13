@@ -1,5 +1,5 @@
 #pragma once
-#include <juce_gui_basics/juce_gui_basics.h>
+#include "FMRackLabeledVerticalSlider.h" // New labeled slider class
 #include "EnvelopeDisplay.h"
 #include "KeyboardScalingDisplay.h"
 #include <juce_data_structures/juce_data_structures.h>
@@ -59,8 +59,7 @@ public:
             OPERATOR_SLIDER_LIST
 #undef X
         };
-        std::array<juce::Slider, NumSliders> sliders;
-        std::array<juce::Label, NumSliders> sliderLabels;
+        std::array<FMRackLabeledVerticalSlider, NumSliders> sliders;
         juce::Label label;
         EnvelopeDisplay envWidget;
         KeyboardScalingDisplay ksWidget;
@@ -140,8 +139,7 @@ public:
     static constexpr const char* globalSliderLabels[numGlobalSliders] = {
         "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP", "SRC", "PMO", "PBR", "PBS", "PRT", "PGL", "PMD", "MWS", "MWA", "FCS", "FCA", "ATS", "ATA", "BCS", "BCA", "ATT", "MTU"    
     };
-    std::array<juce::Slider, numGlobalSliders> globalSliders;
-    std::array<juce::Label, numGlobalSliders> globalSliderLabelsUI;
+    std::array<FMRackLabeledVerticalSlider, numGlobalSliders> globalSliders;
     // PEG Envelope widget
     EnvelopeDisplay pegEnvelopeWidget;
     juce::Label pegEnvelopeLabel;

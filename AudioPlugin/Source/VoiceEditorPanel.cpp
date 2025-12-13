@@ -11,7 +11,7 @@
 using namespace juce;
 
 // Global instance for operator slider look
-static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
+// static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
 
 namespace
 {
@@ -109,10 +109,6 @@ VoiceEditorPanel::VoiceEditorPanel()
             op->label.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
             op->label.setColour(juce::Label::textColourId, juce::Colours::white);
             op->label.setJustificationType(juce::Justification::centred);
-            // Apply custom look and feel to all operator sliders
-            for (int s = 0; s < op->NumSliders; ++s) {
-                op->sliders[s].setLookAndFeel(&operatorSliderLookAndFeel);
-            }
             addAndMakeVisible(*op);
             operators.push_back(std::move(op));
         }
@@ -141,18 +137,12 @@ VoiceEditorPanel::VoiceEditorPanel()
                 searchShort("TX816Perf");
             }
             addAndMakeVisible(globalSliders[i]);
-            addAndMakeVisible(globalSliderLabelsUI[i]);
-            globalSliders[i].setLookAndFeel(&operatorSliderLookAndFeel);
-            globalSliders[i].setSliderStyle(juce::Slider::LinearVertical);
+            // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
             globalSliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, kSliderTextBoxHeight);
             globalSliders[i].setNumDecimalPlacesToDisplay(0);
-            globalSliders[i].setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-            globalSliders[i].setEnabled(enabled);
-            globalSliderLabelsUI[i].setText(enabled ? shortLabel : juce::String(), juce::dontSendNotification);
-            globalSliderLabelsUI[i].setColour(juce::Label::textColourId, enabled ? juce::Colours::white : juce::Colours::grey);
-            globalSliderLabelsUI[i].setFont(juce::Font(juce::FontOptions(10.0f)));
-            globalSliderLabelsUI[i].setJustificationType(juce::Justification::centred);
-            setupOperatorSlider(globalSliders[i], vcedKey, 0, 99, 0);
+            globalSliders[i].getSlider().setEnabled(enabled);
+            globalSliders[i].setLabelText(enabled ? shortLabel : juce::String());
+            setupOperatorSlider(globalSliders[i].getSlider(), vcedKey, 0, 99, 0);
             // Always set up the handler if enabled
             globalSliders[i].onValueChange = [this, i, vcedKey, enabled] {
                 if (!isInitialized) {
@@ -164,7 +154,7 @@ VoiceEditorPanel::VoiceEditorPanel()
                 if (!controller) return;
                 auto it2 = operatorSliderParamOffsets.find(vcedKey);
                 if (it2 != operatorSliderParamOffsets.end())
-                    setDexedParam(it2->second, static_cast<uint8_t>(globalSliders[i].getValue()));
+                    setDexedParam(it2->second, static_cast<uint8_t>(globalSliders[i].getSlider().getValue()));
             };
             globalSliders[i].addMouseListener(this, false);
         }
@@ -195,25 +185,6 @@ VoiceEditorPanel::VoiceEditorPanel()
         // Load initial SVG
         loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);
         loadHelpJson();
-
-        for (int i = 0; i < numGlobalSliders; ++i) {
-            globalSliderLabelsUI[i].setText(globalSliderLabels[i], juce::dontSendNotification);
-            addAndMakeVisible(globalSliderLabelsUI[i]);
-            addAndMakeVisible(globalSliders[i]);
-            // Apply custom look and feel to global sliders
-            globalSliders[i].setLookAndFeel(&operatorSliderLookAndFeel);
-            // Setup from JSON
-            setupOperatorSlider(globalSliders[i], globalSliderKeys[i], 0, 99, 0);
-            globalSliders[i].onValueChange = [this, i] {
-                if (!isInitialized) {
-                    std::cout << "[VoiceEditorPanel] globalSliders[" << i << "] onValueChange called before isInitialized, skipping" << std::endl;
-                    return;
-                }
-                auto it = operatorSliderParamOffsets.find(globalSliderKeys[i]);
-                if (it != operatorSliderParamOffsets.end())
-                    setDexedParam(it->second, static_cast<uint8_t>(globalSliders[i].getValue()));
-            };
-        }
 
         // Make the voice name editor editable, max 10 chars, and update Dexed state on change
         voiceNameEditor.setInputRestrictions(10, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-_*<>()[]#'\"!?$%&,:;/\\");
@@ -426,13 +397,9 @@ void VoiceEditorPanel::resized() {
                 juce::Rectangle<int> sliderBounds(sliderX,
                                                   sliderArea.getY(),
                                                   computedSliderWidth,
-                                                  computedSliderHeight + kSliderLabelHeight);
-                layoutSliderWithLabel(globalSliders[globalSliderIndex],
-                                      globalSliderLabelsUI[globalSliderIndex],
-                                      globalSliderLabelsUI[globalSliderIndex].getText(),
-                                      sliderBounds,
-                                      kSliderTextBoxHeight);
-                globalSliders[globalSliderIndex].setEnabled(globalSliderLabelsUI[globalSliderIndex].getText().isNotEmpty());
+                                                  computedSliderHeight + FMRackLabeledVerticalSlider::kLabelHeight);
+                globalSliders[globalSliderIndex].setBounds(sliderBounds);
+                globalSliders[globalSliderIndex].getSlider().setEnabled(globalSliders[globalSliderIndex].getLabelText().isNotEmpty());
                 sliderX += computedSliderWidth + kSliderGap;
                 ++globalSliderIndex;
             }
@@ -669,21 +636,6 @@ void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, i
     }
 }
 
-// Synchronize slider value with Dexed engine
-void VoiceEditorPanel::syncOperatorSliderWithDexed(Slider& slider, uint8_t paramAddress, const char* sliderKey) {
-    std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] paramAddress=" << static_cast<int>(paramAddress) << " sliderKey=" << (sliderKey ? sliderKey : "null") << std::endl;
-    if (controller && sliderKey) {
-        uint8_t value = getDexedParam(paramAddress);
-        auto range = getDexedRange(sliderKey);
-        double oldValue = slider.getValue();
-        slider.setValue(static_cast<double>(value), juce::dontSendNotification);
-        slider.setRange(range.first, range.second, 1.0);
-    std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] " << sliderKey << ": value=" << static_cast<int>(value) << " range=[" << static_cast<int>(range.first) << "-" << static_cast<int>(range.second) << "] oldSlider=" << oldValue << " newSlider=" << slider.getValue() << std::endl;
-    } else {
-        std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] skipping: controller=" << controller << " sliderKey=" << (sliderKey ? sliderKey : "null") << std::endl;
-    }
-}
-
 void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
     if (!isInitialized) {
         std::cout << "[VoiceEditorPanel::syncAllOperatorSlidersWithDexed] called before isInitialized, skipping" << std::endl;
@@ -738,7 +690,7 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
             uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             uint8_t value = getDexedParam(paramAddress);
             std::cout << "  OP" << (dexedOpIdx+1) << " " << sliderName << " paramAddr=" << static_cast<int>(paramAddress) << " value=" << static_cast<int>(value) << std::endl;
-            syncOperatorSliderWithDexed(op->sliders[s], paramAddress, sliderName.toRawUTF8());
+            syncOperatorSliderWithDexed(op->sliders[s].getSlider(), paramAddress, sliderName.toRawUTF8());
         }
         // --- Envelope widget update ---
         // DX7 operator envelope: R1-R4, L1-L4, consecutive in voice data
@@ -810,38 +762,16 @@ bool VoiceEditorPanel::isCarrier(int opIdx) const {
     return false;
 }
 
-void VoiceEditorPanel::OperatorSliders::paint(Graphics& g) {
-    auto area = getLocalBounds().toFloat();
-    // Draw background: greenish if carrier, else dark
-    bool carrier = false;
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
-        // Reverse the mapping: row 0 (top) = OP1 (dexed 0), row 5 (bottom) = OP6 (dexed 5)
-        int opNum = label.getText().getIntValue(); // label is "6" for OP6, ... "1" for OP1
-        int opIdx = 6 - opNum; // OP1 = 0 (top), OP6 = 5 (bottom)
-        carrier = parent->isCarrier(opIdx);
-    }
-    g.setColour(carrier ? Colour(44, 67, 63) : Colour(33, 33, 33)); // greenish for carrier, dark for non-carrier
-    g.fillRoundedRectangle(area, 6.0f);
-}
-
 // OperatorSliders implementation
-VoiceEditorPanel::OperatorSliders::OperatorSliders() {
+VoiceEditorPanel::OperatorSliders::OperatorSliders()
+{
+    // Set label texts for each slider
     for (int i = 0; i < NumSliders; ++i) {
+        sliders[i].setLabelText(sliderNames[i]);
         addAndMakeVisible(sliders[i]);
-        addAndMakeVisible(sliderLabels[i]);
-        sliderLabels[i].setText(sliderNames[i], juce::dontSendNotification);
-        sliderLabels[i].setFont(juce::Font(juce::FontOptions(10.0f)));
-        sliderLabels[i].setColour(juce::Label::textColourId, juce::Colours::white);
-        sliderLabels[i].setJustificationType(juce::Justification::centred);
-        sliders[i].setSliderStyle(juce::Slider::LinearVertical);
-        sliders[i].setTextBoxStyle(juce::Slider::TextBoxBelow, false, 48, kSliderTextBoxHeight);
-        sliders[i].setNumDecimalPlacesToDisplay(0);
-        sliders[i].setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        sliders[i].addMouseListener(this, true); // Ensure mouse events are forwarded
     }
-    envWidget.addMouseListener(this, true);
-    ksWidget.addMouseListener(this, true);
-    // Ensure both widgets are visible in the UI
+
+    addAndMakeVisible(label);
     addAndMakeVisible(envWidget);
     addAndMakeVisible(ksWidget);
 
@@ -869,98 +799,68 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders() {
     };
 }
 
-VoiceEditorPanel::OperatorSliders::~OperatorSliders() {}
+VoiceEditorPanel::OperatorSliders::~OperatorSliders() = default;
 
-void VoiceEditorPanel::OperatorSliders::resized() {
+void VoiceEditorPanel::OperatorSliders::paint(juce::Graphics& g)
+{
+    // Draw operator number background
+    auto bounds = getLocalBounds();
+    g.setColour(juce::Colour(0xff2a2a2a));
+    g.fillRect(bounds);
+
+    // Draw operator label background
+    auto labelBounds = bounds.removeFromLeft(36);
+    g.setColour(juce::Colour(0xff333333));
+    g.fillRoundedRectangle(labelBounds.toFloat(), 4.0f);
+}
+
+void VoiceEditorPanel::OperatorSliders::resized()
+{
     auto bounds = getLocalBounds();
 
-    auto labelBounds = bounds.removeFromLeft(kOperatorLabelWidth);
-    label.setBounds(labelBounds.reduced(0, 2));
+    // Operator number label on the left
+    auto labelArea = bounds.removeFromLeft(36);
+    label.setBounds(labelArea.reduced(4));
 
-    bounds = bounds.reduced(kRowHorizontalPadding, 0);
+    // Envelope and keyboard scaling widgets on the right
+    auto widgetArea = bounds.removeFromRight(256);
+    auto envBounds = widgetArea.removeFromTop(widgetArea.getHeight() / 2);
+    envWidget.setBounds(envBounds.reduced(4));
+    ksWidget.setBounds(widgetArea.reduced(4));
 
-    auto widgetColumn = bounds.removeFromRight(kWidgetColumnWidth);
-
-    auto envBounds = widgetColumn.removeFromLeft(kWidgetWidth);
-    auto ksBounds = widgetColumn.removeFromRight(kWidgetWidth);
-    envWidget.setBounds(envBounds.reduced(0, 2));
-    ksWidget.setBounds(ksBounds.reduced(0, 2));
-
-    auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent());
-
-    int sliderAreaWidth = bounds.getWidth();
-    int sliderWidth = juce::jmax(kMinSliderWidth, 36);
-    int sliderHeight = juce::jmax(40, bounds.getHeight() - kSliderLabelHeight);
-
-    if (parent != nullptr) {
-        sliderWidth = juce::jmax(kMinSliderWidth, parent->computedSliderWidth);
-        sliderHeight = juce::jmax(40, juce::jmin(bounds.getHeight() - kSliderLabelHeight, parent->computedSliderHeight));
-    }
-
-    const int totalUsed = NumSliders * sliderWidth + (NumSliders - 1) * kSliderGap;
-    if (totalUsed > sliderAreaWidth) {
-        const int usableWidth = sliderAreaWidth - (NumSliders - 1) * kSliderGap;
-        if (usableWidth > 0)
-            sliderWidth = juce::jlimit(kMinSliderWidth, sliderWidth, usableWidth / NumSliders);
-    }
-
-    int sliderX = bounds.getX();
-    const int sliderY = bounds.getY();
-    const int totalSliderHeight = sliderHeight + kSliderLabelHeight;
-
-    int uiRowIdx = -1;
-    if (parent != nullptr) {
-        for (int idx = 0; idx < parent->operators.size(); ++idx) {
-            if (parent->operators[idx].get() == this) {
-                uiRowIdx = idx;
-                break;
-            }
-        }
-    }
-    int dexedOpIdx = juce::jmax(0, uiRowIdx);
+    // Sliders in the middle
+    bounds.removeFromRight(16); // Gap before widgets
+    int sliderWidth = 40;
+    int sliderGap = 8;
+    int totalWidth = (sliderWidth * NumSliders) + (sliderGap * (NumSliders - 1));
+    int startX = bounds.getCentreX() - (totalWidth / 2);
 
     for (int i = 0; i < NumSliders; ++i) {
-        juce::Rectangle<int> sliderBounds(sliderX, sliderY, sliderWidth, totalSliderHeight);
-        layoutSliderWithLabel(sliders[i], sliderLabels[i], sliderNames[i], sliderBounds, kSliderTextBoxHeight);
-        sliderX += sliderWidth + kSliderGap;
+        int x = startX + (i * (sliderWidth + sliderGap));
+        sliders[i].setBounds(x, bounds.getY(), sliderWidth, bounds.getHeight());
+    }
+}
 
-        if (parent != nullptr) {
-            const juce::String sliderName = sliderNames[i];
-            auto it = operatorSliderParamOffsets.find(sliderName);
-            if (it == operatorSliderParamOffsets.end()) {
-                std::cout << "[OperatorSliders] No param offset for slider '" << sliderName << "'\n";
-                continue;
-            }
-            const uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
-            parent->syncOperatorSliderWithDexed(sliders[i], paramAddress, sliderName.toRawUTF8());
-            if (i == 0) {
-                sliders[i].setRange(0, 1, 1.0);
-                sliders[i].onValueChange = [parent]() {
-                    if (!parent->controller) return;
-                    uint8_t bitmask = 0;
-                    const int operatorCount = static_cast<int>(parent->operators.size());
-                    for (int op = 0; op < operatorCount; ++op) {
-                        const auto& opSliders = parent->operators[op];
-                        const int val = static_cast<int>(opSliders->sliders[0].getValue());
-                        if (val != 0) bitmask |= static_cast<uint8_t>(1u << op);
-                    }
-                    parent->setDexedParam(static_cast<uint8_t>(155), bitmask);
-                };
-            } else {
-                sliders[i].onValueChange = [parent, paramAddress, i, this]() {
-                    if (!parent->controller) return;
-                    const int value = static_cast<int>(sliders[i].getValue());
-                    parent->setDexedParam(paramAddress, static_cast<uint8_t>(value));
-                };
-            }
-        }
+void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx)
+{
+    // Forward to parent VoiceEditorPanel
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+        parent->showHelpForKey(sliderNames[sliderIdx]);
+    }
+}
+
+void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx)
+{
+    // Forward to parent VoiceEditorPanel
+    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+        parent->restoreDefaultHelp();
     }
 }
 
 // --- VoiceEditorPanel hover help for global sliders ---
 void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
     for (int i = 0; i < numGlobalSliders; ++i) {
-        if (e.eventComponent == &globalSliders[i]) {
+        if (e.eventComponent == &globalSliders[i].getSlider()) {
             showHelpForKey(globalSliderKeys[i]);
             return;
         }
@@ -969,22 +869,11 @@ void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
 
 void VoiceEditorPanel::mouseExit(const juce::MouseEvent& e) {
     for (int i = 0; i < numGlobalSliders; ++i) {
-        if (e.eventComponent == &globalSliders[i]) {
+        if (e.eventComponent == &globalSliders[i].getSlider()) {
             restoreDefaultHelp();
             return;
         }
     }
-}
-
-void VoiceEditorPanel::OperatorSliders::sliderMouseEnter(int sliderIdx) {
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
-        parent->showHelpForKey(sliderNames[sliderIdx]);
-}
-
-void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx) {
-    juce::ignoreUnused(sliderIdx);
-    if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent()))
-        parent->restoreDefaultHelp();
 }
 
 // --- OperatorSliders hover help for operator sliders, envelope, and keyboard scaling ---
@@ -1196,3 +1085,12 @@ void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
 // --- Operator parameter offset mapping ---
 // Build this dynamically from VCED.json
 std::map<juce::String, uint8_t> VoiceEditorPanel::operatorSliderParamOffsets;
+
+void VoiceEditorPanel::syncOperatorSliderWithDexed(juce::Slider& slider, uint8_t paramAddress, const char* sliderKey)
+{
+    uint8_t value = getDexedParam(paramAddress);
+    auto range = getDexedRange(sliderKey);
+    slider.setRange(range.first, range.second, 1.0);
+    slider.setValue(value, juce::dontSendNotification);
+    std::cout << "[VoiceEditorPanel::syncOperatorSliderWithDexed] " << sliderKey << ": value=" << static_cast<int>(value) << " range=[" << static_cast<int>(range.first) << "-" << static_cast<int>(range.second) << "] oldSlider=" << slider.getValue() << " newSlider=" << value << std::endl;
+}

@@ -4,6 +4,7 @@
 #include <atomic>
 #include "../../src/FMRack/Rack.h"
 #include "FileBrowserDialog.h"
+#include "FMRackLabeledVerticalSlider.h" // New labeled vertical slider class
 
 // Forward declaration
 class AudioPluginAudioProcessorEditor;
@@ -54,59 +55,42 @@ public:
     void updateFromModule(); // NEW: update sliders from module state
     
     // Per-tab controls
-    juce::Slider unisonVoicesSlider;
-    juce::Label unisonVoicesLabel;
-    juce::Slider unisonDetuneSlider;
-    juce::Label unisonDetuneLabel;
-    juce::Slider unisonPanSlider;
-    juce::Label unisonPanLabel;
-    juce::Slider midiChannelSlider;
-    juce::Label midiChannelLabel;
+    FMRackLabeledVerticalSlider unisonVoicesSlider;
+    FMRackLabeledVerticalSlider unisonDetuneSlider;
+    FMRackLabeledVerticalSlider unisonPanSlider;
+    FMRackLabeledVerticalSlider midiChannelSlider;
 
-    juce::Slider reverbSendSlider;
-    juce::Label reverbSendLabel;
-    juce::Slider volumeSlider;
-    juce::Label volumeLabel;
-    juce::Slider panSlider;
-    juce::Label panLabel;
-    juce::Slider detuneSlider;
-    juce::Label detuneLabel;
+    FMRackLabeledVerticalSlider reverbSendSlider;
+    FMRackLabeledVerticalSlider volumeSlider;
+    FMRackLabeledVerticalSlider panSlider;
+    FMRackLabeledVerticalSlider detuneSlider;
 
     // Note Range
-    juce::Slider noteLimitLowSlider;
-    juce::Label noteLimitLowLabel;
-    juce::Slider noteLimitHighSlider;
-    juce::Label noteLimitHighLabel;
-    juce::Slider noteShiftSlider;
-    juce::Label noteShiftLabel;
+    FMRackLabeledVerticalSlider noteLimitLowSlider;
+    FMRackLabeledVerticalSlider noteLimitHighSlider;
+    FMRackLabeledVerticalSlider noteShiftSlider;
 
     // Pitch Bend
-    juce::Slider pitchBendRangeSlider;
-    juce::Label pitchBendRangeLabel;
+    FMRackLabeledVerticalSlider pitchBendRangeSlider;
 
     // Portamento
     juce::ToggleButton portamentoModeButton;
     juce::Label portamentoModeLabel;
-    juce::Slider portamentoTimeSlider;
-    juce::Label portamentoTimeLabel;
+    FMRackLabeledVerticalSlider portamentoTimeSlider;
 
     // Mono Mode
     juce::ToggleButton monoModeButton;
     juce::Label monoModeLabel;
 
     // Misc
-    juce::Slider velocityScaleSlider;
-    juce::Label velocityScaleLabel;
-    juce::Slider masterTuneSlider;
-    juce::Label masterTuneLabel;
+    FMRackLabeledVerticalSlider velocityScaleSlider;
+    FMRackLabeledVerticalSlider masterTuneSlider;
 
     // Filter
     juce::ToggleButton filterEnabledButton;
     juce::Label filterEnabledLabel;
-    juce::Slider filterCutoffSlider;
-    juce::Label filterCutoffLabel;
-    juce::Slider filterResonanceSlider;
-    juce::Label filterResonanceLabel;
+    FMRackLabeledVerticalSlider filterCutoffSlider;
+    FMRackLabeledVerticalSlider filterResonanceSlider;
 
     juce::TextButton loadVoiceButton;
     juce::TextButton openVoiceEditorButton;
