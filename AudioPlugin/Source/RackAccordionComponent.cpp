@@ -81,6 +81,51 @@ namespace
         label.setJustificationType(juce::Justification::centredLeft);
         label.setBounds(labelArea);
     }
+
+    // Concept:
+    // The engine's Module::setupUnison() currently interprets its 'detune' argument as
+    // "cents per step" and then multiplies it by (i - (voices-1)/2). This means:
+    //   voices=2 => outer voices at +/- detune*0.5
+    //   voices=3 => outer voices at +/- detune*1.0
+    //   voices=4 => outer voices at +/- detune*1.5
+    // So if we store 'detune' directly, the perceived spread changes with voice count.
+    // For a TX816-style control, it's more intuitive if the parameter means:
+    //   "maximum cents offset of the outermost voice" (i.e., widest voice is +/-X cents)
+    // and that remains consistent regardless of 2/3/4 voices.
+    //
+    // We implement that by mapping the UI to a target max-outer-cents value, then converting
+    // it into the engine's expected per-step detune before writing to Performance.
+
+    constexpr float kUnisonDetuneMaxOuterCents = 7.0f;   // practical maximum outer detune
+    constexpr float kUnisonDetuneCurve = 2.2f;      // >1 gives more resolution near 0
+
+    static float perStepDetuneFromMaxOuter(float maxOuterCents, int voices)
+    {
+        voices = juce::jlimit(1, 4, voices);
+        if (voices <= 1) return 0.0f;
+        const float maxFactor = (voices - 1) * 0.5f;  // 0.5, 1.0, 1.5 for 2/3/4
+        return (maxFactor > 0.0f) ? (maxOuterCents / maxFactor) : 0.0f;
+    }
+
+    static float maxOuterFromPerStepDetune(float perStepCents, int voices)
+    {
+        voices = juce::jlimit(1, 4, voices);
+        if (voices <= 1) return 0.0f;
+        const float maxFactor = (voices - 1) * 0.5f;
+        return perStepCents * maxFactor;
+    }
+
+    static float uiNormToUnisonCents(float norm)
+    {
+        norm = juce::jlimit(0.0f, 1.0f, norm);
+        return kUnisonDetuneMaxOuterCents * std::pow(norm, kUnisonDetuneCurve);
+    }
+
+    static float unisonCentsToUiNorm(float cents)
+    {
+        const float norm = juce::jlimit(0.0f, 1.0f, cents / kUnisonDetuneMaxOuterCents);
+        return std::pow(norm, 1.0f / kUnisonDetuneCurve);
+    }
 }
 
 // --- StereoVolumeMeter: simple L/R bar meter with pre-gain only, in color ---
@@ -375,8 +420,9 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     unisonDetuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
     unisonDetuneSlider.setNumDecimalPlacesToDisplay(0);
-    unisonDetuneSlider.getSlider().setRange(0.0, 50.0, 0.1);
-    unisonDetuneSlider.getSlider().setValue(7.0);
+    // Slider is normalized; we map it to cents nonlinearly for better low-end resolution.
+    unisonDetuneSlider.getSlider().setRange(0.0, 1.0, 0.001);
+    unisonDetuneSlider.getSlider().setValue(unisonCentsToUiNorm(0.0f));
 
     unisonPanSlider.setLabelText("Unison Pan");
     addAndMakeVisible(unisonPanSlider);
@@ -420,7 +466,9 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     // Note: Slider style and text box are already set by FMRackLabeledVerticalSlider
     detuneSlider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
     detuneSlider.setNumDecimalPlacesToDisplay(0);
-    detuneSlider.getSlider().setRange(-99, 99, 1);
+    // TX816/TX802-style fine tune works in cents. Keep the UI in a sensible musical range.
+    // (The underlying Performance field is still int8_t; we simply constrain the UI here.)
+    detuneSlider.getSlider().setRange(-64, 63, 1);
 
     // Note Range controls
     noteLimitLowSlider.setLabelText("Low");
@@ -514,7 +562,11 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
             uint8_t newValue = (uint8_t)unisonVoicesSlider.getSlider().getValue();
             if (part.unisonVoices != newValue) {
+                // Preserve perceived detune width when changing voice count:
+                // slider represents max-outer-cents, but Performance stores per-step cents.
+                const float currentMaxOuter = uiNormToUnisonCents((float)unisonDetuneSlider.getSlider().getValue());
                 part.unisonVoices = newValue;
+                part.unisonDetune = perStepDetuneFromMaxOuter(currentMaxOuter, (int)part.unisonVoices);
                 controller->setPerformance(*perf);
             }
         }
@@ -526,9 +578,12 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         auto* perf = controller ? controller->getPerformance() : nullptr;
         if (perf) {
             auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            float newValue = (float)unisonDetuneSlider.getSlider().getValue();
-            if (part.unisonDetune != newValue) {
-                part.unisonDetune = newValue;
+            const float uiNorm = (float)unisonDetuneSlider.getSlider().getValue();
+            const float maxOuterCents = uiNormToUnisonCents(uiNorm);
+            const int voices = (int)part.unisonVoices;
+            const float perStepCents = perStepDetuneFromMaxOuter(maxOuterCents, voices);
+            if (part.unisonDetune != perStepCents) {
+                part.unisonDetune = perStepCents;
                 controller->setPerformance(*perf);
             }
         }
@@ -847,7 +902,8 @@ void ModuleTabComponent::updateFromModule()
     if (perf) {
         const auto& part = perf->getPartConfig(moduleIndex);
         unisonVoicesSlider.getSlider().setValue(part.unisonVoices, juce::dontSendNotification);
-        unisonDetuneSlider.getSlider().setValue(part.unisonDetune, juce::dontSendNotification);
+        const float maxOuterCents = maxOuterFromPerStepDetune(part.unisonDetune, (int)part.unisonVoices);
+        unisonDetuneSlider.getSlider().setValue(unisonCentsToUiNorm(maxOuterCents), juce::dontSendNotification);
         unisonPanSlider.getSlider().setValue(part.unisonSpread, juce::dontSendNotification);
         midiChannelSlider.getSlider().setValue(part.midiChannel, juce::dontSendNotification); // Sync MIDI channel
         reverbSendSlider.getSlider().setValue(part.reverbSend, juce::dontSendNotification);
