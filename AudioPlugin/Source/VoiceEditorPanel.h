@@ -64,6 +64,9 @@ public:
         EnvelopeDisplay envWidget;
         KeyboardScalingDisplay ksWidget;
 
+        int operatorIndex = 0; // 0=OP1, 5=OP6
+        bool isCarrierOperator = false; // Whether this operator is a carrier for the current algorithm
+
         OperatorSliders(); // Declaration only, implementation in cpp file
         ~OperatorSliders() override;
         void paint(juce::Graphics&) override;

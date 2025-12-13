@@ -9,6 +9,38 @@ void KeyboardScalingDisplay::setScalingParams(float bp, float ld, float rd, floa
     rightDepth = rd;
     leftCurve = lc;
     rightCurve = rc;
+    // Convert to raw values for display (assuming input is normalized 0-1 for bp, ld, rd)
+    rawBreakPoint = static_cast<int>(bp * 99.0f);
+    rawLeftDepth = static_cast<int>(ld * 99.0f);
+    rawRightDepth = static_cast<int>(rd * 99.0f);
+    // Curve values are already 0-3 mapped to special float values
+    rawLeftCurve = static_cast<int>(lc);
+    rawRightCurve = static_cast<int>(rc);
+    repaint();
+}
+
+void KeyboardScalingDisplay::setScalingParamsRaw(int bp, int ld, int rd, int lc, int rc) {
+    rawBreakPoint = bp;
+    rawLeftDepth = ld;
+    rawRightDepth = rd;
+    rawLeftCurve = lc;
+    rawRightCurve = rc;
+    // Convert to normalized for curve drawing
+    breakPoint = static_cast<float>(bp) / 99.0f;
+    leftDepth = static_cast<float>(ld) / 99.0f;
+    rightDepth = static_cast<float>(rd) / 99.0f;
+    // Map curve values (0-3) to the special float encoding used by the drawing code
+    auto curveMap = [](int v) -> float {
+        switch (v) {
+            case 0: return 0.0f;   // linear
+            case 1: return 1.0f;   // exp+
+            case 2: return -1.0f;  // exp-
+            case 3: return 2.0f;   // exp++
+            default: return 0.0f;
+        }
+    };
+    leftCurve = curveMap(lc);
+    rightCurve = curveMap(rc);
     repaint();
 }
 
@@ -65,13 +97,13 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
     // Draw parameter values above and below the graph
     g.setFont(juce::Font(juce::FontOptions(10.0f)));
     g.setColour(juce::Colours::white);
-    // Top: Breakpoint, LeftDepth, RightDepth
+    // Top: Breakpoint, LeftDepth, RightDepth (show raw integer values)
     juce::Rectangle<float> topArea = area.withHeight(textHeight);
     float itemW = area.getWidth() / 3.0f;
     juce::String topValues[3] = {
-        juce::String(breakPoint, 2),
-        juce::String(leftDepth, 2),
-        juce::String(rightDepth, 2)
+        juce::String(rawBreakPoint),
+        juce::String(rawLeftDepth),
+        juce::String(rawRightDepth)
     };
     juce::String topLabels[3] = { "BP", "LD", "RD" };
     for (int i = 0; i < 3; ++i) {
@@ -80,19 +112,22 @@ void KeyboardScalingDisplay::paint(juce::Graphics& g) {
         g.drawText(topValues[i], r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
         g.drawText(topLabels[i], r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
     }
-    // Bottom: LeftCurve, RightCurve
+    // Bottom: LeftCurve, RightCurve (show curve meaning based on raw 0-3 values)
     juce::Rectangle<float> bottomArea = area.withY(area.getBottom() - textHeight).withHeight(textHeight);
     itemW = area.getWidth() / 2.0f;
-    // Show curve meaning for LC and RC
-    auto curveMeaning = [](float v) -> juce::String {
-        if (v < 0.25f) return "linear";
-        else if (v < 0.5f) return "exp+";
-        else if (v < 0.75f) return "exp-";
-        else return "exp++";
+    // Show curve meaning for LC and RC based on raw values
+    auto curveMeaning = [](int v) -> juce::String {
+        switch (v) {
+            case 0: return "-LIN";
+            case 1: return "-EXP";
+            case 2: return "+EXP";
+            case 3: return "+LIN";
+            default: return "???";
+        }
     };
     juce::String bottomValues[2] = {
-        curveMeaning(leftCurve),
-        curveMeaning(rightCurve)
+        curveMeaning(rawLeftCurve),
+        curveMeaning(rawRightCurve)
     };
     juce::String bottomLabels[2] = { "LC", "RC" };
     for (int i = 0; i < 2; ++i) {

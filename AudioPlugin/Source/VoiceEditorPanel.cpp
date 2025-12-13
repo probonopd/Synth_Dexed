@@ -233,29 +233,28 @@ void VoiceEditorPanel::paint(Graphics& g) {
 }
 
 void VoiceEditorPanel::paintOverChildren(juce::Graphics& g) {
-    // Draw SVG with precise alignment based on operator 6 and operator 1 row centers
-    if (algorithmSvg && operatorRowCenters.size() >= 6) {
-        float op6Center = operatorRowCenters[0];
-        float op1Center = operatorRowCenters[5];
-        float uiDistance = op1Center - op6Center;
-        auto svgBounds = algorithmSvg->getDrawableBounds();
-        float svgNumberDistance = svgBounds.getHeight() * 0.71f;
-        float scaleFactor = uiDistance / svgNumberDistance;
-        float offsetX = svgDrawArea.getX() - svgBounds.getX() * scaleFactor;
-        float offsetY = svgDrawArea.getY() - svgBounds.getY() * scaleFactor;
-        auto transform = AffineTransform::scale(scaleFactor, scaleFactor)
-            .followedBy(AffineTransform::translation(offsetX, offsetY));
-        algorithmSvg->draw(g, 1.0f, transform);
-    } else if (algorithmSvg) {
-        auto svgBounds = algorithmSvg->getDrawableBounds();
-        float scale = std::min(svgDrawArea.getWidth() / svgBounds.getWidth(), 
-                              svgDrawArea.getHeight() / svgBounds.getHeight());
-        float offsetX = svgDrawArea.getX() - svgBounds.getX() * scale;
-        float offsetY = svgDrawArea.getY() - svgBounds.getY() * scale;
-        juce::AffineTransform transform = juce::AffineTransform::scale(scale)
-                                                                .translated(offsetX, offsetY);
-        algorithmSvg->draw(g, 1.0f, transform);
-    }
+    // Draw SVG algorithm diagram in the SVG column area
+    if (!algorithmSvg || svgDrawArea.isEmpty())
+        return;
+
+    auto svgBounds = algorithmSvg->getDrawableBounds();
+    if (svgBounds.isEmpty())
+        return;
+
+    // Scale to fit the SVG draw area while maintaining aspect ratio
+    float scaleX = svgDrawArea.getWidth() / svgBounds.getWidth();
+    float scaleY = svgDrawArea.getHeight() / svgBounds.getHeight();
+    float scale = std::min(scaleX, scaleY);
+
+    // Center the SVG in the draw area
+    float scaledWidth = svgBounds.getWidth() * scale;
+    float scaledHeight = svgBounds.getHeight() * scale;
+    float offsetX = svgDrawArea.getX() + (svgDrawArea.getWidth() - scaledWidth) / 2.0f - svgBounds.getX() * scale;
+    float offsetY = svgDrawArea.getY() + (svgDrawArea.getHeight() - scaledHeight) / 2.0f - svgBounds.getY() * scale;
+
+    auto transform = juce::AffineTransform::scale(scale)
+                         .translated(offsetX, offsetY);
+    algorithmSvg->draw(g, 1.0f, transform);
 }
 
 void VoiceEditorPanel::resized() {
@@ -312,11 +311,8 @@ void VoiceEditorPanel::resized() {
 
     layoutBounds.removeFromRight(kColumnGap);
 
-    // Left column: algorithm diagram
-    auto svgArea = layoutBounds.removeFromLeft(kSvgPanelWidth);
-    svgDrawArea = svgArea.toFloat().reduced(0, 6);
-
-    layoutBounds.removeFromLeft(kColumnGap);
+    // SVG area will be calculated after operator layout based on operator positions
+    // (SVG is drawn between operator label and sliders within each operator row)
 
     if (layoutBounds.getHeight() <= 0)
         return;
@@ -364,8 +360,13 @@ void VoiceEditorPanel::resized() {
                 operatorStartY = rowContent.getY();
             operatorBottomY = rowContent.getBottom();
 
-            if (operators[row])
-                operators[row]->setBounds(rowContent);
+            // Display operators in reverse order: OP6 (index 5) at top, OP1 (index 0) at bottom
+            int operatorIdx = (opCount - 1) - row; // row 0 -> operator 5 (OP6), row 5 -> operator 0 (OP1)
+            if (operators[operatorIdx]) {
+                operators[operatorIdx]->operatorIndex = operatorIdx;
+                operators[operatorIdx]->isCarrierOperator = isCarrier(operatorIdx);
+                operators[operatorIdx]->setBounds(rowContent);
+            }
             operatorRowCenters.push_back(static_cast<float>(rowContent.getCentreY()));
         } else {
             if (globalStartY < 0)
@@ -392,10 +393,20 @@ void VoiceEditorPanel::resized() {
         }
     }
 
-    if (operatorStartY >= 0 && operatorBottomY > operatorStartY)
+    if (operatorStartY >= 0 && operatorBottomY > operatorStartY) {
         operatorAreaBounds = juce::Rectangle<int>(layoutBounds.getX(), operatorStartY, layoutBounds.getWidth(), operatorBottomY - operatorStartY);
-    else
+        // Calculate SVG draw area: positioned after the operator label (36px), spanning operator rows
+        // The SVG column is 100px wide, positioned at layoutBounds.getX() + 36
+        svgDrawArea = juce::Rectangle<float>(
+            static_cast<float>(layoutBounds.getX() + 36),
+            static_cast<float>(operatorStartY),
+            100.0f,
+            static_cast<float>(operatorBottomY - operatorStartY)
+        ).reduced(4, 6);
+    } else {
         operatorAreaBounds = {};
+        svgDrawArea = {};
+    }
 
     if (globalStartY >= 0 && globalBottomY > globalStartY) {
         pegAreaBounds = juce::Rectangle<int>(layoutBounds.getRight() - kWidgetColumnWidth,
@@ -659,38 +670,24 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
             std::cout << "  OP" << (dexedOpIdx+1) << " " << sliderName << " paramAddr=" << static_cast<int>(paramAddress) << " value=" << static_cast<int>(value) << std::endl;
             syncOperatorSliderWithDexed(op->sliders[s].getSlider(), paramAddress, sliderName.toRawUTF8());
         }
-        // --- Envelope widget update ---
+        // --- Envelope widget update (use raw integer values) ---
         // DX7 operator envelope: R1-R4, L1-L4, consecutive in voice data
-        std::vector<float> envRates, envLevels;
+        std::vector<int> rawEnvRates, rawEnvLevels;
         for (int eg = 0; eg < 4; ++eg) {
             uint8_t r = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + eg)); // R1-R4: offsets 0-3
             uint8_t l = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 4 + eg)); // L1-L4: offsets 4-7
-            envRates.push_back(static_cast<float>(r) / 99.0f); // normalize for display
-            envLevels.push_back(static_cast<float>(l) / 99.0f); // normalize for display
+            rawEnvRates.push_back(static_cast<int>(r));
+            rawEnvLevels.push_back(static_cast<int>(l));
         }
-        op->envWidget.setEnvelope(envRates, envLevels);
-        // --- Keyboard scaling widget update ---
+        op->envWidget.setEnvelopeRaw(rawEnvRates, rawEnvLevels);
+        // --- Keyboard scaling widget update (use raw integer values) ---
         uint8_t bp = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 8)); // Breakpoint
         uint8_t ld = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 9)); // Left depth
         uint8_t rd = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 10)); // Right depth
         uint8_t lc = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 11)); // Left curve
         uint8_t rc = getDexedParam(static_cast<uint8_t>(dexedOpIdx * 21 + 12)); // Right curve
-        // Normalize
-        float normBP = static_cast<float>(bp) / 99.0f;
-        float normLD = static_cast<float>(ld) / 99.0f;
-        float normRD = static_cast<float>(rd) / 99.0f;
-        auto curveMap = [](uint8_t v) -> float {
-            switch (v) {
-                case 0: return 0.0f;   // linear
-                case 1: return 1.0f;   // exp+
-                case 2: return -1.0f;  // exp-
-                case 3: return 2.0f;   // exp++
-                default: return 0.0f;
-            }
-        };
-        float normLC = curveMap(lc);
-        float normRC = curveMap(rc);
-        op->ksWidget.setScalingParams(normBP, normLD, normRD, normLC, normRC);
+        op->ksWidget.setScalingParamsRaw(static_cast<int>(bp), static_cast<int>(ld), static_cast<int>(rd), 
+                                          static_cast<int>(lc), static_cast<int>(rc));
     }
     // --- Sync global controls from Dexed engine ---
     for (int i = 0; i < numGlobalSliders; ++i) {
@@ -732,11 +729,33 @@ bool VoiceEditorPanel::isCarrier(int opIdx) const {
 // OperatorSliders implementation
 VoiceEditorPanel::OperatorSliders::OperatorSliders()
 {
-    // Set label texts for each slider
+    // Set label texts for each slider and add mouse listeners
     for (int i = 0; i < NumSliders; ++i) {
         sliders[i].setLabelText(sliderNames[i]);
         addAndMakeVisible(sliders[i]);
+        // Add mouse listener to the internal slider for hover help
+        sliders[i].getSlider().addMouseListener(this, false);
     }
+
+    // Set up slider ranges based on DX7 parameter specs
+    // OPE: Operator Enable (0-1)
+    sliders[OPE].getSlider().setRange(0, 1, 1);
+    // TL: Total Level (0-99)
+    sliders[TL].getSlider().setRange(0, 99, 1);
+    // PM: Pitch Mode/Frequency Mode (0-1, 0=ratio, 1=fixed)
+    sliders[PM].getSlider().setRange(0, 1, 1);
+    // PC: Pitch Coarse (0-31)
+    sliders[PC].getSlider().setRange(0, 31, 1);
+    // PF: Pitch Fine (0-99)
+    sliders[PF].getSlider().setRange(0, 99, 1);
+    // PD: Pitch Detune (0-14, center=7)
+    sliders[PD].getSlider().setRange(0, 14, 1);
+    // AMS: Amplitude Modulation Sensitivity (0-3)
+    sliders[AMS].getSlider().setRange(0, 3, 1);
+    // TS: Touch Sensitivity / Velocity Sensitivity (0-7)
+    sliders[TS].getSlider().setRange(0, 7, 1);
+    // RS: Rate Scaling (0-7)
+    sliders[RS].getSlider().setRange(0, 7, 1);
 
     addAndMakeVisible(label);
     addAndMakeVisible(envWidget);
@@ -770,15 +789,27 @@ VoiceEditorPanel::OperatorSliders::~OperatorSliders() = default;
 
 void VoiceEditorPanel::OperatorSliders::paint(juce::Graphics& g)
 {
-    // Draw operator number background
     auto bounds = getLocalBounds();
-    g.setColour(juce::Colour(0xff2a2a2a));
-    g.fillRect(bounds);
-
-    // Draw operator label background
-    auto labelBounds = bounds.removeFromLeft(36);
-    g.setColour(juce::Colour(0xff333333));
+    
+    // Leave space for SVG column (will be drawn by parent)
+    auto svgArea = bounds.removeFromLeft(36 + 100); // label (36) + SVG area (100)
+    
+    // Only draw operator label background (first 36px of svgArea)
+    auto labelBounds = svgArea.removeFromLeft(36);
+    if (isCarrierOperator) {
+        g.setColour(juce::Colour(0xff2a4a30)); // Slightly brighter green for label
+    } else {
+        g.setColour(juce::Colour(0xff333333));
+    }
     g.fillRoundedRectangle(labelBounds.toFloat(), 4.0f);
+    
+    // Draw operator background for the slider and widget area - green for carriers, dark gray for modulators
+    if (isCarrierOperator) {
+        g.setColour(juce::Colour(0xff1a3320)); // Dark green background for carriers
+    } else {
+        g.setColour(juce::Colour(0xff2a2a2a)); // Dark gray for modulators
+    }
+    g.fillRect(bounds);
 }
 
 void VoiceEditorPanel::OperatorSliders::resized()
@@ -788,6 +819,9 @@ void VoiceEditorPanel::OperatorSliders::resized()
     // Operator number label on the left
     auto labelArea = bounds.removeFromLeft(36);
     label.setBounds(labelArea.reduced(4));
+
+    // Leave space for the SVG algorithm diagram (drawn by parent)
+    bounds.removeFromLeft(100); // SVG column width
 
     // Envelope and keyboard scaling widgets on the right
     auto widgetArea = bounds.removeFromRight(256);
@@ -846,7 +880,7 @@ void VoiceEditorPanel::mouseExit(const juce::MouseEvent& e) {
 // --- OperatorSliders hover help for operator sliders, envelope, and keyboard scaling ---
 void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
     for (int i = 0; i < NumSliders; ++i) {
-        if (e.eventComponent == &sliders[i]) {
+        if (e.eventComponent == &sliders[i].getSlider()) {
             sliderMouseEnter(i);
             return;
         }
@@ -879,7 +913,7 @@ void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
 
 void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
     for (int i = 0; i < NumSliders; ++i) {
-        if (e.eventComponent == &sliders[i]) {
+        if (e.eventComponent == &sliders[i].getSlider()) {
             sliderMouseExit(i);
             return;
         }

@@ -7,6 +7,8 @@ public:
     KeyboardScalingDisplay();
     void paint(juce::Graphics& g) override;
     void setScalingParams(float breakPoint, float leftDepth, float rightDepth, float leftCurve, float rightCurve);
+    // New method that accepts raw integer values
+    void setScalingParamsRaw(int breakPoint, int leftDepth, int rightDepth, int leftCurve, int rightCurve);
     void mouseEnter(const juce::MouseEvent&) override;
     void mouseExit(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
@@ -19,4 +21,10 @@ private:
     float rightDepth = 0.0f;
     float leftCurve = 0.0f;
     float rightCurve = 0.0f;
+    // Raw values for display
+    int rawBreakPoint = 0;
+    int rawLeftDepth = 0;
+    int rawRightDepth = 0;
+    int rawLeftCurve = 0;
+    int rawRightCurve = 0;
 };

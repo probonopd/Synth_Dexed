@@ -7,6 +7,22 @@ EnvelopeDisplay::EnvelopeDisplay() = default;
 void EnvelopeDisplay::setEnvelope(const std::vector<float>& rates, const std::vector<float>& levels) {
     envRates = rates;
     envLevels = levels;
+    // Convert to raw values for display (assuming input is normalized 0-1)
+    rawRates.clear();
+    rawLevels.clear();
+    for (float r : rates) rawRates.push_back(static_cast<int>(r * 99.0f));
+    for (float l : levels) rawLevels.push_back(static_cast<int>(l * 99.0f));
+    repaint();
+}
+
+void EnvelopeDisplay::setEnvelopeRaw(const std::vector<int>& rates, const std::vector<int>& levels) {
+    rawRates = rates;
+    rawLevels = levels;
+    // Convert to normalized for curve drawing
+    envRates.clear();
+    envLevels.clear();
+    for (int r : rates) envRates.push_back(static_cast<float>(r) / 99.0f);
+    for (int l : levels) envLevels.push_back(static_cast<float>(l) / 99.0f);
     repaint();
 }
 
@@ -61,7 +77,7 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::white);
     float w = area.getWidth();
     float itemW = w / 4.0f;
-    // Top: Envelope rates
+    // Top: Envelope rates (show raw integer values)
     for (int i = 0; i < 4; ++i) {
         juce::Rectangle<float> r(area.getX() + i * itemW, area.getY(), itemW, textHeight);
         if (hoveredParam == i)
@@ -76,12 +92,12 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
             case 2: labelTxt = "R3"; break;
             case 3: labelTxt = "R4"; break;
         }
-        // Draw value centered at top, label below value, both centered
-        valueTxt = juce::String(envRates[i], 2);
+        // Draw raw integer value
+        valueTxt = (i < (int)rawRates.size()) ? juce::String(rawRates[i]) : "0";
         g.drawText(valueTxt, r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
         g.drawText(labelTxt, r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
     }
-    // Bottom: Envelope levels
+    // Bottom: Envelope levels (show raw integer values)
     for (int i = 0; i < 4; ++i) {
         juce::Rectangle<float> r(area.getX() + i * itemW, area.getBottom() - textHeight, itemW, textHeight);
         if (hoveredParam == i + 4)
@@ -96,8 +112,8 @@ void EnvelopeDisplay::paint(juce::Graphics& g) {
             case 2: labelTxt = "L3"; break;
             case 3: labelTxt = "L4"; break;
         }
-        // For LC and RC (L3 and L4), show numeric value (not curve meaning)
-        valueTxt = juce::String(envLevels[i], 2);
+        // Show raw integer value
+        valueTxt = (i < (int)rawLevels.size()) ? juce::String(rawLevels[i]) : "0";
         g.drawText(valueTxt, r.withHeight(textHeight/2.0f), juce::Justification::centred, false);
         g.drawText(labelTxt, r.withY(r.getY() + textHeight/2.0f).withHeight(textHeight/2.0f), juce::Justification::centred, false);
     }
