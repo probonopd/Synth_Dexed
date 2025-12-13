@@ -5,7 +5,7 @@
 
 FMRackController::FMRackController(float sampleRate)
 {
-    std::lock_guard<std::mutex> lock(mutex);
+    // Initialize without locking - we're in the constructor so no other thread can access us
     rack = std::make_unique<FMRack::Rack>(sampleRate);
     performance = std::make_unique<FMRack::Performance>();
     // Only set defaults if this is the very first initialization and no user config exists
@@ -20,10 +20,8 @@ FMRackController::FMRackController(float sampleRate)
         performance->setDefaults(8, 1);
     }
     std::cout << "[FMRackController] Constructor: calling setPerformance to ensure handlers are registered" << std::endl;
-    // Temporarily unlock mutex since setPerformance will try to acquire it
-    mutex.unlock();
+    // setPerformance now properly locks the mutex internally
     setPerformance(*performance);
-    mutex.lock();
 }
 
 FMRackController::~FMRackController() = default;
@@ -31,40 +29,42 @@ FMRackController::~FMRackController() = default;
 bool FMRackController::loadPerformanceFile(const juce::String& path)
 {
     try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (!performance)
-            performance = std::make_unique<FMRack::Performance>();
-        juce::Logger::writeToLog("[FMRackController] Attempting to load performance file: " + path);
-        std::cout << "[FMRackController] Attempting to load performance file: " << path << std::endl;
-        // Extra logging: check file existence and permissions
-        juce::File juceFile(path);
-        juce::Logger::writeToLog("[FMRackController] File exists: " + juce::String(juceFile.exists() ? "yes" : "no") + ", readable: " + juce::String(juceFile.hasReadAccess() ? "yes" : "no"));
-        std::cout << "[FMRackController] File exists: " << (juceFile.exists() ? "yes" : "no") << ", readable: " << (juceFile.hasReadAccess() ? "yes" : "no") << std::endl;
-        // Log current working directory
-        juce::File cwd = juce::File::getCurrentWorkingDirectory();
-        juce::Logger::writeToLog("[FMRackController] Current working directory: " + cwd.getFullPathName());
-        std::cout << "[FMRackController] Current working directory: " << cwd.getFullPathName() << std::endl;
-        if (!performance->loadFromFile(path.toStdString())) {
-            juce::Logger::writeToLog("[FMRackController] Performance loadFromFile failed: " + path);
-            std::cout << "[FMRackController] Performance loadFromFile failed: " << path << std::endl;
-            // Try to open the file directly for debug
-            std::ifstream testFile(path.toStdString());
-            if (!testFile.is_open()) {
-                juce::Logger::writeToLog("[FMRackController] DEBUG: Could not open file with std::ifstream: " + path);
-                std::cout << "[FMRackController] DEBUG: Could not open file with std::ifstream: " << path << std::endl;
-            } else {
-                juce::Logger::writeToLog("[FMRackController] DEBUG: File opened with std::ifstream: " + path);
-                std::cout << "[FMRackController] DEBUG: File opened with std::ifstream: " << path << std::endl;
+        FMRack::Performance loadedPerformance;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (!performance)
+                performance = std::make_unique<FMRack::Performance>();
+            juce::Logger::writeToLog("[FMRackController] Attempting to load performance file: " + path);
+            std::cout << "[FMRackController] Attempting to load performance file: " << path << std::endl;
+            // Extra logging: check file existence and permissions
+            juce::File juceFile(path);
+            juce::Logger::writeToLog("[FMRackController] File exists: " + juce::String(juceFile.exists() ? "yes" : "no") + ", readable: " + juce::String(juceFile.hasReadAccess() ? "yes" : "no"));
+            std::cout << "[FMRackController] File exists: " << (juceFile.exists() ? "yes" : "no") << ", readable: " << (juceFile.hasReadAccess() ? "yes" : "no") << std::endl;
+            // Log current working directory
+            juce::File cwd = juce::File::getCurrentWorkingDirectory();
+            juce::Logger::writeToLog("[FMRackController] Current working directory: " + cwd.getFullPathName());
+            std::cout << "[FMRackController] Current working directory: " << cwd.getFullPathName() << std::endl;
+            if (!performance->loadFromFile(path.toStdString())) {
+                juce::Logger::writeToLog("[FMRackController] Performance loadFromFile failed: " + path);
+                std::cout << "[FMRackController] Performance loadFromFile failed: " << path << std::endl;
+                // Try to open the file directly for debug
+                std::ifstream testFile(path.toStdString());
+                if (!testFile.is_open()) {
+                    juce::Logger::writeToLog("[FMRackController] DEBUG: Could not open file with std::ifstream: " + path);
+                    std::cout << "[FMRackController] DEBUG: Could not open file with std::ifstream: " << path << std::endl;
+                } else {
+                    juce::Logger::writeToLog("[FMRackController] DEBUG: File opened with std::ifstream: " + path);
+                    std::cout << "[FMRackController] DEBUG: File opened with std::ifstream: " << path << std::endl;
+                }
+                return false;
             }
-            return false;
+            // Make a copy of the loaded performance to use outside the lock
+            loadedPerformance = *performance;
         }
-        // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
+        // Call setPerformance outside the lock scope - it will acquire the lock internally
         juce::Logger::writeToLog("[FMRackController] loadPerformanceFile: calling setPerformance to ensure handlers are registered");
         std::cout << "[FMRackController] loadPerformanceFile: calling setPerformance to ensure handlers are registered" << std::endl;
-        // Temporarily unlock mutex since setPerformance will try to acquire it
-        mutex.unlock();
-        setPerformance(*performance);
-        mutex.lock();
+        setPerformance(loadedPerformance);
         juce::Logger::writeToLog("[FMRackController] Performance loaded and rack configured from: " + path);
         std::cout << "[FMRackController] Performance loaded and rack configured from: " << path << std::endl;
         return true;
@@ -120,18 +120,21 @@ bool FMRackController::savePerformanceFile(const juce::String& path)
 void FMRackController::setDefaultPerformance()
 {
     try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (!performance)
-            performance = std::make_unique<FMRack::Performance>();
-        // Only set defaults if this is a true reset
-        if (performance->parts[0].midiChannel == 0) {
-            performance->setDefaults(8, 1);
+        FMRack::Performance defaultPerf;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (!performance)
+                performance = std::make_unique<FMRack::Performance>();
+            // Only set defaults if this is a true reset
+            if (performance->parts[0].midiChannel == 0) {
+                performance->setDefaults(8, 1);
+            }
+            // Make a copy of the performance to use outside the lock
+            defaultPerf = *performance;
         }
         std::cout << "[FMRackController] setDefaultPerformance: calling setPerformance to ensure handlers are registered" << std::endl;
-        // Temporarily unlock mutex since setPerformance will try to acquire it
-        mutex.unlock();
-        setPerformance(*performance);
-        mutex.lock();
+        // Call setPerformance outside the lock scope - it will acquire the lock internally
+        setPerformance(defaultPerf);
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setDefaultPerformance: " << e.what() << std::endl;
     } catch (...) {
@@ -140,10 +143,14 @@ void FMRackController::setDefaultPerformance()
 }
 
 void FMRackController::setPerformance(const FMRack::Performance& newPerformance) {
-    *performance = newPerformance;
-    if (rack) {
-        rack->setPerformance(newPerformance);
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        *performance = newPerformance;
+        if (rack) {
+            rack->setPerformance(newPerformance);
+        }
     }
+    // Call UI callback outside the lock to avoid potential deadlocks
     if (onModulesChanged) {
         onModulesChanged();
     }
@@ -243,16 +250,19 @@ void FMRackController::processAudio(float* leftOut, float* rightOut, int numSamp
 void FMRackController::setReverbEnabled(bool enabled)
 {
     try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (rack && performance) {
-            performance->effects.reverbEnable = enabled;
-            // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
-            std::cout << "[FMRackController] setReverbEnabled: calling setPerformance to ensure handlers are registered" << std::endl;
-            // Temporarily unlock mutex since setPerformance will try to acquire it
-            mutex.unlock();
-            setPerformance(*performance);
-            mutex.lock();
+        FMRack::Performance perfCopy;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (rack && performance) {
+                performance->effects.reverbEnable = enabled;
+                perfCopy = *performance;
+            } else {
+                return;
+            }
         }
+        // Call setPerformance outside the lock scope - it will acquire the lock internally
+        std::cout << "[FMRackController] setReverbEnabled: calling setPerformance to ensure handlers are registered" << std::endl;
+        setPerformance(perfCopy);
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setReverbEnabled: " << e.what() << std::endl;
     } catch (...) {
@@ -263,16 +273,19 @@ void FMRackController::setReverbEnabled(bool enabled)
 void FMRackController::setReverbLevel(float level)
 {
     try {
-        std::lock_guard<std::mutex> lock(mutex);
-        if (rack && performance) {
-            performance->effects.reverbLevel = static_cast<uint8_t>(level * 127.0f);
-            // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
-            std::cout << "[FMRackController] setReverbLevel: calling setPerformance to ensure handlers are registered" << std::endl;
-            // Temporarily unlock mutex since setPerformance will try to acquire it
-            mutex.unlock();
-            setPerformance(*performance);
-            mutex.lock();
+        FMRack::Performance perfCopy;
+        {
+            std::lock_guard<std::mutex> lock(mutex);
+            if (rack && performance) {
+                performance->effects.reverbLevel = static_cast<uint8_t>(level * 127.0f);
+                perfCopy = *performance;
+            } else {
+                return;
+            }
         }
+        // Call setPerformance outside the lock scope - it will acquire the lock internally
+        std::cout << "[FMRackController] setReverbLevel: calling setPerformance to ensure handlers are registered" << std::endl;
+        setPerformance(perfCopy);
     } catch (const std::exception& e) {
         std::cout << "[FMRackController] Exception in setReverbLevel: " << e.what() << std::endl;
     } catch (...) {
@@ -282,16 +295,19 @@ void FMRackController::setReverbLevel(float level)
 
 void FMRackController::setReverbSize(float size)
 {
-    std::lock_guard<std::mutex> lock(mutex);
-    if (rack && performance) {
-        performance->effects.reverbSize = static_cast<uint8_t>(size * 127.0f);
-        // Don't call rack->setPerformance directly, use our method to ensure handlers are registered
-        std::cout << "[FMRackController] setReverbSize: calling setPerformance to ensure handlers are registered" << std::endl;
-        // Temporarily unlock mutex since setPerformance will try to acquire it
-        mutex.unlock();
-        setPerformance(*performance);
-        mutex.lock();
+    FMRack::Performance perfCopy;
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (rack && performance) {
+            performance->effects.reverbSize = static_cast<uint8_t>(size * 127.0f);
+            perfCopy = *performance;
+        } else {
+            return;
+        }
     }
+    // Call setPerformance outside the lock scope - it will acquire the lock internally
+    std::cout << "[FMRackController] setReverbSize: calling setPerformance to ensure handlers are registered" << std::endl;
+    setPerformance(perfCopy);
 }
 
 void FMRackController::setNumModules(int num)
