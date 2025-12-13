@@ -59,7 +59,12 @@ public:
             OPERATOR_SLIDER_LIST
 #undef X
         };
-        std::array<FMRackLabeledVerticalSlider, NumSliders> sliders;
+    std::array<FMRackLabeledVerticalSlider, NumSliders> sliders;
+
+    // Binary controls (historically sliders 0/1): use checkboxes instead.
+    juce::ToggleButton opeButton;
+    juce::ToggleButton pmButton;
+
         juce::Label label;
         EnvelopeDisplay envWidget;
         KeyboardScalingDisplay ksWidget;

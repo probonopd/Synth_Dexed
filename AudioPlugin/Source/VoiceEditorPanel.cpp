@@ -67,8 +67,9 @@ VoiceEditorPanel::VoiceEditorPanel()
         algorithmLabel.setText("Algorithm", juce::dontSendNotification);
         algorithmLabel.setColour(juce::Label::textColourId, juce::Colours::white);
         addAndMakeVisible(algorithmLabel);
-        algorithmSelector.addItemList({"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32"}, 1);
-        algorithmSelector.setSelectedId(1);
+    algorithmSelector.addItemList({"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32"}, 1);
+    // Don't select an algorithm here: selecting can cause change callbacks later when we're
+    // wired up to the engine. We'll pick it from the current voice once initialized.
         addAndMakeVisible(algorithmSelector);
 
         voiceNameLabel.setText("Name", juce::dontSendNotification);
@@ -169,6 +170,11 @@ VoiceEditorPanel::VoiceEditorPanel()
                 int idx = algorithmSelector.getSelectedId() - 1;
                 std::cout << "[VoiceEditorPanel] algorithmSelector.onChange triggered, idx=" << idx << std::endl;
                 currentAlgorithm = idx;
+                // Push algorithm change into Dexed voice data so it affects sound.
+                // DX7 algorithm is stored at voice data element 134 (0..31).
+                if (isInitialized && controller) {
+                    setDexedParam(static_cast<uint8_t>(134), static_cast<uint8_t>(juce::jlimit(0, 31, idx)));
+                }
                 loadAlgorithmSvg(idx);
                 std::cout << "[VoiceEditorPanel] Calling resized() and repaint() after SVG load" << std::endl;
                 resized(); // Ensure operatorRowCenters is up to date
@@ -182,9 +188,9 @@ VoiceEditorPanel::VoiceEditorPanel()
                 std::cout << "[VoiceEditorPanel] Unknown exception in algorithmSelector.onChange" << std::endl;
             }
         };
-        // Load initial SVG
-        loadAlgorithmSvg(algorithmSelector.getSelectedId() - 1);
-        loadHelpJson();
+    // Show a default SVG initially (until we can query the current voice once initialized).
+    loadAlgorithmSvg(0);
+    loadHelpJson();
 
         // Make the voice name editor editable, max 10 chars, and update Dexed state on change
         voiceNameEditor.setInputRestrictions(10, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-_*<>()[]#'\"!?$%&,:;/\\");
@@ -216,6 +222,19 @@ void VoiceEditorPanel::initializeIfReady() {
         if (!isInitialized) {
             isInitialized = true;
             std::cout << "[VoiceEditorPanel] isInitialized set to true" << std::endl;
+
+            // Now that we're initialized and can safely talk to the engine, pull the current
+            // algorithm from the loaded voice and update UI without pushing anything back.
+            const int algoIdx = static_cast<int>(getDexedParam(static_cast<uint8_t>(134)));
+            if (algoIdx >= 0 && algoIdx < 32) {
+                currentAlgorithm = algoIdx;
+                algorithmSelector.setSelectedId(algoIdx + 1, juce::dontSendNotification);
+                loadAlgorithmSvg(algoIdx);
+            } else {
+                algorithmSelector.setSelectedId(1, juce::dontSendNotification);
+                currentAlgorithm = 0;
+                loadAlgorithmSvg(0);
+            }
         }
     }
 }
@@ -652,13 +671,15 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
     int numOps = static_cast<int>(operators.size());
     for (int uiRowIdx = 0; uiRowIdx < numOps; ++uiRowIdx) {
         auto& op = operators[uiRowIdx];
-        int dexedOpIdx = uiRowIdx;
-        std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: OP" << (dexedOpIdx+1) << " (UI row " << uiRowIdx << ")" << std::endl;
+        // Operators are displayed in reverse order (OP6 at top), so use the operatorIndex
+        // assigned during layout to map UI rows back to Dexed operator numbering.
+        const int dexedOpIdx = 5 - op->operatorIndex; // 0=OP1 .. 5=OP6
+        std::cout << "[VoiceEditorPanel] syncAllOperatorSlidersWithDexed: OP" << (dexedOpIdx+1) << " (UI row " << uiRowIdx << ", operatorIndex=" << op->operatorIndex << ")" << std::endl;
         // Set operator enable/disable (OPE slider)
         bool opEnabled = (opeBitmask & (1 << dexedOpIdx)) != 0;
-        double oldOpeValue = op->sliders[0].getValue();
-        op->sliders[0].setValue(opEnabled ? 1 : 0, juce::dontSendNotification);
-    std::cout << "  OPE: opeBitmask=0x" << std::hex << static_cast<int>(opeBitmask) << std::dec << " enabled=" << opEnabled << " oldSlider=" << oldOpeValue << " newSlider=" << op->sliders[0].getValue() << std::endl;
+        const bool oldOpeValue = op->opeButton.getToggleState();
+        op->opeButton.setToggleState(opEnabled, juce::dontSendNotification);
+        std::cout << "  OPE: opeBitmask=0x" << std::hex << static_cast<int>(opeBitmask) << std::dec << " enabled=" << opEnabled << " oldToggle=" << oldOpeValue << " newToggle=" << op->opeButton.getToggleState() << std::endl;
         for (int s = 1; s < OperatorSliders::NumSliders; ++s) {
             const juce::String sliderName = OperatorSliders::sliderNames[s];
             auto it = operatorSliderParamOffsets.find(sliderName);
@@ -669,7 +690,11 @@ void VoiceEditorPanel::syncAllOperatorSlidersWithDexed() {
             uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + it->second);
             uint8_t value = getDexedParam(paramAddress);
             std::cout << "  OP" << (dexedOpIdx+1) << " " << sliderName << " paramAddr=" << static_cast<int>(paramAddress) << " value=" << static_cast<int>(value) << std::endl;
-            syncOperatorSliderWithDexed(op->sliders[s].getSlider(), paramAddress, sliderName.toRawUTF8());
+            if (s == OperatorSliders::PM) {
+                op->pmButton.setToggleState(value != 0, juce::dontSendNotification);
+            } else {
+                syncOperatorSliderWithDexed(op->sliders[s].getSlider(), paramAddress, sliderName.toRawUTF8());
+            }
         }
         // --- Envelope widget update (use raw integer values) ---
         // DX7 operator envelope: R1-R4, L1-L4, consecutive in voice data
@@ -738,13 +763,22 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders()
         sliders[i].getSlider().addMouseListener(this, false);
     }
 
+    // Binary parameters: use checkboxes instead of 0/1 sliders.
+    opeButton.setButtonText("OPE");
+    opeButton.setColour(juce::ToggleButton::textColourId, juce::Colours::white);
+    addAndMakeVisible(opeButton);
+    opeButton.addMouseListener(this, false);
+
+    pmButton.setButtonText("PM");
+    pmButton.setColour(juce::ToggleButton::textColourId, juce::Colours::white);
+    addAndMakeVisible(pmButton);
+    pmButton.addMouseListener(this, false);
+
     // Set up slider ranges based on DX7 parameter specs
-    // OPE: Operator Enable (0-1)
-    sliders[OPE].getSlider().setRange(0, 1, 1);
+    // OPE: Operator Enable (binary checkbox)
     // TL: Total Level (0-99)
     sliders[TL].getSlider().setRange(0, 99, 1);
-    // PM: Pitch Mode/Frequency Mode (0-1, 0=ratio, 1=fixed)
-    sliders[PM].getSlider().setRange(0, 1, 1);
+    // PM: Pitch Mode/Frequency Mode (binary checkbox)
     // PC: Pitch Coarse (0-31)
     sliders[PC].getSlider().setRange(0, 31, 1);
     // PF: Pitch Fine (0-99)
@@ -784,6 +818,64 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders()
             }
         }
     };
+
+    // --- UI -> engine wiring ---
+    // Operator controls live in the OperatorSliders component, but the actual writes must go through
+    // VoiceEditorPanel::setDexedParam(), using an operator-specific address.
+    // We rely on VoiceEditorPanel::operatorSliderParamOffsets (built from VCED.json) for the per-operator
+    // offsets, and operatorIndex for which operator row this instance represents (0=OP1 .. 5=OP6).
+
+    // UI shows operators reversed (OP6 at top), but Dexed parameter layout is OP1..OP6.
+    // operatorIndex: 0=OP1 .. 5=OP6
+    // dexedOperatorIndex must match the voice data order (0=OP1 .. 5=OP6).
+    const int dexedOperatorIndex = 5 - operatorIndex;
+
+    auto sendOperatorParam = [this, dexedOperatorIndex](const juce::String& key, uint8_t value)
+    {
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            if (!parent->isInitialized)
+                return;
+            auto it = VoiceEditorPanel::operatorSliderParamOffsets.find(key);
+            if (it == VoiceEditorPanel::operatorSliderParamOffsets.end())
+                return;
+            const uint8_t paramAddress = static_cast<uint8_t>(dexedOperatorIndex * 21 + it->second);
+            parent->setDexedParam(paramAddress, value);
+        }
+    };
+
+    // OPE is stored as a bitmask at address 155 for the whole voice.
+    opeButton.onClick = [this, dexedOperatorIndex]()
+    {
+        if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
+            if (!parent->isInitialized)
+                return;
+            const uint8_t opeAddr = static_cast<uint8_t>(155);
+            uint8_t mask = parent->getDexedParam(opeAddr);
+            const uint8_t bit = static_cast<uint8_t>(1u << dexedOperatorIndex);
+            if (opeButton.getToggleState())
+                mask = static_cast<uint8_t>(mask | bit);
+            else
+                mask = static_cast<uint8_t>(mask & ~bit);
+            parent->setDexedParam(opeAddr, mask);
+        }
+    };
+
+    // PM is per-operator, binary (0=ratio, 1=fixed).
+    pmButton.onClick = [this, sendOperatorParam]()
+    {
+        sendOperatorParam(VoiceEditorPanel::OperatorSliders::sliderNames[PM], pmButton.getToggleState() ? 1u : 0u);
+    };
+
+    // Remaining per-operator sliders.
+    for (int i = 0; i < NumSliders; ++i) {
+        if (i == OPE || i == PM)
+            continue;
+        sliders[i].onValueChange = [this, i, sendOperatorParam]()
+        {
+            const auto value = static_cast<uint8_t>(sliders[i].getSlider().getValue());
+            sendOperatorParam(VoiceEditorPanel::OperatorSliders::sliderNames[i], value);
+        };
+    }
 }
 
 VoiceEditorPanel::OperatorSliders::~OperatorSliders() = default;
@@ -839,7 +931,18 @@ void VoiceEditorPanel::OperatorSliders::resized()
 
     for (int i = 0; i < NumSliders; ++i) {
         int x = startX + (i * (sliderWidth + sliderGap));
-        sliders[i].setBounds(x, bounds.getY(), sliderWidth, bounds.getHeight());
+        if (i == OPE) {
+            sliders[i].setVisible(false);
+            opeButton.setVisible(true);
+            opeButton.setBounds(x, bounds.getY() + 6, sliderWidth, 24);
+        } else if (i == PM) {
+            sliders[i].setVisible(false);
+            pmButton.setVisible(true);
+            pmButton.setBounds(x, bounds.getY() + 6, sliderWidth, 24);
+        } else {
+            sliders[i].setVisible(true);
+            sliders[i].setBounds(x, bounds.getY(), sliderWidth, bounds.getHeight());
+        }
     }
 }
 
@@ -882,6 +985,14 @@ void VoiceEditorPanel::mouseExit(const juce::MouseEvent& e) {
 
 // --- OperatorSliders hover help for operator sliders, envelope, and keyboard scaling ---
 void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
+    if (e.eventComponent == &opeButton) {
+        sliderMouseEnter(OPE);
+        return;
+    }
+    if (e.eventComponent == &pmButton) {
+        sliderMouseEnter(PM);
+        return;
+    }
     for (int i = 0; i < NumSliders; ++i) {
         if (e.eventComponent == &sliders[i].getSlider()) {
             sliderMouseEnter(i);
@@ -915,6 +1026,14 @@ void VoiceEditorPanel::OperatorSliders::mouseEnter(const juce::MouseEvent& e) {
 }
 
 void VoiceEditorPanel::OperatorSliders::mouseExit(const juce::MouseEvent& e) {
+    if (e.eventComponent == &opeButton) {
+        sliderMouseExit(OPE);
+        return;
+    }
+    if (e.eventComponent == &pmButton) {
+        sliderMouseExit(PM);
+        return;
+    }
     for (int i = 0; i < NumSliders; ++i) {
         if (e.eventComponent == &sliders[i].getSlider()) {
             sliderMouseExit(i);
@@ -1022,19 +1141,15 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
                     auto* dexed = modules[moduleIndex]->getDexedEngine();
                     std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] dexed=" << dexed << std::endl;
                     if (dexed) {
-                        uint8_t currentOpeBitmask = dexed->getVoiceDataElement(static_cast<uint8_t>(155));
-                        if (currentOpeBitmask == 0x0) {
-                            currentOpeBitmask = 0x3F;
-                            std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Current OPE bitmask was 0x0, defaulting to 0x3F (all operators enabled)" << std::endl;
-                        } else {
-                            std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Preserving current OPE bitmask: 0x" << std::hex << static_cast<int>(currentOpeBitmask) << std::dec << std::endl;
-                        }
+                        // IMPORTANT: don't mutate OPE when applying a voice dump. If the received voice
+                        // explicitly has OPE=0 (all operators off), that's a valid state.
+                        const uint8_t newOpeBitmask = dataCopy[6 + 155];
+                        std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Applying OPE bitmask from dump: 0x" << std::hex << static_cast<int>(newOpeBitmask) << std::dec << std::endl;
                         for (int i = 0; i < 155; ++i) {
                             std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Setting Dexed param " << i << " = " << static_cast<int>(dataCopy[6 + i]) << std::endl;
                             dexed->setVoiceDataElement(static_cast<uint8_t>(i), dataCopy[6 + i]);
                         }
-                        dexed->setVoiceDataElement(static_cast<uint8_t>(155), currentOpeBitmask);
-                        std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Restored OPE bitmask: 0x" << std::hex << static_cast<int>(currentOpeBitmask) << std::dec << std::endl;
+                        dexed->setVoiceDataElement(static_cast<uint8_t>(155), newOpeBitmask);
                         std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Calling dexed->doRefreshVoice()" << std::endl;
                         dexed->doRefreshVoice();
                     } else {
@@ -1048,6 +1163,16 @@ void VoiceEditorPanel::onSingleVoiceDumpReceived(const std::vector<uint8_t>& dat
             }
             std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Calling syncAllOperatorSlidersWithDexed() on main thread" << std::endl;
             syncAllOperatorSlidersWithDexed();
+
+            // Sync algorithm selector/SVG to the loaded voice data (so diagram matches sound).
+            const int algoIdx = static_cast<int>(getDexedParam(static_cast<uint8_t>(134)));
+            if (algoIdx >= 0 && algoIdx < 32) {
+                currentAlgorithm = algoIdx;
+                algorithmSelector.setSelectedId(algoIdx + 1, juce::dontSendNotification);
+                loadAlgorithmSvg(algoIdx);
+                resized();
+                repaint();
+            }
         });
     } else {
         std::cout << "[VoiceEditorPanel::onSingleVoiceDumpReceived] Received SysEx is not a valid DX7 single voice dump." << std::endl;
