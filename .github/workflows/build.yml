@@ -18,7 +18,7 @@ jobs:
             build_type: 'linux'
           - os: ubuntu-22.04-arm
             build_type: 'linux-arm64'
-          - os: macos-13
+          - os: macos-15
             build_type: 'macos'
           - os: ubuntu-22.04
             build_type: 'alpine-static'
