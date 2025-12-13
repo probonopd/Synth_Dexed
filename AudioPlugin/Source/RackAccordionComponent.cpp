@@ -843,7 +843,14 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     openVoiceEditorButton.onClick = [this] {
         auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
         if (editor) {
-            editor->showVoiceEditorPanel(moduleIndex);
+            // Always target the module represented by the currently active tab.
+            int currentTabIndex = 0;
+            if (parentAccordion) {
+                currentTabIndex = parentAccordion->getCurrentTabIndex();
+                if (currentTabIndex < 0 || currentTabIndex >= 16)
+                    currentTabIndex = 0;
+            }
+            editor->showVoiceEditorPanel(currentTabIndex);
         }
     };
 

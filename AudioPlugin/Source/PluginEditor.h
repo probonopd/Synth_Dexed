@@ -23,7 +23,14 @@ public:
 
     AudioPluginAudioProcessor* getProcessor() const { return &processorRef; } // Added method to access processor
     void showVoiceEditorPanel(int moduleIndex); // Accepts module index
-    VoiceEditorPanel* getVoiceEditorPanel() const { return voiceEditorPanel.get(); } // Added getter for voiceEditorPanel
+    VoiceEditorPanel* getVoiceEditorPanel() const
+    {
+        // The voice editor panel is owned by the VoiceEditorWindow. Keep this accessor working by
+        // returning the current window content if it is a VoiceEditorPanel.
+        if (voiceEditorWindow)
+            return dynamic_cast<VoiceEditorPanel*>(voiceEditorWindow->getContentComponent());
+        return nullptr;
+    } // Added getter for voiceEditorPanel
     RackAccordionComponent* getRackAccordion() const { return rackAccordion.get(); } // Added getter for rackAccordion
     void showVoiceBrowser(int moduleIndex);
 
@@ -64,7 +71,9 @@ private:
 
     std::unique_ptr<RackAccordionComponent> rackAccordion; // Added for the rack GUI
 
-    std::unique_ptr<VoiceEditorPanel> voiceEditorPanel; // Added to manage the new panel
+    // The VoiceEditorPanel is owned by VoiceEditorWindow (DocumentWindow content ownership).
+    // Keep this here only if other code expects it, but do not use it for ownership.
+    std::unique_ptr<VoiceEditorPanel> voiceEditorPanel;
     std::unique_ptr<VoiceEditorWindow> voiceEditorWindow; // Added for the voice editor window
     std::unique_ptr<VoiceBrowserComponent> voiceBrowser;
     std::unique_ptr<juce::DialogWindow> voiceBrowserWindow;

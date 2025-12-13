@@ -477,33 +477,41 @@ void AudioPluginAudioProcessorEditor::loadPerformanceButtonClicked()
 
 void AudioPluginAudioProcessorEditor::showVoiceEditorPanel(int moduleIndex) {
     juce::Logger::writeToLog("[PluginEditor] showVoiceEditorPanel(" + juce::String(moduleIndex) + ") called");
-    // Always create a new VoiceEditorPanel for the window, owned by the window
-    auto newVoiceEditorPanel = std::make_unique<VoiceEditorPanel>();
-    newVoiceEditorPanel->setController(processorRef.getController());
-    newVoiceEditorPanel->setModuleIndex(moduleIndex);
-    newVoiceEditorPanel->syncAllOperatorSlidersWithDexed();
+    // Create the window once, then reuse it. Replacing DocumentWindow content repeatedly can
+    // leave the window in a blank state on some platforms (especially when the old content is
+    // deleted while still processing events). Instead, keep one VoiceEditorPanel instance and
+    // retarget it to the requested module.
     if (!voiceEditorWindow) {
         juce::Logger::writeToLog("[PluginEditor] Creating voice editor window");
         voiceEditorWindow = std::make_unique<VoiceEditorWindow>(
-            "Voice Editor", 
-            juce::Colours::darkgrey, 
+            "Voice Editor",
+            juce::Colours::darkgrey,
             juce::DocumentWindow::allButtons,
-            this // Pass the editor instance to the window
+            this
         );
-        // Give ownership of the panel to the window (window will delete it)
-        voiceEditorWindow->setContentOwned(newVoiceEditorPanel.release(), true);
+
+        voiceEditorPanel = std::make_unique<VoiceEditorPanel>();
+        voiceEditorPanel->setController(processorRef.getController());
+
+        // Window owns the content component. We'll keep a non-owning pointer via unique_ptr for
+        // convenience, but release ownership to the window.
+        voiceEditorWindow->setContentOwned(voiceEditorPanel.release(), true);
         voiceEditorWindow->setUsingNativeTitleBar(true);
         voiceEditorWindow->centreWithSize(1000, 600);
         voiceEditorWindow->setResizable(true, false);
-    } else {
-        // If window already exists, replace its content with a new panel
-        voiceEditorWindow->setContentOwned(newVoiceEditorPanel.release(), true);
+    }
+
+    if (auto* panel = dynamic_cast<VoiceEditorPanel*>(voiceEditorWindow->getContentComponent())) {
+        panel->setController(processorRef.getController());
+        panel->setModuleIndex(moduleIndex);
+        panel->syncAllOperatorSlidersWithDexed();
+        panel->resized();
+        panel->repaint();
     }
     juce::Logger::writeToLog("[PluginEditor] Making voice editor window visible");
     voiceEditorWindow->setVisible(true);
     voiceEditorWindow->toFront(true);
-    // Do not keep a unique_ptr to the panel in the editor anymore
-    voiceEditorPanel.reset();
+    // Note: we keep the content owned by the window. The editor doesn't own the panel.
 }
 
 void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()

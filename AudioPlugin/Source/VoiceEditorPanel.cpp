@@ -241,6 +241,7 @@ void VoiceEditorPanel::initializeIfReady() {
 
 void VoiceEditorPanel::paint(Graphics& g) {
     g.fillAll(Colour(0xff332b28));
+
     if (!isInitialized)
         return;
 
