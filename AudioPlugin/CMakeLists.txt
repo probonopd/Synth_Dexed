@@ -125,7 +125,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # Add VCED.json help file as a resource for JUCE BinaryData
 set(HELP_JSON "${CMAKE_CURRENT_SOURCE_DIR}/Data/VCED.json")
 
-# Add all SVGs in Images/ as resources for JUCE BinaryData
+# Add all algorithm SVGs in Images/ as resources for JUCE BinaryData
 file(GLOB ALGORITHM_SVGS "${CMAKE_CURRENT_SOURCE_DIR}/Images/algorithm-*.svg")
 
 juce_add_binary_data(BinaryData SOURCES ${ALGORITHM_SVGS} ${HELP_JSON})

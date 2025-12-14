@@ -1,4 +1,5 @@
 #include "VoiceBrowserComponent.h"
+#include "DX7LookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_core/juce_core.h>
 #include <juce_data_structures/juce_data_structures.h>
@@ -19,7 +20,7 @@ VoiceBrowserComponent::VoiceBrowserComponent() {
     addKeyListener(this);
     
     addAndMakeVisible(searchBox);
-    searchBox.setTextToShowWhenEmpty("Search voices...", juce::Colours::grey);
+    searchBox.setTextToShowWhenEmpty("Search voices...", DX7LookAndFeel::getTextBrightColour());  // Ensure placeholder text is white
     searchBox.setColour(juce::TextEditor::textColourId, juce::Colours::white);
     searchBox.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff222222)); // Match Voice Editor's text editor background
     searchBox.onTextChange = [this] { filterVoices(); };
@@ -77,7 +78,8 @@ void VoiceBrowserComponent::paintListBoxItem(int row, juce::Graphics& g, int wid
     juce::String name = v["name"].toString();
     juce::String author = v.getProperty("author", "").toString();
     if (selected) g.fillAll(juce::Colours::lightblue);
-    g.setColour(selected ? juce::Colours::black : juce::Colours::white);
+    // Always draw list text in white (no black text allowed)
+    g.setColour(juce::Colours::white);
     g.drawText(name + " - " + author, 4, 0, width-8, height, juce::Justification::centredLeft);
 }
 

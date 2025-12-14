@@ -6,6 +6,7 @@
 /**
  * Custom labeled vertical slider widget that combines a slider and its label.
  * Used throughout the FMRack plugin for consistent appearance with value display and labeling.
+ * Value is shown at TOP of slider, label at BOTTOM.
  */
 class FMRackLabeledVerticalSlider : public juce::Component
 {
@@ -13,13 +14,16 @@ public:
     FMRackLabeledVerticalSlider()
     {
         slider.setSliderStyle(juce::Slider::LinearVertical);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 18);
+        // Value at top, editable, no box around it
+        slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, 28, 12);
         slider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
         slider.setNumDecimalPlacesToDisplay(0);
         slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
+        slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+        slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
 
         label.setColour(juce::Label::textColourId, juce::Colours::white);
-        label.setFont(juce::Font(juce::FontOptions(10.0f)));
+        label.setFont(juce::Font(juce::FontOptions(9.0f)));
         label.setJustificationType(juce::Justification::centred);
 
         // Connect slider's onValueChange to our callback
@@ -69,18 +73,20 @@ public:
         return label.getText();
     }
 
-    // Fixed dimensions for consistency
-    static constexpr int kWidth = 40;
-    static constexpr int kLabelHeight = 16;
-    static constexpr int kMinHeight = 60 + kLabelHeight;
-    static constexpr int kMaxHeight = 113 + kLabelHeight;
+    // Fixed dimensions for consistency - compact
+    static constexpr int kWidth = 26;
+    static constexpr int kLabelHeight = 10;
+    static constexpr int kMinHeight = 70 + kLabelHeight;
+    static constexpr int kMaxHeight = 80 + kLabelHeight;
 
     void resized() override
     {
         auto bounds = getLocalBounds();
-        auto sliderBounds = bounds.withHeight(bounds.getHeight() - kLabelHeight);
-        slider.setBounds(sliderBounds);
+        // Label at bottom with minimal gap (1px)
         label.setBounds(bounds.getX(), bounds.getBottom() - kLabelHeight, bounds.getWidth(), kLabelHeight);
+        // Slider takes the rest (value box is at top, inside the slider)
+        auto sliderBounds = bounds.withHeight(bounds.getHeight() - kLabelHeight - 1);
+        slider.setBounds(sliderBounds);
     }
 
 private:

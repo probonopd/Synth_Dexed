@@ -86,6 +86,7 @@ void FileBrowserDialog::showDialog(juce::Component* parent,
         dialogWindow->setResizable(true, false);
         dialogWindow->setSize(600, 400); // Explicitly set dialog window size
         dialogWindow->setResizeLimits(400, 300, 1920, 1080); // Prevent too small
+        dialogWindow->setAlwaysOnTop(true); // Keep dialog on top when clicking items
         dialogWindow->centreAroundComponent(parent, getWidth(), getHeight());
         dialogWindow->setVisible(true);
         addKeyListener(this);

@@ -3,6 +3,7 @@
 #include "VoiceEditorPanel.h"
 #include "VoiceEditorWindow.h"
 #include "VoiceBrowserComponent.h"
+#include "BinaryData.h"
 #include <iostream> // For logging
 
 namespace
@@ -111,13 +112,16 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
         juce::ignoreUnused (processorRef);
 
+        // Apply DX7-inspired look and feel
+        setLookAndFeel(&dx7LookAndFeel);
+
         // Make the editor resizable
         setResizable(true, true);
-        constrainer.setMinimumSize(1000, 420);
-        constrainer.setMaximumSize(1800, 1000);
+        constrainer.setMinimumSize(1000, 380);
+        constrainer.setMaximumSize(1800, 900);
         addAndMakeVisible(resizer);
 
-        setSize (1100, 480);
+        setSize (1100, 420);
 
         // Set up log text box (hidden by default for cleaner UI)
         logTextBox.setMultiLine(true);
@@ -241,6 +245,9 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 {
     try {
+        // Remove look and feel before destruction
+        setLookAndFeel(nullptr);
+        
         processorRef.setEditorPointer(nullptr);
         // --- CRASH PREVENTION: Ensure all child windows are closed before main editor is destroyed ---
         if (voiceEditorWindow) {
@@ -268,8 +275,31 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 //==============================================================================
 void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 {
-    // (Our component is opaque, so we must completely fill the background with a solid colour)
-    g.fillAll (juce::Colour(0xff332b28)); // Match Voice Editor's dark brown/sepia background
+    auto bounds = getLocalBounds();
+    
+    // Draw dark charcoal FM synth-inspired background
+    // Main panel with subtle vertical gradient (like brushed aluminum)
+    juce::ColourGradient panelGradient(
+        juce::Colour(0xFF2A2A2A),  // Slightly lighter at top
+        0.0f, 0.0f,
+        juce::Colour(0xFF1A1A1A),  // Darker at bottom
+        0.0f, static_cast<float>(bounds.getHeight()),
+        false);
+    panelGradient.addColour(0.02, juce::Colour(0xFF353535));  // Top bevel highlight
+    panelGradient.addColour(0.98, juce::Colour(0xFF151515));  // Bottom shadow
+    
+    g.setGradientFill(panelGradient);
+    g.fillAll();
+    
+    // Draw subtle top edge highlight (like panel edge catch light)
+    g.setColour(juce::Colour(0xFF404040));
+    g.fillRect(0, 0, bounds.getWidth(), 2);
+    g.setColour(juce::Colour(0xFF4A4A4A));
+    g.fillRect(0, 0, bounds.getWidth(), 1);
+    
+    // Draw subtle bottom edge shadow
+    g.setColour(juce::Colour(0xFF0A0A0A));
+    g.fillRect(0, bounds.getHeight() - 2, bounds.getWidth(), 2);
 }
 
 void AudioPluginAudioProcessorEditor::resized()
@@ -278,12 +308,16 @@ void AudioPluginAudioProcessorEditor::resized()
     const int resizerSize = 16;
     resizer.setBounds(getWidth() - resizerSize, getHeight() - resizerSize, resizerSize, resizerSize);
 
+    // Layout constants - reduced padding
     const int outerMargin = 8;
-    const int sectionGap = 8;
-    const int controlGap = 6;
-    const int topButtonHeight = 28;
+    const int sectionGap = 6;
+    const int controlGap = 4;
+    const int topButtonHeight = 24;
+    const int headerHeight = 8; // Minimal header space (no logo text)
 
+    // Main content area
     auto layoutBounds = getLocalBounds().reduced(outerMargin);
+    layoutBounds.removeFromTop(headerHeight); // Minimal header space
 
     // Only show log box if visible (can be toggled via Options menu)
     if (logTextBox.isVisible())
