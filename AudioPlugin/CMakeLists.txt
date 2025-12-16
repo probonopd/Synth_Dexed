@@ -141,3 +141,8 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E echo "  Linux:     ~/.vst3"
     COMMAND ${CMAKE_COMMAND} -E echo "==============================="
 )
+
+# ============================================================================
+# SPX90 Symphonic Effect Plugin
+# ============================================================================
+add_subdirectory(SPX90Symphonic)
