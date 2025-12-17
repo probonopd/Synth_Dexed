@@ -31,6 +31,10 @@ namespace
     {
         if (controls.size() == 0 || columns <= 0)
             return;
+        
+        // Safety check: if area is too small, don't attempt layout
+        if (area.getWidth() < 10 || area.getHeight() < 10)
+            return;
 
         const int totalControls = static_cast<int>(controls.size());
         const int rows = (totalControls + columns - 1) / columns;
@@ -78,13 +82,14 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         // Apply DX7-inspired look and feel
 
 
-        // Make the editor resizable
-        setResizable(true, true);
-        constrainer.setMinimumSize(1000, 380);
-        constrainer.setMaximumSize(1800, 900);
-        addAndMakeVisible(resizer);
+    // Make the editor non-resizable to prevent crashes
+    setResizable(false, false);
+    // Remove resizer component since window is not resizable
+    // constrainer.setMinimumSize(40, 380); // 40px min width, 380px min height
+    // constrainer.setMaximumSize(1800, 900);
+    // addAndMakeVisible(resizer);
 
-        setSize (1100, 420);
+        setSize (880, 420);
 
         // Set up log text box (hidden by default for cleaner UI)
         logTextBox.setMultiLine(true);
@@ -186,6 +191,31 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diff", "reverbDiffusion", reverbDiffusionAttachment);
     setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", reverbLevelAttachment);
 
+        // Load help JSON and set up help panel
+        loadMainWindowHelpJson();
+        defaultHelpText = "FMRack - Multi-module FM Synthesizer\nHover over a control for help.";
+        helpPanel.setText(defaultHelpText, juce::dontSendNotification);
+        helpPanel.setFont(juce::Font(juce::FontOptions(12.0f)));
+        helpPanel.setColour(juce::Label::backgroundColourId, juce::Colour(0xff222222));
+        helpPanel.setColour(juce::Label::textColourId, juce::Colours::white);
+        helpPanel.setJustificationType(juce::Justification::topLeft);
+        helpPanel.setBorderSize(juce::BorderSize<int>(8));
+        addAndMakeVisible(helpPanel);
+
+        // Add mouse listeners for hover help on main window controls
+        loadPerformanceButton.addMouseListener(this, false);
+        savePerformanceButton.addMouseListener(this, false);
+        addModuleButton.addMouseListener(this, false);
+        removeModuleButton.addMouseListener(this, false);
+        compressorEnableButton.addMouseListener(this, false);
+        reverbEnableButton.addMouseListener(this, false);
+        reverbSizeSlider.addMouseListener(this, false);
+        reverbHighDampSlider.addMouseListener(this, false);
+        reverbLowDampSlider.addMouseListener(this, false);
+        reverbLowPassSlider.addMouseListener(this, false);
+        reverbDiffusionSlider.addMouseListener(this, false);
+        reverbLevelSlider.addMouseListener(this, false);
+
         resized(); // Force layout after construction
         juce::Logger::writeToLog("[PluginEditor] End of constructor");
         logTextBox.insertTextAtCaret("[PluginEditor] Constructor completed\n");
@@ -265,118 +295,174 @@ void AudioPluginAudioProcessorEditor::paint (juce::Graphics& g)
 
 void AudioPluginAudioProcessorEditor::resized()
 {
-    juce::Logger::writeToLog("[PluginEditor] resized() called");
-    const int resizerSize = 16;
-    resizer.setBounds(getWidth() - resizerSize, getHeight() - resizerSize, resizerSize, resizerSize);
+    try {
+        juce::Logger::writeToLog("[PluginEditor] resized() called - width: " + juce::String(getWidth()) + ", height: " + juce::String(getHeight()));
 
-    // Layout constants - reduced padding
-    const int outerMargin = 8;
-    const int sectionGap = 6;
-    const int controlGap = 4;
-    const int topButtonHeight = 24;
-    const int headerHeight = 8; // Minimal header space (no logo text)
+        // Layout constants - reduced padding
+        const int outerMargin = 8;
+        const int sectionGap = 6;
+        const int controlGap = 4;
+        const int topButtonHeight = 24;
+        const int headerHeight = 8; // Minimal header space (no logo text)
+        const int helpPanelHeight = 60; // Help panel at bottom
 
-    // Main content area
-    auto layoutBounds = getLocalBounds().reduced(outerMargin);
-    layoutBounds.removeFromTop(headerHeight); // Minimal header space
+        // Main content area
+        auto layoutBounds = getLocalBounds().reduced(outerMargin);
+        layoutBounds.removeFromTop(headerHeight); // Minimal header space
 
-    // Only show log box if visible (can be toggled via Options menu)
-    if (logTextBox.isVisible())
-    {
-        const int logHeight = juce::jlimit(80, 120, getHeight() / 5);
-        auto logArea = layoutBounds.removeFromBottom(logHeight);
-        logArea = logArea.withTrimmedRight(resizerSize).reduced(0, 2);
-        logTextBox.setBounds(logArea);
+        // Reserve space for help panel at bottom (always visible)
+        auto helpArea = layoutBounds.removeFromBottom(helpPanelHeight);
+        helpArea = helpArea.reduced(0, 2);
+        helpPanel.setBounds(helpArea);
         layoutBounds.removeFromBottom(sectionGap);
+
+        // Only show log box if visible (can be toggled via Options menu)
+        if (logTextBox.isVisible())
+        {
+            const int logHeight = juce::jlimit(80, 120, getHeight() / 5);
+            auto logArea = layoutBounds.removeFromBottom(logHeight);
+            logArea = logArea.reduced(0, 2);
+            logTextBox.setBounds(logArea);
+            layoutBounds.removeFromBottom(sectionGap);
+        }
+
+        auto topRow = layoutBounds.removeFromTop(topButtonHeight);
+        layoutBounds.removeFromTop(sectionGap);
+
+        // Scale button widths down gracefully if window is very small
+        int largeButtonWidth = juce::jlimit(60, 160, topRow.getWidth() / 5);
+        const int smallButtonWidth = juce::jlimit(20, 28, topRow.getWidth() / 20);
+
+        auto alignButton = [&](juce::Rectangle<int> area)
+        {
+            return juce::Rectangle<int>(area.getX(), area.getCentreY() - topButtonHeight / 2, area.getWidth(), topButtonHeight);
+        };
+
+        // Only add buttons if there's actually space for them
+        if (topRow.getWidth() > largeButtonWidth * 2 + controlGap * 3)
+        {
+            auto loadBounds = topRow.removeFromLeft(largeButtonWidth);
+            loadPerformanceButton.setBounds(alignButton(loadBounds));
+            topRow.removeFromLeft(controlGap);
+            auto saveBounds = topRow.removeFromLeft(largeButtonWidth);
+            savePerformanceButton.setBounds(alignButton(saveBounds));
+        }
+
+        if (topRow.getWidth() > smallButtonWidth * 2 + controlGap * 2)
+        {
+            auto addBounds = topRow.removeFromRight(smallButtonWidth);
+            addModuleButton.setBounds(alignButton(addBounds));
+            topRow.removeFromRight(controlGap);
+            auto removeBounds = topRow.removeFromRight(smallButtonWidth);
+            removeModuleButton.setBounds(alignButton(removeBounds));
+        }
+
+
+        const int spacing = 10;
+        int availableWidth = layoutBounds.getWidth();
+        juce::Logger::writeToLog("[PluginEditor] availableWidth: " + juce::String(availableWidth));
+
+        // If width is too small, hide components to avoid crash
+        if (availableWidth < 200) {
+            juce::Logger::writeToLog("[PluginEditor] Width too small, hiding components");
+            if (rackAccordion) rackAccordion->setVisible(false);
+            effectsGroup.setVisible(false);
+            return;
+        }
+
+        // Ensure components are visible when width is adequate
+        if (rackAccordion) rackAccordion->setVisible(true);
+        effectsGroup.setVisible(true);
+
+        // Gracefully handle very small widths
+        const int minEffectsWidth = 50;   // Reduced minimum - can collapse more
+        const int minRackWidth = 100;      // Reduced minimum for extreme cases
+
+        // Global Effects panel - compact width, but don't force unrealistic minimums
+        int effectsWidth = juce::jlimit(minEffectsWidth, 200, availableWidth / 6);
+        int rackWidth = availableWidth - effectsWidth - spacing;
+
+        // If space is too tight, give all to rack (hide effects temporarily if needed)
+        if (rackWidth < minRackWidth && availableWidth > minRackWidth + 10)
+        {
+            rackWidth = juce::jmax(minRackWidth, availableWidth - spacing - 10);
+            effectsWidth = juce::jmax(10, availableWidth - rackWidth - spacing);
+        }
+        else if (rackWidth < minRackWidth)
+        {
+            // Space is very tight, distribute proportionally
+            rackWidth = juce::jmax(minRackWidth, availableWidth - spacing - minEffectsWidth);
+            effectsWidth = juce::jmax(10, availableWidth - rackWidth - spacing);
+        }
+
+        // Final clamp to ensure positive values
+        rackWidth = juce::jmax(10, rackWidth);
+        effectsWidth = juce::jmax(10, effectsWidth);
+
+        // Ensure total doesn't exceed available width
+        if (rackWidth + effectsWidth + spacing > availableWidth)
+        {
+            int overflow = (rackWidth + effectsWidth + spacing) - availableWidth;
+            effectsWidth = juce::jmax(10, effectsWidth - overflow);
+        }
+
+        juce::Logger::writeToLog("[PluginEditor] rackWidth: " + juce::String(rackWidth) + ", effectsWidth: " + juce::String(effectsWidth));
+
+        auto rackArea = layoutBounds.removeFromLeft(rackWidth);
+        if (rackAccordion)
+            rackAccordion->setBounds(rackArea);
+
+        layoutBounds.removeFromLeft(spacing);
+
+        auto effectsArea = layoutBounds;
+        effectsGroup.setBounds(effectsArea);
+
+        const int groupPadding = 6;
+        const int groupLabelOffset = 18;
+        const int toggleHeight = 20;
+        const int rowGap = 6;
+        const int columnGapRotary = 4;
+
+        auto effectsContent = effectsArea.reduced(groupPadding).withTrimmedTop(groupLabelOffset);
+
+        // Toggles row - stacked vertically for narrow panel
+        auto toggleRow = effectsContent.removeFromTop(toggleHeight);
+        int toggleWidth = juce::jmax(10, toggleRow.getWidth() / 2 - 2); // Prevent negative/zero width
+        compressorEnableButton.setBounds(toggleRow.removeFromLeft(toggleWidth));
+        toggleRow.removeFromLeft(juce::jmin(4, toggleRow.getWidth())); // Don't remove more than available
+        reverbEnableButton.setBounds(toggleRow);
+
+        effectsContent.removeFromTop(rowGap);
+
+        // Calculate slider layout - 3 columns x 2 rows for compact display
+        const int verticalColumns = 3;
+        int verticalSliderHeight = juce::jlimit(40, 70, (effectsContent.getHeight() - rowGap) / 2 - kVerticalSliderLabelHeight);
+        if (verticalSliderHeight <= 0)
+            verticalSliderHeight = 40;
+
+        layoutVerticalSliderGrid(effectsContent,
+                                 {
+                                     { &reverbSizeSlider, &reverbSizeLabel },
+                                     { &reverbLevelSlider, &reverbLevelLabel },
+                                     { &reverbDiffusionSlider, &reverbDiffusionLabel },
+                                     { &reverbHighDampSlider, &reverbHighDampLabel },
+                                     { &reverbLowDampSlider, &reverbLowDampLabel },
+                                     { &reverbLowPassSlider, &reverbLowPassLabel }
+                                 },
+                                 verticalColumns,
+                                 verticalSliderHeight,
+                                 rowGap,
+                                 columnGapRotary);
+
+        if (voiceEditorWindow)
+            voiceEditorWindow->setBounds(100, 100, 800, 600);
+
+        juce::Logger::writeToLog("[PluginEditor] resized() completed successfully");
+    } catch (const std::exception& e) {
+        juce::Logger::writeToLog("[PluginEditor] Exception in resized(): " + juce::String(e.what()));
+    } catch (...) {
+        juce::Logger::writeToLog("[PluginEditor] Unknown exception in resized()");
     }
-
-    auto topRow = layoutBounds.removeFromTop(topButtonHeight);
-    layoutBounds.removeFromTop(sectionGap);
-
-    const int largeButtonWidth = juce::jlimit(120, 160, topRow.getWidth() / 5);
-    const int smallButtonWidth = 28;
-
-    auto alignButton = [&](juce::Rectangle<int> area)
-    {
-        return juce::Rectangle<int>(area.getX(), area.getCentreY() - topButtonHeight / 2, area.getWidth(), topButtonHeight);
-    };
-
-    auto loadBounds = topRow.removeFromLeft(largeButtonWidth);
-    loadPerformanceButton.setBounds(alignButton(loadBounds));
-    topRow.removeFromLeft(controlGap);
-    auto saveBounds = topRow.removeFromLeft(largeButtonWidth);
-    savePerformanceButton.setBounds(alignButton(saveBounds));
-
-    auto addBounds = topRow.removeFromRight(smallButtonWidth);
-    addModuleButton.setBounds(alignButton(addBounds));
-    topRow.removeFromRight(controlGap);
-    auto removeBounds = topRow.removeFromRight(smallButtonWidth);
-    removeModuleButton.setBounds(alignButton(removeBounds));
-
-    const int spacing = 10;
-    int availableWidth = layoutBounds.getWidth();
-    // Global Effects panel - compact width
-    int effectsWidth = juce::jlimit(160, 200, availableWidth / 5);
-    int rackWidth = availableWidth - effectsWidth - spacing;
-
-    if (rackWidth < 700)
-    {
-        rackWidth = juce::jmax(700, availableWidth - effectsWidth - spacing);
-        effectsWidth = availableWidth - rackWidth - spacing;
-    }
-
-    rackWidth = juce::jmax(0, rackWidth);
-    effectsWidth = juce::jmax(0, effectsWidth);
-
-    auto rackArea = layoutBounds.removeFromLeft(rackWidth);
-    if (rackAccordion)
-        rackAccordion->setBounds(rackArea);
-
-    layoutBounds.removeFromLeft(spacing);
-
-    auto effectsArea = layoutBounds;
-    effectsGroup.setBounds(effectsArea);
-
-    const int groupPadding = 6;
-    const int groupLabelOffset = 18;
-    const int toggleHeight = 20;
-    const int rowGap = 6;
-    const int columnGapRotary = 4;
-
-    auto effectsContent = effectsArea.reduced(groupPadding).withTrimmedTop(groupLabelOffset);
-
-    // Toggles row - stacked vertically for narrow panel
-    auto toggleRow = effectsContent.removeFromTop(toggleHeight);
-    compressorEnableButton.setBounds(toggleRow.removeFromLeft(toggleRow.getWidth() / 2 - 2));
-    toggleRow.removeFromLeft(4);
-    reverbEnableButton.setBounds(toggleRow);
-
-    effectsContent.removeFromTop(rowGap);
-
-    // Calculate slider layout - 3 columns x 2 rows for compact display
-    const int verticalColumns = 3;
-    int verticalSliderHeight = juce::jlimit(40, 70, (effectsContent.getHeight() - rowGap) / 2 - kVerticalSliderLabelHeight);
-    if (verticalSliderHeight <= 0)
-        verticalSliderHeight = 40;
-
-    layoutVerticalSliderGrid(effectsContent,
-                             {
-                                 { &reverbSizeSlider, &reverbSizeLabel },
-                                 { &reverbLevelSlider, &reverbLevelLabel },
-                                 { &reverbDiffusionSlider, &reverbDiffusionLabel },
-                                 { &reverbHighDampSlider, &reverbHighDampLabel },
-                                 { &reverbLowDampSlider, &reverbLowDampLabel },
-                                 { &reverbLowPassSlider, &reverbLowPassLabel }
-                             },
-                             verticalColumns,
-                             verticalSliderHeight,
-                             rowGap,
-                             columnGapRotary);
-
-    if (voiceEditorWindow)
-        voiceEditorWindow->setBounds(100, 100, 800, 600);
-
-    juce::Logger::writeToLog("[PluginEditor] resized() end");
 }
 
 void AudioPluginAudioProcessorEditor::appendLogMessage(const juce::String& message)
@@ -611,5 +697,114 @@ void AudioPluginAudioProcessorEditor::showVoiceBrowser(int /*moduleIndex*/)
     
     voiceBrowserWindow->setVisible(true);
     voiceBrowserWindow->toFront(true);
+}
+
+void AudioPluginAudioProcessorEditor::loadMainWindowHelpJson()
+{
+    using namespace juce;
+    // Use JUCE BinaryData for MainWindowHelp.json
+    auto* data = BinaryData::MainWindowHelp_json;
+    int dataSize = BinaryData::MainWindowHelp_jsonSize;
+    juce::Logger::writeToLog("[PluginEditor] Loading MainWindowHelp.json from BinaryData");
+    juce::String jsonStr = juce::String::fromUTF8(reinterpret_cast<const char*>(data), dataSize);
+    var json = JSON::parse(jsonStr);
+    if (!json.isObject()) {
+        juce::Logger::writeToLog("[PluginEditor] MainWindowHelp.json parse failed");
+        return;
+    }
+    helpJson = json;
+    helpTextByKey.clear();
+
+    // Read default help text
+    if (json.hasProperty("defaultHelp"))
+        defaultHelpText = json["defaultHelp"].toString();
+
+    // Parse controls array
+    if (auto* controls = json["controls"].getArray()) {
+        for (auto& c : *controls) {
+            auto* obj = c.getDynamicObject();
+            if (!obj || !obj->hasProperty("key"))
+                continue;
+            auto keyStd = obj->getProperty("key").toString().toStdString();
+            juce::String name = obj->getProperty("name").toString();
+            juce::String desc = obj->getProperty("long_description").toString();
+            if (desc.isEmpty())
+                desc = obj->getProperty("description").toString();
+            juce::String shortDesc = obj->getProperty("description").toString();
+
+            juce::String hoverText;
+            hoverText << name << "\n";
+            if (!shortDesc.isEmpty() && shortDesc != desc)
+                hoverText << shortDesc << "\n";
+            hoverText << "\n" << desc;
+
+            helpTextByKey[keyStd] = hoverText.toStdString();
+        }
+    }
+    juce::Logger::writeToLog("[PluginEditor] Loaded " + juce::String((int)helpTextByKey.size()) + " help entries");
+}
+
+void AudioPluginAudioProcessorEditor::showHelpForKey(const juce::String& key)
+{
+    auto it = helpTextByKey.find(key.toStdString());
+    if (it != helpTextByKey.end()) {
+        helpPanel.setText(it->second, juce::dontSendNotification);
+    } else {
+        helpPanel.setText(defaultHelpText, juce::dontSendNotification);
+    }
+}
+
+void AudioPluginAudioProcessorEditor::restoreDefaultHelp()
+{
+    helpPanel.setText(defaultHelpText, juce::dontSendNotification);
+}
+
+void AudioPluginAudioProcessorEditor::mouseEnter(const juce::MouseEvent& e)
+{
+    // Map controls to help keys
+    if (e.eventComponent == &loadPerformanceButton) {
+        showHelpForKey("loadPerformance");
+    } else if (e.eventComponent == &savePerformanceButton) {
+        showHelpForKey("savePerformance");
+    } else if (e.eventComponent == &addModuleButton) {
+        showHelpForKey("addModule");
+    } else if (e.eventComponent == &removeModuleButton) {
+        showHelpForKey("removeModule");
+    } else if (e.eventComponent == &compressorEnableButton) {
+        showHelpForKey("compressorEnable");
+    } else if (e.eventComponent == &reverbEnableButton) {
+        showHelpForKey("reverbEnable");
+    } else if (e.eventComponent == &reverbSizeSlider) {
+        showHelpForKey("reverbSize");
+    } else if (e.eventComponent == &reverbHighDampSlider) {
+        showHelpForKey("reverbHighDamp");
+    } else if (e.eventComponent == &reverbLowDampSlider) {
+        showHelpForKey("reverbLowDamp");
+    } else if (e.eventComponent == &reverbLowPassSlider) {
+        showHelpForKey("reverbLowPass");
+    } else if (e.eventComponent == &reverbDiffusionSlider) {
+        showHelpForKey("reverbDiffusion");
+    } else if (e.eventComponent == &reverbLevelSlider) {
+        showHelpForKey("reverbLevel");
+    }
+}
+
+void AudioPluginAudioProcessorEditor::mouseExit(const juce::MouseEvent& e)
+{
+    // Restore default help when mouse leaves a control
+    if (e.eventComponent == &loadPerformanceButton ||
+        e.eventComponent == &savePerformanceButton ||
+        e.eventComponent == &addModuleButton ||
+        e.eventComponent == &removeModuleButton ||
+        e.eventComponent == &compressorEnableButton ||
+        e.eventComponent == &reverbEnableButton ||
+        e.eventComponent == &reverbSizeSlider ||
+        e.eventComponent == &reverbHighDampSlider ||
+        e.eventComponent == &reverbLowDampSlider ||
+        e.eventComponent == &reverbLowPassSlider ||
+        e.eventComponent == &reverbDiffusionSlider ||
+        e.eventComponent == &reverbLevelSlider) {
+        restoreDefaultHelp();
+    }
 }
 

@@ -1,0 +1,250 @@
+{
+    "defaultHelp": "FMRack - Multi-module FM Synthesizer\nHover over a control for help.",
+    "controls": [
+        {
+            "key": "loadVoice",
+            "name": "Open Voice",
+            "short": "Open",
+            "description": "Load a DX7/TX816 voice file (.syx or .dx7) into this module.",
+            "long_description": "Opens a file browser to select a voice file. Supports DX7 single voice dumps, 32-voice cartridge dumps (.syx), and native .dx7 files. The selected voice will replace the current voice in this module."
+        },
+        {
+            "key": "browsePatches",
+            "name": "Browse Patches",
+            "short": "Browse",
+            "description": "Browse and preview available patches from your voice library.",
+            "long_description": "Opens a patch browser where you can explore, audition, and select voices from your collection. You can organize patches by category and quickly find the sound you need."
+        },
+        {
+            "key": "editVoice",
+            "name": "Edit Voice",
+            "short": "Edit",
+            "description": "Open the voice editor to modify the current voice parameters.",
+            "long_description": "Opens a detailed voice editor panel where you can modify all 6 operators, envelopes, algorithm, feedback, and other voice parameters. Changes are applied in real-time."
+        },
+        {
+            "key": "volume",
+            "name": "Volume",
+            "short": "Vol",
+            "description": "Module output volume (0-127).",
+            "long_description": "Controls the output level of this module. This is the final volume stage before the signal is mixed with other modules. Corresponds to the TX816 output level parameter."
+        },
+        {
+            "key": "pan",
+            "name": "Pan",
+            "short": "Pan",
+            "description": "Stereo panning position (-64 to +63).",
+            "long_description": "Controls the stereo position of this module's output. Center (0) sends equal signal to both channels. Negative values pan left, positive values pan right."
+        },
+        {
+            "key": "detune",
+            "name": "Fine Tune",
+            "short": "Fine",
+            "description": "Fine tuning in cents (-50 to +50).",
+            "long_description": "Adjusts the pitch of this module in cents (1/100th of a semitone). Useful for creating subtle detuning effects between modules or compensating for tuning differences."
+        },
+        {
+            "key": "reverbSend",
+            "name": "Reverb Send",
+            "short": "Rvb",
+            "description": "Amount of signal sent to the global reverb (0-127).",
+            "long_description": "Controls how much of this module's output is sent to the global reverb effect. Higher values create a more spacious, ambient sound."
+        },
+        {
+            "key": "unisonVoices",
+            "name": "Unison Voices",
+            "short": "Voices",
+            "description": "Number of unison voices (1-4).",
+            "long_description": "Sets the number of voices stacked for unison effect. More voices create a thicker, fuller sound but use more CPU. Each voice is detuned according to the Detune setting."
+        },
+        {
+            "key": "unisonDetune",
+            "name": "Unison Detune",
+            "short": "Detune",
+            "description": "Detuning spread between unison voices.",
+            "long_description": "Controls the pitch spread between stacked unison voices. Higher values create a more pronounced chorus-like effect. The maximum detune is applied to the outermost voices."
+        },
+        {
+            "key": "unisonPan",
+            "name": "Unison Pan",
+            "short": "Pan",
+            "description": "Stereo spread of unison voices.",
+            "long_description": "Controls the stereo width of the unison effect. Higher values spread the unison voices across the stereo field for a wider sound. At 0, all voices are centered."
+        },
+        {
+            "key": "midiChannel",
+            "name": "MIDI Channel",
+            "short": "Ch",
+            "description": "MIDI receive channel (1-16, or Omni).",
+            "long_description": "Sets which MIDI channel this module responds to. Set to Omni to receive on all channels. Each module can have its own channel for multi-timbral operation."
+        },
+        {
+            "key": "noteLimitLow",
+            "name": "Note Limit Low",
+            "short": "Low",
+            "description": "Lowest note this module will respond to (C-1 to G9).",
+            "long_description": "Sets the lower boundary of the keyboard range for this module. Notes below this value will be ignored. Use with Note Limit High to create keyboard splits."
+        },
+        {
+            "key": "noteLimitHigh",
+            "name": "Note Limit High",
+            "short": "High",
+            "description": "Highest note this module will respond to (C-1 to G9).",
+            "long_description": "Sets the upper boundary of the keyboard range for this module. Notes above this value will be ignored. Use with Note Limit Low to create keyboard splits."
+        },
+        {
+            "key": "noteShift",
+            "name": "Note Shift",
+            "short": "Shift",
+            "description": "Transpose incoming notes by semitones (-24 to +24).",
+            "long_description": "Transposes all incoming MIDI notes up or down by the specified number of semitones. Useful for layering sounds at different octaves or creating harmonies."
+        },
+        {
+            "key": "pitchBendRange",
+            "name": "Pitch Bend Range",
+            "short": "PB",
+            "description": "Pitch bend range in semitones (0-12).",
+            "long_description": "Sets how many semitones the pitch will bend when the pitch wheel is moved to its maximum position. Standard value is 2 semitones."
+        },
+        {
+            "key": "portamentoMode",
+            "name": "Portamento",
+            "short": "Porta",
+            "description": "Enable/disable portamento (pitch glide between notes).",
+            "long_description": "When enabled, the pitch glides smoothly from one note to the next instead of jumping instantly. The glide time is set by the Portamento Time control."
+        },
+        {
+            "key": "portamentoTime",
+            "name": "Portamento Time",
+            "short": "Time",
+            "description": "Portamento glide time (0-99).",
+            "long_description": "Controls the speed of the portamento glide. Higher values create slower, more pronounced glides. Only active when Portamento is enabled."
+        },
+        {
+            "key": "monoMode",
+            "name": "Mono Mode",
+            "short": "Mono",
+            "description": "Enable monophonic mode (single voice at a time).",
+            "long_description": "When enabled, only one note can sound at a time. New notes will cut off previous notes. Mono mode is often used for lead and bass sounds, and enables proper legato playing."
+        },
+        {
+            "key": "velocityScale",
+            "name": "Velocity Scale",
+            "short": "VelSc",
+            "description": "Velocity sensitivity scaling.",
+            "long_description": "Adjusts how strongly velocity affects the sound. Higher values make the sound more responsive to how hard you play. At 0, velocity has no effect."
+        },
+        {
+            "key": "masterTune",
+            "name": "Master Tune",
+            "short": "Tune",
+            "description": "Master tuning offset.",
+            "long_description": "Global tuning adjustment for this module. Useful for matching pitch with other instruments or creating detuned effects between modules."
+        },
+        {
+            "key": "filterEnabled",
+            "name": "Filter",
+            "short": "Filter",
+            "description": "Enable/disable the low-pass filter.",
+            "long_description": "Toggles the module's output filter. When enabled, frequencies above the cutoff are attenuated, creating a warmer, less bright sound."
+        },
+        {
+            "key": "filterCutoff",
+            "name": "Filter Cutoff",
+            "short": "Cut",
+            "description": "Filter cutoff frequency.",
+            "long_description": "Sets the frequency at which the low-pass filter begins to attenuate higher frequencies. Lower values create a darker, more muffled sound."
+        },
+        {
+            "key": "filterResonance",
+            "name": "Filter Resonance",
+            "short": "Res",
+            "description": "Filter resonance amount.",
+            "long_description": "Boosts frequencies around the cutoff point, creating a more pronounced, peaky filter character. High resonance values can create a whistling or ringing quality."
+        },
+        {
+            "key": "compressorEnable",
+            "name": "Compressor",
+            "short": "Comp",
+            "description": "Enable/disable the global compressor.",
+            "long_description": "Toggles the global output compressor. The compressor reduces dynamic range, making quiet sounds louder and preventing loud sounds from clipping."
+        },
+        {
+            "key": "reverbEnable",
+            "name": "Reverb",
+            "short": "Rvb",
+            "description": "Enable/disable the global reverb effect.",
+            "long_description": "Toggles the global reverb processor. Reverb adds spatial ambience and depth to the sound, simulating acoustic spaces."
+        },
+        {
+            "key": "reverbSize",
+            "name": "Reverb Size",
+            "short": "Size",
+            "description": "Reverb room size.",
+            "long_description": "Controls the size of the simulated acoustic space. Larger values create longer, more spacious reverb tails simulating bigger rooms or halls."
+        },
+        {
+            "key": "reverbLevel",
+            "name": "Reverb Level",
+            "short": "Level",
+            "description": "Reverb output level.",
+            "long_description": "Controls the volume of the reverb effect in the mix. Higher values make the reverb more prominent."
+        },
+        {
+            "key": "reverbDiffusion",
+            "name": "Reverb Diffusion",
+            "short": "Diff",
+            "description": "Reverb diffusion amount.",
+            "long_description": "Controls how quickly the reverb reflections become dense and smooth. Higher diffusion creates a smoother, more blended reverb tail."
+        },
+        {
+            "key": "reverbHighDamp",
+            "name": "High Damping",
+            "short": "HiDamp",
+            "description": "High frequency damping in reverb.",
+            "long_description": "Controls how quickly high frequencies decay in the reverb. Higher values simulate rooms with more absorptive surfaces, creating a warmer reverb."
+        },
+        {
+            "key": "reverbLowDamp",
+            "name": "Low Damping",
+            "short": "LoDamp",
+            "description": "Low frequency damping in reverb.",
+            "long_description": "Controls how quickly low frequencies decay in the reverb. Higher values reduce bass buildup in the reverb, creating a cleaner tail."
+        },
+        {
+            "key": "reverbLowPass",
+            "name": "Reverb Low Pass",
+            "short": "LoPass",
+            "description": "Low pass filter on reverb output.",
+            "long_description": "Applies a low-pass filter to the reverb output, reducing high frequencies. Useful for creating darker, more vintage-style reverb sounds."
+        },
+        {
+            "key": "loadPerformance",
+            "name": "Load Performance",
+            "short": "Load",
+            "description": "Load a complete performance setup from a file.",
+            "long_description": "Opens a file browser to load a performance file (.ini) containing all module settings, voices, and global parameters. Use this to recall complete multi-module setups."
+        },
+        {
+            "key": "savePerformance",
+            "name": "Save Performance",
+            "short": "Save",
+            "description": "Save the current performance setup to a file.",
+            "long_description": "Opens a file browser to save the current performance to an .ini file. This saves all module settings, loaded voices, and global parameters for later recall."
+        },
+        {
+            "key": "addModule",
+            "name": "Add Module",
+            "short": "+",
+            "description": "Add a new module to the rack.",
+            "long_description": "Adds a new FM synthesis module to the rack. Each module is an independent voice with its own settings, allowing multi-timbral operation. Maximum 16 modules."
+        },
+        {
+            "key": "removeModule",
+            "name": "Remove Module",
+            "short": "-",
+            "description": "Remove the last module from the rack.",
+            "long_description": "Removes the last module from the rack. This reduces polyphony but frees up CPU resources. Minimum 1 module must remain."
+        }
+    ]
+}

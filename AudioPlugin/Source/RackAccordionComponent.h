@@ -54,6 +54,10 @@ public:
     void resized() override;
     void updateFromModule(); // NEW: update sliders from module state
     
+    // Mouse listener overrides for hover help
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+    
     // Per-tab controls
     FMRackLabeledVerticalSlider unisonVoicesSlider;
     FMRackLabeledVerticalSlider unisonDetuneSlider;

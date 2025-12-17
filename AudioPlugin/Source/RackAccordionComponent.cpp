@@ -466,9 +466,9 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     pitchBendRangeSlider.getSlider().setRange(0, 12, 1);
 
     // Portamento
-    portamentoModeLabel.setText("Porta", juce::dontSendNotification);
+    portamentoModeLabel.setText("", juce::dontSendNotification);
     addAndMakeVisible(portamentoModeLabel);
-    portamentoModeButton.setButtonText("On");
+    portamentoModeButton.setButtonText("Portamento");
     addAndMakeVisible(portamentoModeButton);
 
     portamentoTimeSlider.setLabelText("Time");
@@ -476,9 +476,9 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     portamentoTimeSlider.getSlider().setRange(0, 99, 1);
 
     // Mono Mode
-    monoModeLabel.setText("Mono", juce::dontSendNotification);
+    monoModeLabel.setText("", juce::dontSendNotification);
     addAndMakeVisible(monoModeLabel);
-    monoModeButton.setButtonText("On");
+    monoModeButton.setButtonText("Mono");
     addAndMakeVisible(monoModeButton);
 
     // Misc
@@ -815,8 +815,6 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         }
     };
 
-
-
     volumeMeter = std::make_unique<StereoVolumeMeter>();
     addAndMakeVisible(*volumeMeter);
     volumeMeter->onRequestLevels = [this](float& preL, float& preR) {
@@ -829,6 +827,31 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
             preL = preR = 0.0f;
         }
     };
+
+    // Add mouse listeners for hover help on all controls
+    loadVoiceButton.addMouseListener(this, false);
+    browsePatchesButton.addMouseListener(this, false);
+    openVoiceEditorButton.addMouseListener(this, false);
+    volumeSlider.getSlider().addMouseListener(this, false);
+    panSlider.getSlider().addMouseListener(this, false);
+    detuneSlider.getSlider().addMouseListener(this, false);
+    reverbSendSlider.getSlider().addMouseListener(this, false);
+    unisonVoicesSlider.getSlider().addMouseListener(this, false);
+    unisonDetuneSlider.getSlider().addMouseListener(this, false);
+    unisonPanSlider.getSlider().addMouseListener(this, false);
+    midiChannelSlider.getSlider().addMouseListener(this, false);
+    noteLimitLowSlider.getSlider().addMouseListener(this, false);
+    noteLimitHighSlider.getSlider().addMouseListener(this, false);
+    noteShiftSlider.getSlider().addMouseListener(this, false);
+    pitchBendRangeSlider.getSlider().addMouseListener(this, false);
+    portamentoModeButton.addMouseListener(this, false);
+    portamentoTimeSlider.getSlider().addMouseListener(this, false);
+    monoModeButton.addMouseListener(this, false);
+    velocityScaleSlider.getSlider().addMouseListener(this, false);
+    masterTuneSlider.getSlider().addMouseListener(this, false);
+    filterEnabledButton.addMouseListener(this, false);
+    filterCutoffSlider.getSlider().addMouseListener(this, false);
+    filterResonanceSlider.getSlider().addMouseListener(this, false);
 
     updateFromModule(); // Initial sync
 }
@@ -892,27 +915,24 @@ void ModuleTabComponent::resized()
     // === ROW 1: Voice | Main | Filter | Portamento & Mono ===
     auto row1 = area.removeFromTop(rowHeight);
     
-    // Voice group (buttons) - compute minimal width based on button count
-    const int buttonCount = 3;
-    const int buttonSpacing = 2;
-    const int minButtonWidth = 60; // smallest comfortable button width
-    const int voiceContentWidth = buttonCount * minButtonWidth + buttonSpacing * (buttonCount - 1);
-    const int voiceWidth = juce::jmax(voiceContentWidth + 2 * kContentPadding, 110);
+    // Voice group (buttons) - stack vertically for narrower width
+    const int voiceButtonWidth = 60; // narrow button width
+    const int voiceButtonSpacing = 2;
+    const int voiceWidth = voiceButtonWidth + 2 * kContentPadding;
     auto voiceArea = row1.removeFromLeft(voiceWidth);
     voiceGroup.setBounds(voiceArea);
-    auto voiceContent = makeGroupContentBounds(voiceArea, buttonHeight);
+    // Calculate vertical layout for 3 buttons
     {
         const int buttonCount = 3;
-        const int buttonSpacing = 2;
-        const int availWidth = voiceContent.getWidth() - buttonSpacing * (buttonCount - 1);
-        const int buttonWidth = availWidth / buttonCount;
-        int x = voiceContent.getX();
-        const int y = voiceContent.getCentreY() - buttonHeight / 2;
-        loadVoiceButton.setBounds(x, y, buttonWidth, buttonHeight);
-        x += buttonWidth + buttonSpacing;
-        browsePatchesButton.setBounds(x, y, buttonWidth, buttonHeight);
-        x += buttonWidth + buttonSpacing;
-        openVoiceEditorButton.setBounds(x, y, buttonWidth, buttonHeight);
+        const int totalButtonHeight = buttonCount * buttonHeight + (buttonCount - 1) * voiceButtonSpacing;
+        auto voiceContent = voiceArea.reduced(kContentPadding).withTrimmedTop(kGroupLabelOffset);
+        int x = voiceContent.getCentreX() - voiceButtonWidth / 2;
+        int y = voiceContent.getY() + (voiceContent.getHeight() - totalButtonHeight) / 2;
+        loadVoiceButton.setBounds(x, y, voiceButtonWidth, buttonHeight);
+        y += buttonHeight + voiceButtonSpacing;
+        browsePatchesButton.setBounds(x, y, voiceButtonWidth, buttonHeight);
+        y += buttonHeight + voiceButtonSpacing;
+        openVoiceEditorButton.setBounds(x, y, voiceButtonWidth, buttonHeight);
     }
     row1.removeFromLeft(groupGap);
 
@@ -1221,3 +1241,65 @@ FMRack::Performance* ModuleTabComponent::getPerformance() {
     auto* controller = getController();
     return controller ? controller->getPerformance() : nullptr;
 }
+
+void ModuleTabComponent::mouseEnter(const juce::MouseEvent& e) {
+    auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+    if (!editor) return;
+    
+    // Map controls to help keys
+    if (e.eventComponent == &loadVoiceButton) {
+        editor->showHelpForKey("loadVoice");
+    } else if (e.eventComponent == &browsePatchesButton) {
+        editor->showHelpForKey("browsePatches");
+    } else if (e.eventComponent == &openVoiceEditorButton) {
+        editor->showHelpForKey("editVoice");
+    } else if (e.eventComponent == &volumeSlider.getSlider()) {
+        editor->showHelpForKey("volume");
+    } else if (e.eventComponent == &panSlider.getSlider()) {
+        editor->showHelpForKey("pan");
+    } else if (e.eventComponent == &detuneSlider.getSlider()) {
+        editor->showHelpForKey("detune");
+    } else if (e.eventComponent == &reverbSendSlider.getSlider()) {
+        editor->showHelpForKey("reverbSend");
+    } else if (e.eventComponent == &unisonVoicesSlider.getSlider()) {
+        editor->showHelpForKey("unisonVoices");
+    } else if (e.eventComponent == &unisonDetuneSlider.getSlider()) {
+        editor->showHelpForKey("unisonDetune");
+    } else if (e.eventComponent == &unisonPanSlider.getSlider()) {
+        editor->showHelpForKey("unisonPan");
+    } else if (e.eventComponent == &midiChannelSlider.getSlider()) {
+        editor->showHelpForKey("midiChannel");
+    } else if (e.eventComponent == &noteLimitLowSlider.getSlider()) {
+        editor->showHelpForKey("noteLimitLow");
+    } else if (e.eventComponent == &noteLimitHighSlider.getSlider()) {
+        editor->showHelpForKey("noteLimitHigh");
+    } else if (e.eventComponent == &noteShiftSlider.getSlider()) {
+        editor->showHelpForKey("noteShift");
+    } else if (e.eventComponent == &pitchBendRangeSlider.getSlider()) {
+        editor->showHelpForKey("pitchBendRange");
+    } else if (e.eventComponent == &portamentoModeButton) {
+        editor->showHelpForKey("portamentoMode");
+    } else if (e.eventComponent == &portamentoTimeSlider.getSlider()) {
+        editor->showHelpForKey("portamentoTime");
+    } else if (e.eventComponent == &monoModeButton) {
+        editor->showHelpForKey("monoMode");
+    } else if (e.eventComponent == &velocityScaleSlider.getSlider()) {
+        editor->showHelpForKey("velocityScale");
+    } else if (e.eventComponent == &masterTuneSlider.getSlider()) {
+        editor->showHelpForKey("masterTune");
+    } else if (e.eventComponent == &filterEnabledButton) {
+        editor->showHelpForKey("filterEnabled");
+    } else if (e.eventComponent == &filterCutoffSlider.getSlider()) {
+        editor->showHelpForKey("filterCutoff");
+    } else if (e.eventComponent == &filterResonanceSlider.getSlider()) {
+        editor->showHelpForKey("filterResonance");
+    }
+}
+
+void ModuleTabComponent::mouseExit(const juce::MouseEvent& e) {
+    auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
+    if (editor) {
+        editor->restoreDefaultHelp();
+    }
+}
+

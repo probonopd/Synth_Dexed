@@ -10,6 +10,7 @@
 #include "DX7LookAndFeel.h" // DX7-inspired visual theme
 #include <juce_gui_basics/juce_gui_basics.h> // Added for GUI elements
 #include <memory> // Added for std::unique_ptr
+#include <map> // Added for help text map
 
 //==============================================================================
 class AudioPluginAudioProcessorEditor final : public juce::AudioProcessorEditor
@@ -19,6 +20,10 @@ public:
     ~AudioPluginAudioProcessorEditor() override;    //==============================================================================
     void paint (juce::Graphics&) override;
     void resized() override;
+    
+    // Mouse listener overrides for hover help
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
 
     void appendLogMessage(const juce::String& message); // Public method to append log
 
@@ -113,6 +118,18 @@ private:
     // DX7-inspired look and feel
     DX7LookAndFeel dx7LookAndFeel;
 
+    // Help panel for displaying context-sensitive help
+    juce::Label helpPanel;
+    juce::String defaultHelpText;
+    juce::var helpJson;
+    std::map<std::string, std::string> helpTextByKey;
+    void loadMainWindowHelpJson();
+
+public:
+    void showHelpForKey(const juce::String& key);
+    void restoreDefaultHelp();
+
+private:
     void setupSlider(FMRackVerticalSlider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment)
     {
         addAndMakeVisible(slider);
