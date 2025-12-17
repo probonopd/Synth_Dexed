@@ -3,7 +3,7 @@
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "VoiceEditorPanel.h"
 #include "BinaryData.h"
-#include "OperatorSliderLookAndFeel.h"
+
 #include "DX7LookAndFeel.h"
 #include <filesystem>
 #include <juce_data_structures/juce_data_structures.h>
@@ -12,7 +12,7 @@
 using namespace juce;
 
 // Global instance for operator slider look
-// static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
+
 
 namespace
 {

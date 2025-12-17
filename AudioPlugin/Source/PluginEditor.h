@@ -42,13 +42,13 @@ private:
     // access the processor object that created it.
     AudioPluginAudioProcessor& processorRef;
 
-    juce::Slider numModulesSlider;
+    FMRackVerticalSlider numModulesSlider;
     juce::Label numModulesLabel;
-    juce::Slider unisonVoicesSlider;
+    FMRackVerticalSlider unisonVoicesSlider;
     juce::Label unisonVoicesLabel;
-    juce::Slider unisonDetuneSlider;
+    FMRackVerticalSlider unisonDetuneSlider;
     juce::Label unisonDetuneLabel;
-    juce::Slider unisonPanSlider;
+    FMRackVerticalSlider unisonPanSlider;
     juce::Label unisonPanLabel;
 
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> numModulesAttachment;
@@ -113,17 +113,9 @@ private:
     // DX7-inspired look and feel
     DX7LookAndFeel dx7LookAndFeel;
 
-    void setupSlider(juce::Slider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment)
+    void setupSlider(FMRackVerticalSlider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment)
     {
         addAndMakeVisible(slider);
-        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 40, 14);
-        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-        slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-        addAndMakeVisible(label);
-        label.setText(labelText, juce::dontSendNotification);
-        label.setJustificationType(juce::Justification::centred);
         attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.treeState, paramID, slider);
     }
 

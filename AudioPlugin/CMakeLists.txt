@@ -68,7 +68,7 @@ set(SourceFiles
     Source/EnvelopeDisplay.cpp
     Source/KeyboardScalingDisplay.cpp
     Source/FMRackController.cpp
-    Source/OperatorSliderLookAndFeel.cpp
+
     Source/VoiceBrowserComponent.cpp
 
     ../src/dexed.cpp
@@ -92,6 +92,7 @@ set(SourceFiles
     ../src/FMRack/AudioEffectPlateReverb.cpp
     ../src/FMRack/FileRenderer.cpp
     ../src/FMRack/UdpServer.cpp
+        Source/FMRackVerticalSlider.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ../src ../src/FMRack)

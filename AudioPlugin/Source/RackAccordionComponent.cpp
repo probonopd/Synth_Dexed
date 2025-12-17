@@ -1,4 +1,4 @@
-#include "OperatorSliderLookAndFeel.h"
+
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "RackAccordionComponent.h"
@@ -11,7 +11,7 @@
 #include "../../src/FMRack/VoiceData.h" // NEW: Include VoiceData for conversion function
 #include <juce_gui_extra/juce_gui_extra.h>
 
-// static OperatorSliderLookAndFeel operatorSliderLookAndFeel;
+
 
 namespace
 {
@@ -814,26 +814,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         }
     };
 
-    // Apply custom look and feel to sliders
-    unisonVoicesSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    unisonDetuneSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    unisonPanSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    midiChannelSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    reverbSendSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    volumeSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    panSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    detuneSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
 
-    // Apply custom look and feel to new sliders
-    noteLimitLowSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    noteLimitHighSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    noteShiftSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    pitchBendRangeSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    portamentoTimeSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    velocityScaleSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    masterTuneSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    filterCutoffSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-    filterResonanceSlider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
 
     volumeMeter = std::make_unique<StereoVolumeMeter>();
     addAndMakeVisible(*volumeMeter);

@@ -1,7 +1,8 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
-#include "OperatorSliderLookAndFeel.h"
+#include "FMRackVerticalSlider.h"
+
 
 /**
  * Custom labeled vertical slider widget that combines a slider and its label.
@@ -13,15 +14,6 @@ class FMRackLabeledVerticalSlider : public juce::Component
 public:
     FMRackLabeledVerticalSlider()
     {
-        slider.setSliderStyle(juce::Slider::LinearVertical);
-        // Value at top, editable, no box around it
-        slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, 28, 12);
-        slider.setLookAndFeel(&OperatorSliderLookAndFeel::getInstance());
-        slider.setNumDecimalPlacesToDisplay(0);
-        slider.setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-        slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-
         label.setColour(juce::Label::textColourId, juce::Colours::white);
         label.setFont(juce::Font(juce::FontOptions(9.0f)));
         label.setJustificationType(juce::Justification::centred);
@@ -90,7 +82,7 @@ public:
     }
 
 private:
-    juce::Slider slider;
+    FMRackVerticalSlider slider;
     juce::Label label;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FMRackLabeledVerticalSlider)

@@ -113,7 +113,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         juce::ignoreUnused (processorRef);
 
         // Apply DX7-inspired look and feel
-        setLookAndFeel(&dx7LookAndFeel);
+
 
         // Make the editor resizable
         setResizable(true, true);
@@ -208,22 +208,20 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         addAndMakeVisible(reverbEnableButton);
         reverbEnableAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(processorRef.treeState, "reverbEnable", reverbEnableButton);
 
-        auto setupSlider = [this](juce::Slider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment) {
+        auto setupSlider = [this](FMRackVerticalSlider& slider, juce::Label& label, const juce::String& labelText, const juce::String& paramID, std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment) {
             addAndMakeVisible(slider);
-            // Set text box style for global effects (no text box)
-            slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
             addAndMakeVisible(label);
             label.setText(labelText, juce::dontSendNotification);
             label.setJustificationType(juce::Justification::centred);
             attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processorRef.treeState, paramID, slider);
         };
 
-        setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", reverbSizeAttachment);
-        setupSlider(reverbHighDampSlider, reverbHighDampLabel, "HiDamp", "reverbHighDamp", reverbHighDampAttachment);
-        setupSlider(reverbLowDampSlider, reverbLowDampLabel, "LoDamp", "reverbLowDamp", reverbLowDampAttachment);
-        setupSlider(reverbLowPassSlider, reverbLowPassLabel, "LoPass", "reverbLowPass", reverbLowPassAttachment);
-        setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diff", "reverbDiffusion", reverbDiffusionAttachment);
-        setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", reverbLevelAttachment);
+    setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", reverbSizeAttachment);
+    setupSlider(reverbHighDampSlider, reverbHighDampLabel, "HiDamp", "reverbHighDamp", reverbHighDampAttachment);
+    setupSlider(reverbLowDampSlider, reverbLowDampLabel, "LoDamp", "reverbLowDamp", reverbLowDampAttachment);
+    setupSlider(reverbLowPassSlider, reverbLowPassLabel, "LoPass", "reverbLowPass", reverbLowPassAttachment);
+    setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diff", "reverbDiffusion", reverbDiffusionAttachment);
+    setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", reverbLevelAttachment);
 
         resized(); // Force layout after construction
         juce::Logger::writeToLog("[PluginEditor] End of constructor");
@@ -246,7 +244,7 @@ AudioPluginAudioProcessorEditor::~AudioPluginAudioProcessorEditor()
 {
     try {
         // Remove look and feel before destruction
-        setLookAndFeel(nullptr);
+
         
         processorRef.setEditorPointer(nullptr);
         // --- CRASH PREVENTION: Ensure all child windows are closed before main editor is destroyed ---
