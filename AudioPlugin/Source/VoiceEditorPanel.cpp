@@ -2,6 +2,7 @@
 #include <juce_graphics/juce_graphics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "VoiceEditorPanel.h"
+#include "VoiceEditorWindow.h"
 #include "BinaryData.h"
 
 #include "DX7LookAndFeel.h"
@@ -63,6 +64,10 @@ VoiceEditorPanel::VoiceEditorPanel()
     std::cout << "[VoiceEditorPanel] Constructor start" << std::endl;
     try {
         loadHelpJson(); // <-- Moved to the start to ensure helpJson and operatorSliderParamOffsets are initialized
+
+        // Enable key listening for ESC key
+        setWantsKeyboardFocus(true);
+        addKeyListener(this);
 
         setBounds(0, 0, 1100, 700);
         setColour(juce::ResizableWindow::backgroundColourId, juce::Colour(0xff2a2a2a));
@@ -212,7 +217,19 @@ VoiceEditorPanel::VoiceEditorPanel()
 }
 
 VoiceEditorPanel::~VoiceEditorPanel() {
+    removeKeyListener(this);
     // unique_ptr automatically handles cleanup
+}
+
+bool VoiceEditorPanel::keyPressed(const juce::KeyPress& key, juce::Component* /*originatingComponent*/) {
+    if (key == juce::KeyPress::escapeKey) {
+        // Find the parent VoiceEditorWindow and close it
+        if (auto* window = findParentComponentOfClass<VoiceEditorWindow>()) {
+            window->setVisible(false);
+            return true;
+        }
+    }
+    return false;
 }
 
 void VoiceEditorPanel::initializeIfReady() {
@@ -396,7 +413,7 @@ void VoiceEditorPanel::resized() {
     const int opCount = static_cast<int>(operators.size());
     
     // Reserve space for help panel at the bottom
-    const int helpHeight = 80;
+    const int helpHeight = 120;
     auto helpArea = layoutBounds.removeFromBottom(helpHeight);
     helpPanel.setBounds(helpArea.reduced(4, 2));
     layoutBounds.removeFromBottom(kRowGap);

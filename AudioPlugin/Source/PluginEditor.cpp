@@ -89,7 +89,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     // constrainer.setMaximumSize(1800, 900);
     // addAndMakeVisible(resizer);
 
-        setSize (880, 420);
+        setSize (800, 500);
 
         // Set up log text box (hidden by default for cleaner UI)
         logTextBox.setMultiLine(true);
@@ -304,7 +304,7 @@ void AudioPluginAudioProcessorEditor::resized()
         const int controlGap = 4;
         const int topButtonHeight = 24;
         const int headerHeight = 8; // Minimal header space (no logo text)
-        const int helpPanelHeight = 60; // Help panel at bottom
+        const int helpPanelHeight = 80; // Help panel at bottom
 
         // Main content area
         auto layoutBounds = getLocalBounds().reduced(outerMargin);

@@ -46,7 +46,7 @@ namespace
             return;
 
         const int sliderCount = static_cast<int>(controls.size());
-        const int sliderWidth = 52; // Width for labeled sliders (slightly wider to accommodate labels)
+        const int sliderWidth = kMinSliderWidth;
         const int gapTotal = controlGap * (sliderCount - 1);
         const int totalWidth = sliderWidth * sliderCount + gapTotal;
 
@@ -909,7 +909,7 @@ void ModuleTabComponent::resized()
     // We want 2 rows of controls
     const int availableHeight = area.getHeight();
     const int rowHeight = (availableHeight - rowGap) / 2;
-    const int sliderHeight = juce::jlimit(40, 70, rowHeight - kGroupLabelOffset - kContentPadding * 2 - kSliderLabelHeight);
+    const int sliderHeight = 70;
     const int sliderRowHeight = sliderHeight + kSliderLabelHeight;
 
     // === ROW 1: Voice | Main | Filter | Portamento & Mono ===
