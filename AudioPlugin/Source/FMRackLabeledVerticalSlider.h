@@ -34,8 +34,8 @@ public:
         label.setText(text, juce::dontSendNotification);
     }
 
-    juce::Slider& getSlider() { return slider; }
-    const juce::Slider& getSlider() const { return slider; }
+    FMRackVerticalSlider& getSlider() { return slider; }
+    const FMRackVerticalSlider& getSlider() const { return slider; }
 
     // Delegate methods to the internal slider
     void setTextBoxStyle(juce::Slider::TextEntryBoxPosition position, bool readOnly, int textBoxWidth, int textBoxHeight)

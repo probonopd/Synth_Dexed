@@ -33,7 +33,7 @@ namespace
     constexpr int kSliderTextBoxHeight = 12;
     constexpr int kMinSliderWidth = 22;
 
-    void layoutSliderWithLabel(juce::Slider& slider,
+    void layoutSliderWithLabel(FMRackVerticalSlider& slider,
                                juce::Label& label,
                                const juce::String& text,
                                const juce::Rectangle<int>& totalBounds,
@@ -110,10 +110,6 @@ VoiceEditorPanel::VoiceEditorPanel()
         operators.clear();
         for (int i = 0; i < 6; ++i) {
             auto op = std::make_unique<OperatorSliders>();
-            op->label.setText(juce::String(i + 1), juce::dontSendNotification);
-            op->label.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
-            op->label.setColour(juce::Label::textColourId, juce::Colours::white);
-            op->label.setJustificationType(juce::Justification::centred);
             addAndMakeVisible(*op);
             operators.push_back(std::move(op));
         }
@@ -601,7 +597,7 @@ void VoiceEditorPanel::restoreDefaultHelp() {
     helpPanel.repaint();
 }
 
-void VoiceEditorPanel::setupOperatorSlider(Slider& slider, const String& name, int /*min*/, int /*max*/, int /*defaultValue*/) {
+void VoiceEditorPanel::setupOperatorSlider(FMRackVerticalSlider& slider, const String& name, int /*min*/, int /*max*/, int /*defaultValue*/) {
     std::cout << "[VoiceEditorPanel] setupOperatorSlider called for '" << name << "'" << std::endl;
     double minValue = 0.0, maxValue = 99.0, defaultValue = 0.0;
     double step = 1.0;
@@ -1258,7 +1254,7 @@ void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
 // Build this dynamically from VCED.json
 std::map<juce::String, uint8_t> VoiceEditorPanel::operatorSliderParamOffsets;
 
-void VoiceEditorPanel::syncOperatorSliderWithDexed(juce::Slider& slider, uint8_t paramAddress, const char* sliderKey)
+void VoiceEditorPanel::syncOperatorSliderWithDexed(FMRackVerticalSlider& slider, uint8_t paramAddress, const char* sliderKey)
 {
     uint8_t value = getDexedParam(paramAddress);
     auto range = getDexedRange(sliderKey);

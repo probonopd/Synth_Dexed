@@ -47,7 +47,7 @@ class FMRackVerticalSlider : public juce::Slider
         }
     };
 
-    static TealLineLookAndFeel tealLookAndFeel;
+    inline static TealLineLookAndFeel tealLookAndFeel;
 
 public:
     explicit FMRackVerticalSlider()

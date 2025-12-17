@@ -5,12 +5,13 @@
 #include "VoiceBrowserComponent.h"
 #include "BinaryData.h"
 #include <iostream> // For logging
+#include "FMRackVerticalSlider.h"
 
 namespace
 {
     struct SliderLabelPair
     {
-        juce::Slider* slider = nullptr;
+        FMRackVerticalSlider* slider = nullptr;
         juce::Label* label = nullptr;
     };
 
@@ -18,46 +19,8 @@ namespace
     constexpr int kVerticalSliderWidth = 40;
     constexpr int kVerticalSliderLabelHeight = 16;
 
-    void layoutRotarySliderGrid(const juce::Rectangle<int>& area,
-                                const std::initializer_list<SliderLabelPair>& controls,
-                                int columns,
-                                int sliderSize,
-                                int rowGap,
-                                int columnGap)
-    {
-        if (controls.size() == 0 || columns <= 0)
-            return;
-
-        const int totalControls = static_cast<int>(controls.size());
-        const int rows = (totalControls + columns - 1) / columns;
-
-        const int totalWidth = columns * sliderSize + (columns - 1) * columnGap;
-        const int totalHeight = rows * (sliderSize + kRotaryLabelHeight) + (rows - 1) * rowGap;
-
-        const int startX = area.getX() + juce::jmax(0, (area.getWidth() - totalWidth) / 2);
-        const int startY = area.getY() + juce::jmax(0, (area.getHeight() - totalHeight) / 2);
-
-        int index = 0;
-        for (auto control : controls)
-        {
-            const int row = index / columns;
-            const int column = index % columns;
-
-            const int x = startX + column * (sliderSize + columnGap);
-            const int y = startY + row * (sliderSize + kRotaryLabelHeight + rowGap);
-
-            if (control.slider != nullptr)
-                control.slider->setBounds(x, y, sliderSize, sliderSize);
-
-            if (control.label != nullptr)
-            {
-                control.label->setJustificationType(juce::Justification::centred);
-                control.label->setBounds(x, y + sliderSize, sliderSize, kRotaryLabelHeight);
-            }
-
-            ++index;
-        }
-    }
+    // layoutRotarySliderGrid removed — rotary sliders are no longer used. Kept SliderLabelPair
+    // and layoutVerticalSliderGrid for vertical-only sliders.
 
     void layoutVerticalSliderGrid(const juce::Rectangle<int>& area,
                                   const std::initializer_list<SliderLabelPair>& controls,

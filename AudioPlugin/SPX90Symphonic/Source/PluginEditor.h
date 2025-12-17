@@ -11,6 +11,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "../../Source/FMRackVerticalSlider.h"
 
 //==============================================================================
 class SPX90SymphonicAudioProcessorEditor : public juce::AudioProcessorEditor
@@ -29,10 +30,10 @@ private:
     // Bypass toggle
     juce::ToggleButton bypassButton{ "Bypass" };
 
-    // Simple knob-style controls
-    juce::Slider mixSlider;
-    juce::Slider depthSlider;
-    juce::Slider speedSlider;
+  // Simple knob-style controls (use unified FMRackVerticalSlider)
+  FMRackVerticalSlider mixSlider;
+  FMRackVerticalSlider depthSlider;
+  FMRackVerticalSlider speedSlider;
 
     juce::Label mixLabel;
     juce::Label depthLabel;

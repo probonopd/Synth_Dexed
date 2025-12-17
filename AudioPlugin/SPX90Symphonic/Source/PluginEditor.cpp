@@ -26,28 +26,28 @@ SPX90SymphonicAudioProcessorEditor::SPX90SymphonicAudioProcessorEditor(SPX90Symp
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processorRef.getParameters(), "bypass", bypassButton);
 
-    // Helper lambda to set up rotary sliders
-    auto setupSlider = [this](juce::Slider& slider, juce::Label& label,
-                               const juce::String& labelText, const juce::String& paramID,
-                               std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment>& attachment)
-    {
-        slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-        slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 18);
-        addAndMakeVisible(slider);
+    // Use unified FMRackVerticalSlider instances and attach them to parameters
 
-        label.setText(labelText, juce::dontSendNotification);
-        label.setFont(juce::Font(juce::FontOptions(12.0f)));
-        label.setJustificationType(juce::Justification::centred);
-        label.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-        addAndMakeVisible(label);
+    // Speed (MOD FREQ)
+    speedLabel.setText("MOD FREQ", juce::dontSendNotification);
+    addAndMakeVisible(speedLabel);
+    addAndMakeVisible(speedSlider);
+    speedAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processorRef.getParameters(), "speed", speedSlider);
 
-        attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-            processorRef.getParameters(), paramID, slider);
-    };
+    // Depth (MOD DEPTH)
+    depthLabel.setText("MOD DEPTH", juce::dontSendNotification);
+    addAndMakeVisible(depthLabel);
+    addAndMakeVisible(depthSlider);
+    depthAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processorRef.getParameters(), "depth", depthSlider);
 
-    setupSlider(speedSlider, speedLabel, "MOD FREQ", "speed", speedAttachment);
-    setupSlider(depthSlider, depthLabel, "MOD DEPTH", "depth", depthAttachment);
-    setupSlider(mixSlider, mixLabel, "BALANCE", "mix", mixAttachment);
+    // Mix (BALANCE)
+    mixLabel.setText("BALANCE", juce::dontSendNotification);
+    addAndMakeVisible(mixLabel);
+    addAndMakeVisible(mixSlider);
+    mixAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        processorRef.getParameters(), "mix", mixSlider);
 
     // Set editor size
     setSize(300, 220);

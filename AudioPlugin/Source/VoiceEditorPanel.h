@@ -108,7 +108,7 @@ public:
     static std::map<juce::String, uint8_t> operatorSliderParamOffsets;
 
     void loadAlgorithmSvg(int algorithmIdx);
-    void setupOperatorSlider(juce::Slider& slider, const juce::String& name, int min, int max, int defaultValue);
+    void setupOperatorSlider(FMRackVerticalSlider& slider, const juce::String& name, int min, int max, int defaultValue);
     void loadHelpJson();
 
     // Returns true if the given operator is a carrier for the current algorithm
@@ -119,7 +119,7 @@ public:
     std::vector<int> getCarrierIndicesForAlgorithm(int algoIdx) const;
 
     // Synchronize slider value with Dexed engine, using sliderKey for range
-    void syncOperatorSliderWithDexed(juce::Slider& slider, uint8_t paramAddress, const char* sliderKey);
+    void syncOperatorSliderWithDexed(FMRackVerticalSlider& slider, uint8_t paramAddress, const char* sliderKey);
     // Synchronize all operator sliders with Dexed engine (call after loading a new performance)
     void syncAllOperatorSlidersWithDexed();
 

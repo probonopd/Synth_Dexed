@@ -10,6 +10,7 @@
 #include <initializer_list>
 #include "../../src/FMRack/VoiceData.h" // NEW: Include VoiceData for conversion function
 #include <juce_gui_extra/juce_gui_extra.h>
+#include "FMRackVerticalSlider.h"
 
 
 
@@ -23,7 +24,7 @@ namespace
 
     struct SliderLabelPair
     {
-        juce::Slider* slider = nullptr;
+        FMRackVerticalSlider* slider = nullptr;
         juce::Label* label = nullptr;
     };
 
@@ -891,8 +892,12 @@ void ModuleTabComponent::resized()
     // === ROW 1: Voice | Main | Filter | Portamento & Mono ===
     auto row1 = area.removeFromTop(rowHeight);
     
-    // Voice group (buttons) - fixed width
-    const int voiceWidth = 150;
+    // Voice group (buttons) - compute minimal width based on button count
+    const int buttonCount = 3;
+    const int buttonSpacing = 2;
+    const int minButtonWidth = 60; // smallest comfortable button width
+    const int voiceContentWidth = buttonCount * minButtonWidth + buttonSpacing * (buttonCount - 1);
+    const int voiceWidth = juce::jmax(voiceContentWidth + 2 * kContentPadding, 110);
     auto voiceArea = row1.removeFromLeft(voiceWidth);
     voiceGroup.setBounds(voiceArea);
     auto voiceContent = makeGroupContentBounds(voiceArea, buttonHeight);
@@ -911,13 +916,59 @@ void ModuleTabComponent::resized()
     }
     row1.removeFromLeft(groupGap);
 
-    // Calculate remaining space for Main, Filter, PortaMono
-    const int portaMonoWidth = 110;
-    const int filterWidth = 100;
-    const int mainWidth = row1.getWidth() - filterWidth - portaMonoWidth - groupGap * 2;
+    // Calculate minimal widths for Main, Filter, PortaMono based on contained controls
+    auto computeSliderGroupMin = [&](int sliderCount, int gap)->int {
+        const int sliderW = kMinSliderWidth; // matches layoutLabeledSliderRow
+        const int contentW = sliderCount * sliderW + gap * juce::jmax(0, sliderCount - 1);
+        return contentW + 2 * kContentPadding;
+    };
+
+    const int mainMin = computeSliderGroupMin(4, controlGap); // Vol, Pan, Fine, Rvb
+    const int filterMin = computeSliderGroupMin(2, controlGap); // Cut, Res
+    const int portaMonoMin = juce::jmax(computeSliderGroupMin(1, controlGap), 110); // Time + toggles
+
+    // Available width remaining after voice and the gap we already removed above
+    int remaining = row1.getWidth();
+    // We'll subtract group gaps between the three groups (main, filter, porta)
+    // There are two gaps between these three groups.
+    const int gapsTotal = groupGap * 2;
+    remaining -= gapsTotal;
+
+    // Start with minimal sizes
+    int mainW = mainMin;
+    int filterW = filterMin;
+    int portaW = portaMonoMin;
+
+    int sumMin = mainW + filterW + portaW;
+    // If we have extra space, expand main first, then others. If not enough, shrink proportionally but not below a floor.
+    const int minFloor = 2 * kContentPadding + kMinSliderWidth; // very smallest allowed
+    if (sumMin <= remaining) {
+        int extra = remaining - sumMin;
+        // Give most extra to main, then filter, then porta
+        int giveMain = extra * 60 / 100;
+        int giveFilter = extra * 25 / 100;
+        int givePorta = extra - giveMain - giveFilter;
+        mainW += giveMain;
+        filterW += giveFilter;
+        portaW += givePorta;
+    } else {
+        // Need to shrink. Compute proportional shrink but respect minFloor
+        float scale = (float)remaining / (float)sumMin;
+        mainW = juce::jmax(minFloor, (int)std::floor(mainW * scale));
+        filterW = juce::jmax(minFloor, (int)std::floor(filterW * scale));
+        portaW = juce::jmax(minFloor, (int)std::floor(portaW * scale));
+        // If rounding caused us to still exceed remaining, trim from main
+        int adjustedSum = mainW + filterW + portaW;
+        while (adjustedSum > remaining) {
+            if (mainW > minFloor) { mainW--; }
+            else if (filterW > minFloor) { filterW--; }
+            else if (portaW > minFloor) { portaW--; }
+            adjustedSum = mainW + filterW + portaW;
+        }
+    }
 
     // Main group (Vol, Pan, Fine, Reverb)
-    auto mainArea = row1.removeFromLeft(mainWidth);
+    auto mainArea = row1.removeFromLeft(mainW);
     mainPartGroup.setBounds(mainArea);
     auto mainContent = makeGroupContentBounds(mainArea, sliderRowHeight);
     layoutLabeledSliderRow(mainContent.withHeight(sliderHeight),
@@ -926,7 +977,7 @@ void ModuleTabComponent::resized()
     row1.removeFromLeft(groupGap);
 
     // Filter group
-    auto filterArea = row1.removeFromLeft(filterWidth);
+    auto filterArea = row1.removeFromLeft(filterW);
     filterGroup.setBounds(filterArea);
     auto filterContent = makeGroupContentBounds(filterArea, sliderRowHeight);
     // Toggle at top
@@ -975,13 +1026,46 @@ void ModuleTabComponent::resized()
 
     // === ROW 2: Unison | Note Range | MIDI & Pitch (3 sections now) ===
     auto row2 = area;
-    
-    // Calculate widths for 3 sections
-    const int totalWidth = row2.getWidth();
-    const int sectionWidth = (totalWidth - groupGap * 2) / 3;
 
-    // Unison group
-    auto unisonArea = row2.removeFromLeft(sectionWidth);
+    // Compute minimal widths for the three groups
+    const int unisonMin = computeSliderGroupMin(3, controlGap);
+    const int noteRangeMin = computeSliderGroupMin(3, controlGap);
+    const int midiPitchMin = computeSliderGroupMin(4, controlGap);
+
+    int avail2 = row2.getWidth();
+    const int gapsRow2 = groupGap * 2; // two gaps between three groups
+    avail2 -= gapsRow2;
+
+    int uW = unisonMin;
+    int nW = noteRangeMin;
+    int mW = midiPitchMin;
+    int sum2 = uW + nW + mW;
+    if (sum2 <= avail2) {
+        int extra = avail2 - sum2;
+        // Give most extra to MIDI, then split the rest
+        int giveMidi = extra * 60 / 100;
+        int giveUnison = extra * 20 / 100;
+        int giveNote = extra - giveMidi - giveUnison;
+        mW += giveMidi;
+        uW += giveUnison;
+        nW += giveNote;
+    } else {
+        float scale = (float)avail2 / (float)sum2;
+        const int floorW = 2 * kContentPadding + kMinSliderWidth;
+        uW = juce::jmax(floorW, (int)std::floor(uW * scale));
+        nW = juce::jmax(floorW, (int)std::floor(nW * scale));
+        mW = juce::jmax(floorW, (int)std::floor(mW * scale));
+        int adjusted = uW + nW + mW;
+        while (adjusted > avail2) {
+            if (mW > floorW) { mW--; }
+            else if (uW > floorW) { uW--; }
+            else if (nW > floorW) { nW--; }
+            adjusted = uW + nW + mW;
+        }
+    }
+
+    // Place the three groups
+    auto unisonArea = row2.removeFromLeft(uW);
     unisonGroup.setBounds(unisonArea);
     auto unisonContent = makeGroupContentBounds(unisonArea, sliderRowHeight);
     layoutLabeledSliderRow(unisonContent.withHeight(sliderHeight),
@@ -989,8 +1073,7 @@ void ModuleTabComponent::resized()
                           sliderHeight, controlGap);
     row2.removeFromLeft(groupGap);
 
-    // Note Range group
-    auto noteRangeArea = row2.removeFromLeft(sectionWidth);
+    auto noteRangeArea = row2.removeFromLeft(nW);
     noteRangeGroup.setBounds(noteRangeArea);
     auto noteRangeContent = makeGroupContentBounds(noteRangeArea, sliderRowHeight);
     layoutLabeledSliderRow(noteRangeContent.withHeight(sliderHeight),
@@ -998,8 +1081,7 @@ void ModuleTabComponent::resized()
                           sliderHeight, controlGap);
     row2.removeFromLeft(groupGap);
 
-    // MIDI & Pitch group (takes remaining space)
-    auto midiPitchArea = row2;
+    auto midiPitchArea = row2.removeFromLeft(mW);
     midiPitchGroup.setBounds(midiPitchArea);
     auto midiPitchContent = makeGroupContentBounds(midiPitchArea, sliderRowHeight);
     layoutLabeledSliderRow(midiPitchContent.withHeight(sliderHeight),
