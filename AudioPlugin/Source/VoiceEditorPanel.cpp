@@ -1307,8 +1307,10 @@ void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
         return;
     }
     // Use thread-safe method instead of bypassing the mutex
+    // Also send MIDI output using the selected channel
     if (controller) {
-        controller->setDexedParamForModule(moduleIndex, address, value);
+        int midiChannel = channelSelector.getSelectedId();
+        controller->setDexedParamForModuleWithMidi(moduleIndex, address, value, midiChannel);
     }
 }
 

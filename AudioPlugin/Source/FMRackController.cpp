@@ -378,6 +378,42 @@ void FMRackController::setDexedParamForModule(int moduleIndex, uint8_t address, 
     dexed->doRefreshVoice();
 }
 
+void FMRackController::setDexedParamForModuleWithMidi(int moduleIndex, uint8_t address, uint8_t value, int midiChannel)
+{
+    // First, set the parameter internally
+    setDexedParamForModule(moduleIndex, address, value);
+    
+    // Then queue a DX7 parameter change SysEx message
+    // DX7 Parameter Change format: F0 43 1n pp vv F7
+    // n = MIDI channel (0-15), pp = parameter number (0-155), vv = value (0-127 for most, but we'll clamp it)
+    uint8_t channelNibble = static_cast<uint8_t>((midiChannel - 1) & 0x0F);
+    
+    // Create the SysEx data (JUCE will add F0 and F7 automatically)
+    uint8_t sysexData[] = {
+        0x43,                           // Yamaha manufacturer ID
+        static_cast<uint8_t>(0x10 | channelNibble),  // Sub-status + channel
+        address,                        // Parameter number
+        static_cast<uint8_t>(value & 0x7F)   // Parameter value (clamped to 7 bits)
+    };
+    
+    auto sysexMessage = juce::MidiMessage::createSysExMessage(sysexData, sizeof(sysexData));
+    
+    {
+        std::lock_guard<std::mutex> midiLock(midiOutputMutex);
+        midiOutputQueue.push(sysexMessage);
+        std::cout << "[FMRackController] *** QUEUED MIDI SysEx *** param=" << (int)address 
+                  << " value=" << (int)value << " channel=" << midiChannel 
+                  << " queueSize=" << midiOutputQueue.size() << std::endl;
+        
+        // Debug: print the actual SysEx bytes
+        std::cout << "[FMRackController] SysEx bytes: ";
+        for (int i = 0; i < sysexMessage.getRawDataSize(); i++) {
+            printf("%02X ", sysexMessage.getRawData()[i]);
+        }
+        std::cout << std::endl;
+    }
+}
+
 juce::String FMRackController::getVoiceNameForModule(int moduleIndex) const
 {
     std::lock_guard<std::mutex> lock(mutex);
@@ -440,11 +476,26 @@ void FMRackController::requestSingleVoiceDump(int midiChannel) {
     }
 }
 
-void FMRackController::onSingleVoiceDumpReceived(const uint8_t* data, int len) {
-    // NOTE: All std::cout logging removed - this function is called from audio thread
-    // Handle incoming MIDI/SysEx here
-    (void)data;
-    (void)len;
+void FMRackController::applyVoiceDumpToModule(int moduleIndex, const uint8_t* voiceData, int len) {
+    // Apply a DX7 voice dump to a specific module
+    // This is called from the audio thread, so minimal processing
+    if (len != 156) return;  // Must be exactly 156 bytes (155 params + checksum)
+    
+    std::lock_guard<std::mutex> lock(mutex);
+    if (!rack) return;
+    const auto& modules = rack->getModules();
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules.size())) return;
+    
+    auto* dexed = modules[moduleIndex]->getDexedEngine();
+    if (!dexed) return;
+    
+    // Apply all 156 voice parameters (the last byte is typically ignored/checksum)
+    for (int i = 0; i < 155; i++) {
+        dexed->setVoiceDataElement(static_cast<uint8_t>(i), voiceData[i]);
+    }
+    
+    // Refresh the voice to apply changes
+    dexed->doRefreshVoice();
 }
 
 void FMRackController::setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData) {
@@ -490,4 +541,19 @@ std::mutex& FMRackController::getMutex() { return mutex; }
 void FMRackController::setOscilloscope(OscilloscopeComponent* osc)
 {
     oscilloscope = osc;
+}
+
+void FMRackController::flushMidiOutputQueue(juce::MidiBuffer& midiMessages)
+{
+    std::lock_guard<std::mutex> lock(midiOutputMutex);
+    int flushedCount = 0;
+    while (!midiOutputQueue.empty()) {
+        const auto& msg = midiOutputQueue.front();
+        midiMessages.addEvent(msg, 0);
+        midiOutputQueue.pop();
+        flushedCount++;
+    }
+    if (flushedCount > 0) {
+        std::cout << "[FMRackController] *** FLUSHED " << flushedCount << " MIDI messages to output ***" << std::endl;
+    }
 }

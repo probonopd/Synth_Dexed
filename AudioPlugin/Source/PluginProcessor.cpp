@@ -356,12 +356,44 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
                                           msg.getRawDataSize() > 1 ? msg.getRawData()[1] : 0,
                                           msg.getRawDataSize() > 2 ? msg.getRawData()[2] : 0);
         }
-        // Handle incoming SysEx: DX7 single voice dump (163 bytes)
-        // NOTE: No vector allocation here - pass pointer+length directly
-        if (msg.isSysEx() && msg.getSysExDataSize() == 163) {
+        
+        // Handle incoming SysEx messages
+        if (msg.isSysEx()) {
             const uint8_t* data = msg.getSysExData();
-            if (data[0] == 0xF0 && data[1] == 0x43 && data[5] == 0x1B) {
-                controller->onSingleVoiceDumpReceived(data, 163);
+            const int sysexSize = msg.getSysExDataSize();
+            
+            // DX7 Parameter Change: F0 43 1n pp vv F7 (6 bytes total, getSysExData excludes F0/F7)
+            // So we get: 43 1n pp vv (4 bytes)
+            if (sysexSize == 4 && data[0] == 0x43 && (data[1] & 0xF0) == 0x10) {
+                // Extract channel, parameter, and value
+                uint8_t channel = (data[1] & 0x0F) + 1;  // Convert 0-15 to 1-16
+                uint8_t param = data[2];
+                uint8_t value = data[3] & 0x7F;
+                
+                // Apply to all modules on this MIDI channel
+                // (In a real scenario, you might want to route to specific modules based on channel)
+                for (int i = 0; i < controller->getNumModules(); i++) {
+                    auto* module = controller->getModule(i);
+                    if (module && module->getMIDIChannel() == channel) {
+                        controller->setDexedParamForModule(i, param, value);
+                    }
+                }
+            }
+            // DX7 single voice dump: F0 43 0n 00 01 1B <155 voice bytes> <checksum> F7
+            // getSysExData() excludes F0/F7, so we check: 43 0n 00 01 1B... (161 bytes)
+            else if (sysexSize == 161 && data[0] == 0x43 && (data[1] & 0xF0) == 0x00 && 
+                     data[2] == 0x00 && data[3] == 0x01 && data[4] == 0x1B) {
+                // Extract MIDI channel from second byte
+                uint8_t channel = (data[1] & 0x0F) + 1;
+                
+                // Apply to all modules on this MIDI channel
+                for (int i = 0; i < controller->getNumModules(); i++) {
+                    auto* module = controller->getModule(i);
+                    if (module && module->getMIDIChannel() == channel) {
+                        // Voice data starts at byte 5 (after header)
+                        controller->applyVoiceDumpToModule(i, data + 5, 156);
+                    }
+                }
             }
         }
     }
@@ -380,6 +412,10 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
 
     // Process audio
     controller->processAudio(audioBufferLeft.data(), audioBufferRight.data(), numSamples);
+
+    // Flush any queued MIDI output messages (e.g., parameter changes to external DX7)
+    // Always flush MIDI output regardless of build flag (the plugin is configured with NEEDS_MIDI_OUTPUT TRUE)
+    controller->flushMidiOutputQueue(midiMessages);
 
     // Copy to output buffer
     for (int ch = 0; ch < totalNumOutputChannels; ++ch) {

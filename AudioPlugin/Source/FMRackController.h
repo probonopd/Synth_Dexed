@@ -1,10 +1,12 @@
 #pragma once
 
 #include <juce_core/juce_core.h>
+#include <juce_audio_basics/juce_audio_basics.h>
 #include <memory>
 #include <mutex>
 #include <atomic>
 #include <array>
+#include <queue>
 #include "../src/FMRack/Rack.h"
 #include "../src/FMRack/Performance.h"
 
@@ -51,6 +53,8 @@ public:
     // Thread-safe Dexed parameter access by module index
     uint8_t getDexedParamForModule(int moduleIndex, uint8_t address) const;
     void setDexedParamForModule(int moduleIndex, uint8_t address, uint8_t value);
+    // Set a Dexed parameter and also queue a MIDI output message (for sending to external DX7)
+    void setDexedParamForModuleWithMidi(int moduleIndex, uint8_t address, uint8_t value, int midiChannel);
     
     // Thread-safe voice name access
     juce::String getVoiceNameForModule(int moduleIndex) const;
@@ -62,9 +66,9 @@ public:
 
     // Request a DX7 single voice dump from the given MIDI channel (1-16)
     void requestSingleVoiceDump(int midiChannel);
-    // This function should be called by the MIDI/SysEx receive path when a single voice dump is received
-    // NOTE: Uses pointer+length to avoid heap allocation in audio thread
-    void onSingleVoiceDumpReceived(const uint8_t* data, int len);
+    
+    // Apply a DX7 voice dump to a specific module (called from audio thread)
+    void applyVoiceDumpToModule(int moduleIndex, const uint8_t* voiceData, int len);
 
     // Voice data management
     void setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData);
@@ -80,6 +84,9 @@ public:
     void setOscilloscope(OscilloscopeComponent* osc);
     OscilloscopeComponent* getOscilloscope() const { return oscilloscope; }
 
+    // MIDI output queue: retrieve queued MIDI messages and add to output buffer
+    void flushMidiOutputQueue(juce::MidiBuffer& midiMessages);
+
 private:
     std::unique_ptr<FMRack::Rack> rack;
     std::unique_ptr<FMRack::Performance> performance;
@@ -87,4 +94,8 @@ private:
     
     // Oscilloscope pointer (not owned, just a reference)
     OscilloscopeComponent* oscilloscope = nullptr;
+    
+    // MIDI output queue for parameter changes
+    mutable std::mutex midiOutputMutex;
+    std::queue<juce::MidiMessage> midiOutputQueue;
 };
