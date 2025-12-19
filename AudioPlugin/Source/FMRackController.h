@@ -3,8 +3,13 @@
 #include <juce_core/juce_core.h>
 #include <memory>
 #include <mutex>
+#include <atomic>
+#include <array>
 #include "../src/FMRack/Rack.h"
 #include "../src/FMRack/Performance.h"
+
+// Forward declaration
+class OscilloscopeComponent;
 
 // FMRackController mediates all access between the JUCE UI and the FMRack backend.
 // It exposes high-level methods for UI interaction and ensures thread safety.
@@ -71,8 +76,15 @@ public:
     // UI update callback
     std::function<void()> onModulesChanged;
 
+    // Oscilloscope support: register an oscilloscope to receive audio samples
+    void setOscilloscope(OscilloscopeComponent* osc);
+    OscilloscopeComponent* getOscilloscope() const { return oscilloscope; }
+
 private:
     std::unique_ptr<FMRack::Rack> rack;
     std::unique_ptr<FMRack::Performance> performance;
     mutable std::mutex mutex;
+    
+    // Oscilloscope pointer (not owned, just a reference)
+    OscilloscopeComponent* oscilloscope = nullptr;
 };

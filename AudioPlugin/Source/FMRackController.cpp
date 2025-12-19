@@ -1,4 +1,5 @@
 #include "FMRackController.h"
+#include "OscilloscopeComponent.h"
 #include <iostream>
 #include <atomic>
 #include <fstream>
@@ -207,6 +208,16 @@ void FMRackController::processAudio(float* leftOut, float* rightOut, int numSamp
     std::lock_guard<std::mutex> lock(mutex);
     if (rack) {
         rack->processAudio(leftOut, rightOut, numSamples);
+        
+        // Push samples to oscilloscope (mix L+R to mono for display)
+        if (oscilloscope && leftOut && rightOut) {
+            // Create a temporary buffer for mono mix
+            std::vector<float> monoBuffer(numSamples);
+            for (int i = 0; i < numSamples; ++i) {
+                monoBuffer[i] = (leftOut[i] + rightOut[i]) * 0.5f;
+            }
+            oscilloscope->pushSamples(monoBuffer.data(), numSamples);
+        }
     } else {
         // Clear output if no rack
         if (leftOut) std::memset(leftOut, 0, numSamples * sizeof(float));
@@ -453,3 +464,8 @@ void FMRackController::getModuleOutputLevelsExtended(int moduleIndex, float& l, 
 }
 
 std::mutex& FMRackController::getMutex() { return mutex; }
+
+void FMRackController::setOscilloscope(OscilloscopeComponent* osc)
+{
+    oscilloscope = osc;
+}

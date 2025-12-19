@@ -144,6 +144,10 @@ VoiceEditorPanel::VoiceEditorPanel()
         // pegEnvelopeLabel.setText("Pitch Envelope Generator", juce::dontSendNotification);
         // addAndMakeVisible(pegEnvelopeLabel); // REMOVE LABEL
         addAndMakeVisible(pegEnvelopeWidget);
+        
+        // Oscilloscope for waveform display
+        addAndMakeVisible(oscilloscope);
+        oscilloscope.start();  // Start the timer for updates
 
         algorithmSelector.onChange = [this]() {
             try {
@@ -195,6 +199,12 @@ VoiceEditorPanel::VoiceEditorPanel()
 
 VoiceEditorPanel::~VoiceEditorPanel() {
     removeKeyListener(this);
+    oscilloscope.stop();  // Stop the oscilloscope timer
+    
+    // Unregister oscilloscope from controller
+    if (controller) {
+        controller->setOscilloscope(nullptr);
+    }
     // unique_ptr automatically handles cleanup
 }
 
@@ -370,13 +380,26 @@ void VoiceEditorPanel::resized() {
         
         // PEG widget below the global sliders
         int pegY = y + sliderHeight + vGap * 2;
-        int pegHeight = globalContent.getBottom() - pegY;
-        if (pegHeight > 50) {
+        int remainingHeight = globalContent.getBottom() - pegY;
+        
+        // Split remaining space between PEG widget and oscilloscope
+        int pegHeight = remainingHeight / 2 - vGap;
+        int oscY = pegY + pegHeight + vGap * 2;
+        int oscHeight = globalContent.getBottom() - oscY;
+        
+        if (pegHeight > 40) {
             pegAreaBounds = juce::Rectangle<int>(globalContent.getX(), pegY, globalContent.getWidth(), pegHeight);
             pegEnvelopeWidget.setBounds(pegAreaBounds.reduced(2));
         } else {
             pegAreaBounds = {};
             pegEnvelopeWidget.setBounds({});
+        }
+        
+        // Oscilloscope at the bottom right
+        if (oscHeight > 40) {
+            oscilloscope.setBounds(globalContent.getX() + 2, oscY, globalContent.getWidth() - 4, oscHeight - 4);
+        } else {
+            oscilloscope.setBounds({});
         }
     }
 
@@ -884,24 +907,31 @@ VoiceEditorPanel::OperatorSliders::OperatorSliders()
     opeButton.onClick = [this]()
     {
         if (auto* parent = dynamic_cast<VoiceEditorPanel*>(getParentComponent())) {
-            if (!parent->isInitialized)
+            if (!parent->isInitialized) {
+                std::cout << "[OperatorSliders] OPE button clicked but parent not initialized" << std::endl;
                 return;
+            }
             const uint8_t opeAddr = static_cast<uint8_t>(155);
             uint8_t mask = parent->getDexedParam(opeAddr);
             // Convert UI operatorIndex to Dexed bit position
             const int dexedOpIdx = 5 - operatorIndex;
             const uint8_t bit = static_cast<uint8_t>(1u << dexedOpIdx);
-            if (opeButton.getToggleState())
+            const bool newState = opeButton.getToggleState();
+            if (newState)
                 mask = static_cast<uint8_t>(mask | bit);
             else
                 mask = static_cast<uint8_t>(mask & ~bit);
+            std::cout << "[OperatorSliders] OPE OP" << (operatorIndex + 1) << " clicked: newState=" << newState << " mask=0x" << std::hex << static_cast<int>(mask) << std::dec << std::endl;
             parent->setDexedParam(opeAddr, mask);
+        } else {
+            std::cout << "[OperatorSliders] OPE button clicked but parent is null" << std::endl;
         }
     };
 
     // PM is per-operator, binary (0=ratio, 1=fixed).
     pmButton.onClick = [this, sendOperatorParam]()
     {
+        std::cout << "[OperatorSliders] PM OP" << (operatorIndex + 1) << " clicked: newState=" << pmButton.getToggleState() << std::endl;
         sendOperatorParam(VoiceEditorPanel::OperatorSliders::sliderNames[PM], pmButton.getToggleState() ? 1u : 0u);
     };
 
@@ -1140,6 +1170,13 @@ std::pair<uint8_t, uint8_t> VoiceEditorPanel::getDexedRange(const char* sliderKe
 void VoiceEditorPanel::setController(FMRackController* controller_) {
     std::cout << "[VoiceEditorPanel::setController] called with controller_=" << controller_ << std::endl;
     controller = controller_;
+    
+    // Register oscilloscope with controller to receive audio samples
+    if (controller) {
+        controller->setOscilloscope(&oscilloscope);
+        oscilloscope.setController(controller);
+    }
+    
     initializeIfReady();
 }
 

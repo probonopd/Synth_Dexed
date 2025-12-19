@@ -68,6 +68,7 @@ set(SourceFiles
     Source/EnvelopeDisplay.cpp
     Source/KeyboardScalingDisplay.cpp
     Source/FMRackController.cpp
+    Source/OscilloscopeComponent.cpp
 
     Source/VoiceBrowserComponent.cpp
 

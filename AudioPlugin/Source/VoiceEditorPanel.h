@@ -2,6 +2,7 @@
 #include "FMRackLabeledVerticalSlider.h" // New labeled slider class
 #include "EnvelopeDisplay.h"
 #include "KeyboardScalingDisplay.h"
+#include "OscilloscopeComponent.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <map>
 #include "FMRackController.h"
@@ -155,6 +156,9 @@ public:
     // PEG Envelope widget
     EnvelopeDisplay pegEnvelopeWidget;
     juce::Label pegEnvelopeLabel;
+    
+    // Oscilloscope widget for waveform display
+    OscilloscopeComponent oscilloscope;
 
     // Cached layout metrics for consistent component sizing
     juce::Rectangle<int> operatorAreaBounds;
