@@ -125,6 +125,9 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         };        addAndMakeVisible(savePerformanceButton);
         savePerformanceButton.onClick = [this] { savePerformanceButtonClicked(); };
 
+        addAndMakeVisible(initButton);
+        initButton.onClick = [this] { initButtonClicked(); };
+
         addAndMakeVisible(addModuleButton);
         addModuleButton.onClick = [this]
         {
@@ -185,11 +188,17 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         };
 
     setupSlider(reverbSizeSlider, reverbSizeLabel, "Size", "reverbSize", reverbSizeAttachment);
+    reverbSizeSlider.setRange(0, 99, 1);
     setupSlider(reverbHighDampSlider, reverbHighDampLabel, "HiDamp", "reverbHighDamp", reverbHighDampAttachment);
+    reverbHighDampSlider.setRange(0, 99, 1);
     setupSlider(reverbLowDampSlider, reverbLowDampLabel, "LoDamp", "reverbLowDamp", reverbLowDampAttachment);
+    reverbLowDampSlider.setRange(0, 99, 1);
     setupSlider(reverbLowPassSlider, reverbLowPassLabel, "LoPass", "reverbLowPass", reverbLowPassAttachment);
+    reverbLowPassSlider.setRange(0, 99, 1);
     setupSlider(reverbDiffusionSlider, reverbDiffusionLabel, "Diff", "reverbDiffusion", reverbDiffusionAttachment);
+    reverbDiffusionSlider.setRange(0, 99, 1);
     setupSlider(reverbLevelSlider, reverbLevelLabel, "Level", "reverbLevel", reverbLevelAttachment);
+    reverbLevelSlider.setRange(0, 99, 1);
 
         // Load help JSON and set up help panel
         loadMainWindowHelpJson();
@@ -331,6 +340,7 @@ void AudioPluginAudioProcessorEditor::resized()
 
         // Scale button widths down gracefully if window is very small
         int largeButtonWidth = juce::jlimit(60, 160, topRow.getWidth() / 5);
+        const int mediumButtonWidth = juce::jlimit(40, 60, topRow.getWidth() / 8);
         const int smallButtonWidth = juce::jlimit(20, 28, topRow.getWidth() / 20);
 
         auto alignButton = [&](juce::Rectangle<int> area)
@@ -339,7 +349,18 @@ void AudioPluginAudioProcessorEditor::resized()
         };
 
         // Only add buttons if there's actually space for them
-        if (topRow.getWidth() > largeButtonWidth * 2 + controlGap * 3)
+        if (topRow.getWidth() > largeButtonWidth * 2 + mediumButtonWidth + controlGap * 4)
+        {
+            auto loadBounds = topRow.removeFromLeft(largeButtonWidth);
+            loadPerformanceButton.setBounds(alignButton(loadBounds));
+            topRow.removeFromLeft(controlGap);
+            auto saveBounds = topRow.removeFromLeft(largeButtonWidth);
+            savePerformanceButton.setBounds(alignButton(saveBounds));
+            topRow.removeFromLeft(controlGap);
+            auto initBounds = topRow.removeFromLeft(mediumButtonWidth);
+            initButton.setBounds(alignButton(initBounds));
+        }
+        else if (topRow.getWidth() > largeButtonWidth * 2 + controlGap * 3)
         {
             auto loadBounds = topRow.removeFromLeft(largeButtonWidth);
             loadPerformanceButton.setBounds(alignButton(loadBounds));
@@ -625,6 +646,53 @@ void AudioPluginAudioProcessorEditor::savePerformanceButtonClicked()
         },
         []() {
         });
+}
+
+void AudioPluginAudioProcessorEditor::initButtonClicked()
+{
+    try {
+        appendLogMessage("Initializing plugin to default state...");
+
+        // Create a new default performance and set it
+        if (auto* controller = processorRef.getController())
+        {
+            FMRack::Performance defaultPerformance;
+            defaultPerformance.setDefaults(1, 1); // 1 module, 1 voice each
+            controller->setPerformance(defaultPerformance);
+        }
+
+        // Set numModules parameter to match
+        if (auto* param = processorRef.treeState.getParameter("numModules"))
+        {
+            param->setValueNotifyingHost(param->convertTo0to1(1.0f));
+        }
+
+        // Set reverb to disabled but at maximum level
+        if (auto* param = processorRef.treeState.getParameter("reverbEnable"))
+        {
+            param->setValueNotifyingHost(0.0f); // Disable reverb
+        }
+        if (auto* param = processorRef.treeState.getParameter("reverbLevel"))
+        {
+            param->setValueNotifyingHost(1.0f); // Set to 99 (maximum level) - normalized value
+        }
+
+        // Force UI update to show only 1 tab
+        if (rackAccordion)
+        {
+            rackAccordion->updatePanels();
+        }
+
+        appendLogMessage("Plugin initialized to default state.");
+    }
+    catch (const std::exception& e) {
+        appendLogMessage("Exception during initialization: " + juce::String(e.what()));
+        juce::Logger::writeToLog("[PluginEditor] Exception in initButtonClicked: " + juce::String(e.what()));
+    }
+    catch (...) {
+        appendLogMessage("Unknown exception during initialization.");
+        juce::Logger::writeToLog("[PluginEditor] Unknown exception in initButtonClicked");
+    }
 }
 
 void AudioPluginAudioProcessorEditor::showVoiceBrowser(int /*moduleIndex*/)

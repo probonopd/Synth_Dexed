@@ -26,6 +26,42 @@ SPX90SymphonicAudioProcessorEditor::SPX90SymphonicAudioProcessorEditor(SPX90Symp
     bypassAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
         processorRef.getParameters(), "bypass", bypassButton);
 
+    // Set up control buttons
+    addAndMakeVisible(initButton);
+    addAndMakeVisible(incrementButton);
+    addAndMakeVisible(decrementButton);
+
+    // Init button resets all parameters to defaults
+    initButton.onClick = [this] {
+        processorRef.getParameters().getParameter("mix")->setValueNotifyingHost(
+            processorRef.getParameters().getParameter("mix")->convertTo0to1(100.0f));
+        processorRef.getParameters().getParameter("depth")->setValueNotifyingHost(
+            processorRef.getParameters().getParameter("depth")->convertTo0to1(50.0f));
+        processorRef.getParameters().getParameter("speed")->setValueNotifyingHost(
+            processorRef.getParameters().getParameter("speed")->convertTo0to1(0.7f));
+        processorRef.getParameters().getParameter("bypass")->setValueNotifyingHost(0.0f);
+    };
+
+    // Increment button increases current focused parameter
+    incrementButton.onClick = [this] {
+        // For now, increment the mix parameter as an example
+        // In a full implementation, you'd track which parameter is focused
+        auto* param = processorRef.getParameters().getParameter("mix");
+        float currentValue = param->getValue();
+        float newValue = juce::jmin(1.0f, currentValue + 0.01f); // Small increment
+        param->setValueNotifyingHost(newValue);
+    };
+
+    // Decrement button decreases current focused parameter
+    decrementButton.onClick = [this] {
+        // For now, decrement the mix parameter as an example
+        // In a full implementation, you'd track which parameter is focused
+        auto* param = processorRef.getParameters().getParameter("mix");
+        float currentValue = param->getValue();
+        float newValue = juce::jmax(0.0f, currentValue - 0.01f); // Small decrement
+        param->setValueNotifyingHost(newValue);
+    };
+
     // Use unified FMRackVerticalSlider instances and attach them to parameters
 
     // Speed (MOD FREQ)
@@ -50,7 +86,7 @@ SPX90SymphonicAudioProcessorEditor::SPX90SymphonicAudioProcessorEditor(SPX90Symp
         processorRef.getParameters(), "mix", mixSlider);
 
     // Set editor size
-    setSize(300, 220);
+    setSize(300, 260);
 }
 
 SPX90SymphonicAudioProcessorEditor::~SPX90SymphonicAudioProcessorEditor()
@@ -101,6 +137,20 @@ void SPX90SymphonicAudioProcessorEditor::resized()
     int mixX = depthX + knobSize + 10;
     mixLabel.setBounds(mixX, knobArea.getY(), knobSize, labelHeight);
     mixSlider.setBounds(mixX, knobArea.getY() + labelHeight, knobSize, knobSize);
+
+    // Control buttons below the knobs
+    bounds.removeFromTop(10);
+    auto buttonArea = bounds.removeFromTop(24);
+    
+    // Position buttons: Init | + | .
+    const int buttonWidth = 40;
+    const int buttonSpacing = 8;
+    const int totalButtonWidth = buttonWidth * 3 + buttonSpacing * 2;
+    const int buttonStartX = (bounds.getWidth() - totalButtonWidth) / 2;
+    
+    initButton.setBounds(buttonStartX, buttonArea.getY(), buttonWidth, 24);
+    incrementButton.setBounds(buttonStartX + buttonWidth + buttonSpacing, buttonArea.getY(), buttonWidth, 24);
+    decrementButton.setBounds(buttonStartX + (buttonWidth + buttonSpacing) * 2, buttonArea.getY(), buttonWidth, 24);
 
     // Bypass button at bottom
     bounds.removeFromTop(5);

@@ -67,9 +67,11 @@ private:
     juce::TextButton savePerformanceButton{ "Save As..." };
     juce::TextButton addModuleButton{ "+" };
     juce::TextButton removeModuleButton{ "-" };
+    juce::TextButton initButton{ "Init" };
 
     void loadPerformanceButtonClicked();
     void savePerformanceButtonClicked(); // NEW: Save handler
+    void initButtonClicked();
     
     void unisonVoicesChanged();
     void unisonDetuneChanged();

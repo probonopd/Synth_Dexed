@@ -10,7 +10,7 @@
 
 // VoiceEditorPanel: A panel for editing a single DX7 voice, styled after the classic DX7 UI.
 // Envelope and keyboard scaling widgets are placeholders for now.
-class VoiceEditorPanel : public juce::Component {
+class VoiceEditorPanel : public juce::Component, public juce::KeyListener {
 public:
     VoiceEditorPanel();
     ~VoiceEditorPanel() override;
@@ -23,6 +23,9 @@ public:
     // MouseListener overrides for global slider hover help
     void mouseEnter(const juce::MouseEvent&) override;
     void mouseExit(const juce::MouseEvent&) override;
+
+    // KeyListener override for ESC key handling
+    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
 
     // Set the controller pointer for backend access
     void setController(FMRackController* controller_);

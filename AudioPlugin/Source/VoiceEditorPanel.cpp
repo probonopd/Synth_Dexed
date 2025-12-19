@@ -160,7 +160,8 @@ VoiceEditorPanel::VoiceEditorPanel()
                 if (it2 != operatorSliderParamOffsets.end())
                     setDexedParam(it2->second, static_cast<uint8_t>(globalSliders[i].getSlider().getValue()));
             };
-            globalSliders[i].addMouseListener(this, false);
+            // Use true for wantsEventsForAllNestedChildComponents to receive events from child slider
+            globalSliders[i].addMouseListener(this, true);
         }
         // PEG Envelope
         // Remove the label and add only the widget
@@ -1040,7 +1041,9 @@ void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx)
 // --- VoiceEditorPanel hover help for global sliders ---
 void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
     for (int i = 0; i < numGlobalSliders; ++i) {
-        if (e.eventComponent == &globalSliders[i].getSlider()) {
+        // Check both the container component and the internal slider
+        if (e.eventComponent == &globalSliders[i] || 
+            e.eventComponent == &globalSliders[i].getSlider()) {
             showHelpForKey(globalSliderKeys[i]);
             return;
         }
@@ -1049,7 +1052,9 @@ void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
 
 void VoiceEditorPanel::mouseExit(const juce::MouseEvent& e) {
     for (int i = 0; i < numGlobalSliders; ++i) {
-        if (e.eventComponent == &globalSliders[i].getSlider()) {
+        // Check both the container component and the internal slider
+        if (e.eventComponent == &globalSliders[i] ||
+            e.eventComponent == &globalSliders[i].getSlider()) {
             restoreDefaultHelp();
             return;
         }

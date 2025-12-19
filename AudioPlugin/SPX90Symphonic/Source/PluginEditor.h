@@ -40,6 +40,11 @@ private:
     juce::Label speedLabel;
     juce::Label titleLabel;
 
+    // Control buttons
+    juce::TextButton initButton{ "Init" };
+    juce::TextButton incrementButton{ "+" };
+    juce::TextButton decrementButton{ "." };
+
     // Parameter attachments
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> mixAttachment;
