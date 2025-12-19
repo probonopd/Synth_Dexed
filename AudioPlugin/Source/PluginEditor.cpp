@@ -787,7 +787,7 @@ void AudioPluginAudioProcessorEditor::loadMainWindowHelpJson()
     if (json.hasProperty("defaultHelp"))
         defaultHelpText = json["defaultHelp"].toString();
 
-    // Parse controls array
+    // Parse controls array from MainWindowHelp.json
     if (auto* controls = json["controls"].getArray()) {
         for (auto& c : *controls) {
             auto* obj = c.getDynamicObject();
@@ -809,7 +809,39 @@ void AudioPluginAudioProcessorEditor::loadMainWindowHelpJson()
             helpTextByKey[keyStd] = hoverText.toStdString();
         }
     }
-    juce::Logger::writeToLog("[PluginEditor] Loaded " + juce::String((int)helpTextByKey.size()) + " help entries");
+    
+    // Load TX816Perf.json for performance parameters
+    auto* tx816Data = BinaryData::TX816Perf_json;
+    int tx816DataSize = BinaryData::TX816Perf_jsonSize;
+    juce::Logger::writeToLog("[PluginEditor] Loading TX816Perf.json from BinaryData");
+    juce::String tx816JsonStr = juce::String::fromUTF8(reinterpret_cast<const char*>(tx816Data), tx816DataSize);
+    var tx816Json = JSON::parse(tx816JsonStr);
+    if (tx816Json.isObject()) {
+        // Parse parameters array from TX816Perf.json
+        if (auto* params = tx816Json["parameters"].getArray()) {
+            for (auto& p : *params) {
+                auto* obj = p.getDynamicObject();
+                if (!obj || !obj->hasProperty("key"))
+                    continue;
+                auto keyStd = obj->getProperty("key").toString().toStdString();
+                juce::String name = obj->getProperty("long").toString();
+                if (name.isEmpty())
+                    name = obj->getProperty("short").toString();
+                juce::String desc = obj->getProperty("description").toString();
+
+                juce::String hoverText;
+                hoverText << name << "\n";
+                hoverText << "\n" << desc;
+
+                helpTextByKey[keyStd] = hoverText.toStdString();
+            }
+        }
+        juce::Logger::writeToLog("[PluginEditor] Loaded TX816Perf help entries");
+    } else {
+        juce::Logger::writeToLog("[PluginEditor] TX816Perf.json parse failed");
+    }
+    
+    juce::Logger::writeToLog("[PluginEditor] Loaded " + juce::String((int)helpTextByKey.size()) + " total help entries");
 }
 
 void AudioPluginAudioProcessorEditor::showHelpForKey(const juce::String& key)

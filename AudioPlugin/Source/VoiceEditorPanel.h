@@ -142,13 +142,14 @@ public:
     int getModuleIndex() const { return moduleIndex; }
 
     // --- Global (non-per-operator) controls ---
-    static constexpr int numGlobalSliders = 27;
-    static constexpr int numGlobalRows = 3;
+    // VCED voice parameters only (TX816Perf parameters are in Module tabs)
+    static constexpr int numGlobalSliders = 10;
+    static constexpr int numGlobalRows = 2;
     static constexpr const char* globalSliderKeys[numGlobalSliders] = {
-        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP", "SRC", "PMO", "PBR", "PBS", "PRT", "PGL", "PMD", "MWS", "MWA", "FCS", "FCA", "ATS", "ATA", "BCS", "BCA", "ATT", "MTU"
+        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP"
     };
     static constexpr const char* globalSliderLabels[numGlobalSliders] = {
-        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP", "SRC", "PMO", "PBR", "PBS", "PRT", "PGL", "PMD", "MWS", "MWA", "FCS", "FCA", "ATS", "ATA", "BCS", "BCA", "ATT", "MTU"    
+        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP"
     };
     std::array<FMRackLabeledVerticalSlider, numGlobalSliders> globalSliders;
     // PEG Envelope widget

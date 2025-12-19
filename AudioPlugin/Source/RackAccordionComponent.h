@@ -74,21 +74,35 @@ public:
     FMRackLabeledVerticalSlider noteLimitHighSlider;
     FMRackLabeledVerticalSlider noteShiftSlider;
 
-    // Pitch Bend
-    FMRackLabeledVerticalSlider pitchBendRangeSlider;
+    // Pitch Bend (TX816Perf: PBR, PBS)
+    FMRackLabeledVerticalSlider pitchBendRangeSlider;    // PBR
+    FMRackLabeledVerticalSlider pitchBendStepSlider;     // PBS
 
-    // Portamento
-    juce::ToggleButton portamentoModeButton;
+    // Portamento (TX816Perf: PRT, PGL, PMD)
+    juce::ToggleButton portamentoGlissandoButton;        // PGL
+    juce::Label portamentoGlissandoLabel;
+    FMRackLabeledVerticalSlider portamentoTimeSlider;    // PRT
+    juce::ToggleButton portamentoModeButton;             // PMD (Normal/Fingered)
     juce::Label portamentoModeLabel;
-    FMRackLabeledVerticalSlider portamentoTimeSlider;
 
-    // Mono Mode
-    juce::ToggleButton monoModeButton;
+    // Mono Mode (TX816Perf: PMO)
+    juce::ToggleButton monoModeButton;                   // PMO
     juce::Label monoModeLabel;
+    
+    // Controller Assignments (TX816Perf: MWS, MWA, FCS, FCA, ATS, ATA, BCS, BCA)
+    FMRackLabeledVerticalSlider modWheelSensSlider;      // MWS
+    FMRackLabeledVerticalSlider modWheelAssignSlider;    // MWA
+    FMRackLabeledVerticalSlider footCtrlSensSlider;      // FCS
+    FMRackLabeledVerticalSlider footCtrlAssignSlider;    // FCA
+    FMRackLabeledVerticalSlider afterTouchSensSlider;    // ATS
+    FMRackLabeledVerticalSlider afterTouchAssignSlider;  // ATA
+    FMRackLabeledVerticalSlider breathCtrlSensSlider;    // BCS
+    FMRackLabeledVerticalSlider breathCtrlAssignSlider;  // BCA
 
-    // Misc
+    // Misc (TX816Perf: ATT, MTU)
     FMRackLabeledVerticalSlider velocityScaleSlider;
-    FMRackLabeledVerticalSlider masterTuneSlider;
+    FMRackLabeledVerticalSlider audioAttenuatorSlider;   // ATT
+    FMRackLabeledVerticalSlider masterTuneSlider;        // MTU
 
     // Filter
     juce::ToggleButton filterEnabledButton;

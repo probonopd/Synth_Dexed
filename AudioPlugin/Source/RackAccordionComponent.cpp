@@ -393,7 +393,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     : moduleIndex(idx), parentAccordion(parent),
       voiceGroup("voiceGroup", "Voice"),
       unisonGroup("unisonGroup", "Unison"),
-      midiPitchGroup("midiPitchGroup", "MIDI & Pitch"),
+      midiPitchGroup("midiPitchGroup", "Controllers"),
       noteRangeGroup("noteRangeGroup", "Note Range"),
       portaMonoGroup("portaMonoGroup", "Portamento & Mono"),
       filterGroup("filterGroup", "Filter"),
@@ -427,8 +427,16 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
 
     midiChannelSlider.setLabelText("Ch");
     addAndMakeVisible(midiChannelSlider);
-    midiChannelSlider.getSlider().setRange(1, 16, 1);
+    midiChannelSlider.getSlider().setRange(0, 16, 1); // 0 = Omni, 1-16 = specific channels
     midiChannelSlider.getSlider().setValue(idx + 1); // Default to 1-based index
+    midiChannelSlider.getSlider().textFromValueFunction = [](double value) {
+        int ch = (int)value;
+        return ch == 0 ? "Omni" : juce::String(ch);
+    };
+    midiChannelSlider.getSlider().valueFromTextFunction = [](const juce::String& text) {
+        if (text.equalsIgnoreCase("Omni")) return 0.0;
+        return text.getDoubleValue();
+    };
 
     reverbSendSlider.setLabelText("Rvb");
     addAndMakeVisible(reverbSendSlider);
@@ -460,35 +468,81 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     addAndMakeVisible(noteShiftSlider);
     noteShiftSlider.getSlider().setRange(-24, 24, 1);
 
-    // Pitch Bend
-    pitchBendRangeSlider.setLabelText("Bend");
+    // Pitch Bend (TX816Perf: PBR, PBS)
+    pitchBendRangeSlider.setLabelText("PBR");
     addAndMakeVisible(pitchBendRangeSlider);
     pitchBendRangeSlider.getSlider().setRange(0, 12, 1);
 
-    // Portamento
-    portamentoModeLabel.setText("", juce::dontSendNotification);
-    addAndMakeVisible(portamentoModeLabel);
-    portamentoModeButton.setButtonText("Portamento");
-    addAndMakeVisible(portamentoModeButton);
+    pitchBendStepSlider.setLabelText("PBS");
+    addAndMakeVisible(pitchBendStepSlider);
+    pitchBendStepSlider.getSlider().setRange(0, 12, 1);
 
-    portamentoTimeSlider.setLabelText("Time");
+    // Portamento (TX816Perf: PRT, PGL, PMD)
+    portamentoTimeSlider.setLabelText("PRT");
     addAndMakeVisible(portamentoTimeSlider);
     portamentoTimeSlider.getSlider().setRange(0, 99, 1);
 
-    // Mono Mode
+    portamentoGlissandoLabel.setText("", juce::dontSendNotification);
+    addAndMakeVisible(portamentoGlissandoLabel);
+    portamentoGlissandoButton.setButtonText("PGL");
+    addAndMakeVisible(portamentoGlissandoButton);
+
+    portamentoModeLabel.setText("", juce::dontSendNotification);
+    addAndMakeVisible(portamentoModeLabel);
+    portamentoModeButton.setButtonText("PMD");
+    addAndMakeVisible(portamentoModeButton);
+
+    // Mono Mode (TX816Perf: PMO)
     monoModeLabel.setText("", juce::dontSendNotification);
     addAndMakeVisible(monoModeLabel);
-    monoModeButton.setButtonText("Mono");
+    monoModeButton.setButtonText("PMO");
     addAndMakeVisible(monoModeButton);
 
-    // Misc
+    // Controller Assignments (TX816Perf: MWS, MWA, FCS, FCA, ATS, ATA, BCS, BCA)
+    modWheelSensSlider.setLabelText("MWS");
+    addAndMakeVisible(modWheelSensSlider);
+    modWheelSensSlider.getSlider().setRange(0, 15, 1);
+
+    modWheelAssignSlider.setLabelText("MWA");
+    addAndMakeVisible(modWheelAssignSlider);
+    modWheelAssignSlider.getSlider().setRange(0, 7, 1);
+
+    footCtrlSensSlider.setLabelText("FCS");
+    addAndMakeVisible(footCtrlSensSlider);
+    footCtrlSensSlider.getSlider().setRange(0, 15, 1);
+
+    footCtrlAssignSlider.setLabelText("FCA");
+    addAndMakeVisible(footCtrlAssignSlider);
+    footCtrlAssignSlider.getSlider().setRange(0, 7, 1);
+
+    afterTouchSensSlider.setLabelText("ATS");
+    addAndMakeVisible(afterTouchSensSlider);
+    afterTouchSensSlider.getSlider().setRange(0, 15, 1);
+
+    afterTouchAssignSlider.setLabelText("ATA");
+    addAndMakeVisible(afterTouchAssignSlider);
+    afterTouchAssignSlider.getSlider().setRange(0, 7, 1);
+
+    breathCtrlSensSlider.setLabelText("BCS");
+    addAndMakeVisible(breathCtrlSensSlider);
+    breathCtrlSensSlider.getSlider().setRange(0, 15, 1);
+
+    breathCtrlAssignSlider.setLabelText("BCA");
+    addAndMakeVisible(breathCtrlAssignSlider);
+    breathCtrlAssignSlider.getSlider().setRange(0, 7, 1);
+
+    // Misc (TX816Perf: ATT, MTU)
     velocityScaleSlider.setLabelText("Vel");
     addAndMakeVisible(velocityScaleSlider);
     velocityScaleSlider.getSlider().setRange(0, 127, 1);
 
-    masterTuneSlider.setLabelText("Tune");
+    audioAttenuatorSlider.setLabelText("ATT");
+    addAndMakeVisible(audioAttenuatorSlider);
+    audioAttenuatorSlider.getSlider().setRange(0, 7, 1);
+
+    masterTuneSlider.setLabelText("MTU");
     addAndMakeVisible(masterTuneSlider);
-    masterTuneSlider.getSlider().setRange(-100, 100, 1);
+    masterTuneSlider.getSlider().setRange(0, 127, 1);
 
     // Filter
     filterEnabledLabel.setText("Filter", juce::dontSendNotification);
@@ -844,9 +898,20 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     noteLimitHighSlider.getSlider().addMouseListener(this, false);
     noteShiftSlider.getSlider().addMouseListener(this, false);
     pitchBendRangeSlider.getSlider().addMouseListener(this, false);
+    pitchBendStepSlider.getSlider().addMouseListener(this, false);
+    portamentoGlissandoButton.addMouseListener(this, false);
     portamentoModeButton.addMouseListener(this, false);
     portamentoTimeSlider.getSlider().addMouseListener(this, false);
     monoModeButton.addMouseListener(this, false);
+    modWheelSensSlider.getSlider().addMouseListener(this, false);
+    modWheelAssignSlider.getSlider().addMouseListener(this, false);
+    footCtrlSensSlider.getSlider().addMouseListener(this, false);
+    footCtrlAssignSlider.getSlider().addMouseListener(this, false);
+    afterTouchSensSlider.getSlider().addMouseListener(this, false);
+    afterTouchAssignSlider.getSlider().addMouseListener(this, false);
+    breathCtrlSensSlider.getSlider().addMouseListener(this, false);
+    breathCtrlAssignSlider.getSlider().addMouseListener(this, false);
+    audioAttenuatorSlider.getSlider().addMouseListener(this, false);
     velocityScaleSlider.getSlider().addMouseListener(this, false);
     masterTuneSlider.getSlider().addMouseListener(this, false);
     filterEnabledButton.addMouseListener(this, false);
@@ -943,7 +1008,7 @@ void ModuleTabComponent::resized()
         return contentW + 2 * kContentPadding;
     };
 
-    const int mainMin = computeSliderGroupMin(4, controlGap); // Vol, Pan, Fine, Rvb
+    const int mainMin = computeSliderGroupMin(5, controlGap); // Ch, Vol, Pan, Fine, Rvb
     const int filterMin = computeSliderGroupMin(2, controlGap); // Cut, Res
     const int portaMonoMin = juce::jmax(computeSliderGroupMin(1, controlGap), 110); // Time + toggles
 
@@ -987,12 +1052,12 @@ void ModuleTabComponent::resized()
         }
     }
 
-    // Main group (Vol, Pan, Fine, Reverb)
+    // Main group (Ch, Vol, Pan, Fine, Reverb)
     auto mainArea = row1.removeFromLeft(mainW);
     mainPartGroup.setBounds(mainArea);
     auto mainContent = makeGroupContentBounds(mainArea, sliderRowHeight);
     layoutLabeledSliderRow(mainContent.withHeight(sliderHeight),
-                          { &volumeSlider, &panSlider, &detuneSlider, &reverbSendSlider },
+                          { &midiChannelSlider, &volumeSlider, &panSlider, &detuneSlider, &reverbSendSlider },
                           sliderHeight, controlGap);
     row1.removeFromLeft(groupGap);
 
@@ -1019,22 +1084,30 @@ void ModuleTabComponent::resized()
     const int toggleRowH = 16;
     const int innerGap = 1;
     
-    // Portamento toggle at top
-    juce::Rectangle<int> portaRow(portaMonoContent.getX(), portaMonoContent.getY(), 
+    // Portamento Mode toggle at top (PMD - Normal/Fingered)
+    juce::Rectangle<int> pmdRow(portaMonoContent.getX(), portaMonoContent.getY(), 
                                    portaMonoContent.getWidth(), toggleRowH);
-    portamentoModeButton.setBounds(portaRow.removeFromRight(toggleWidth));
-    portamentoModeLabel.setBounds(portaRow);
+    portamentoModeButton.setBounds(pmdRow.removeFromRight(toggleWidth));
+    portamentoModeLabel.setBounds(pmdRow);
     portamentoModeLabel.setJustificationType(juce::Justification::centredLeft);
     
+    // Portamento Glissando toggle (PGL)
+    int yAfterPMD = portaMonoContent.getY() + toggleRowH + innerGap;
+    juce::Rectangle<int> pglRow(portaMonoContent.getX(), yAfterPMD,
+                                portaMonoContent.getWidth(), toggleRowH);
+    portamentoGlissandoButton.setBounds(pglRow.removeFromRight(toggleWidth));
+    portamentoGlissandoLabel.setBounds(pglRow);
+    portamentoGlissandoLabel.setJustificationType(juce::Justification::centredLeft);
+    
     // Time slider in middle
-    int sliderY = portaMonoContent.getY() + toggleRowH + innerGap;
-    int remainingH = portaMonoContent.getHeight() - toggleRowH * 2 - innerGap * 2;
+    int sliderY = yAfterPMD + toggleRowH + innerGap;
+    int remainingH = portaMonoContent.getHeight() - toggleRowH * 3 - innerGap * 3;
     int actualSliderH = juce::jmin(sliderHeight, remainingH - kSliderLabelHeight);
     juce::Rectangle<int> timeSliderArea(portaMonoContent.getX(), sliderY, 
                                          portaMonoContent.getWidth(), actualSliderH);
     layoutLabeledSliderRow(timeSliderArea, { &portamentoTimeSlider }, actualSliderH, controlGap);
     
-    // Mono toggle at bottom
+    // Mono toggle at bottom (PMO)
     juce::Rectangle<int> monoRow(portaMonoContent.getX(), 
                                   portaMonoContent.getBottom() - toggleRowH,
                                   portaMonoContent.getWidth(), toggleRowH);
@@ -1050,7 +1123,7 @@ void ModuleTabComponent::resized()
     // Compute minimal widths for the three groups
     const int unisonMin = computeSliderGroupMin(3, controlGap);
     const int noteRangeMin = computeSliderGroupMin(3, controlGap);
-    const int midiPitchMin = computeSliderGroupMin(4, controlGap);
+    const int midiPitchMin = computeSliderGroupMin(13, controlGap); // PBR, PBS, MTU, Vel, ATT, MWS, MWA, FCS, FCA, ATS, ATA, BCS, BCA
 
     int avail2 = row2.getWidth();
     const int gapsRow2 = groupGap * 2; // two gaps between three groups
@@ -1105,7 +1178,9 @@ void ModuleTabComponent::resized()
     midiPitchGroup.setBounds(midiPitchArea);
     auto midiPitchContent = makeGroupContentBounds(midiPitchArea, sliderRowHeight);
     layoutLabeledSliderRow(midiPitchContent.withHeight(sliderHeight),
-                          { &midiChannelSlider, &pitchBendRangeSlider, &masterTuneSlider, &velocityScaleSlider },
+                          { &pitchBendRangeSlider, &pitchBendStepSlider, &masterTuneSlider, &velocityScaleSlider, &audioAttenuatorSlider,
+                            &modWheelSensSlider, &modWheelAssignSlider, &footCtrlSensSlider, &footCtrlAssignSlider,
+                            &afterTouchSensSlider, &afterTouchAssignSlider, &breathCtrlSensSlider, &breathCtrlAssignSlider },
                           sliderHeight, controlGap);
 
     updateFromModule();
@@ -1277,16 +1352,38 @@ void ModuleTabComponent::mouseEnter(const juce::MouseEvent& e) {
         editor->showHelpForKey("noteShift");
     } else if (e.eventComponent == &pitchBendRangeSlider.getSlider()) {
         editor->showHelpForKey("pitchBendRange");
+    } else if (e.eventComponent == &pitchBendStepSlider.getSlider()) {
+        editor->showHelpForKey("PBS");
+    } else if (e.eventComponent == &portamentoGlissandoButton) {
+        editor->showHelpForKey("PGL");
     } else if (e.eventComponent == &portamentoModeButton) {
-        editor->showHelpForKey("portamentoMode");
+        editor->showHelpForKey("PMD");
     } else if (e.eventComponent == &portamentoTimeSlider.getSlider()) {
-        editor->showHelpForKey("portamentoTime");
+        editor->showHelpForKey("PRT");
     } else if (e.eventComponent == &monoModeButton) {
-        editor->showHelpForKey("monoMode");
+        editor->showHelpForKey("PMO");
+    } else if (e.eventComponent == &modWheelSensSlider.getSlider()) {
+        editor->showHelpForKey("MWS");
+    } else if (e.eventComponent == &modWheelAssignSlider.getSlider()) {
+        editor->showHelpForKey("MWA");
+    } else if (e.eventComponent == &footCtrlSensSlider.getSlider()) {
+        editor->showHelpForKey("FCS");
+    } else if (e.eventComponent == &footCtrlAssignSlider.getSlider()) {
+        editor->showHelpForKey("FCA");
+    } else if (e.eventComponent == &afterTouchSensSlider.getSlider()) {
+        editor->showHelpForKey("ATS");
+    } else if (e.eventComponent == &afterTouchAssignSlider.getSlider()) {
+        editor->showHelpForKey("ATA");
+    } else if (e.eventComponent == &breathCtrlSensSlider.getSlider()) {
+        editor->showHelpForKey("BCS");
+    } else if (e.eventComponent == &breathCtrlAssignSlider.getSlider()) {
+        editor->showHelpForKey("BCA");
+    } else if (e.eventComponent == &audioAttenuatorSlider.getSlider()) {
+        editor->showHelpForKey("ATT");
     } else if (e.eventComponent == &velocityScaleSlider.getSlider()) {
         editor->showHelpForKey("velocityScale");
     } else if (e.eventComponent == &masterTuneSlider.getSlider()) {
-        editor->showHelpForKey("masterTune");
+        editor->showHelpForKey("MTU");
     } else if (e.eventComponent == &filterEnabledButton) {
         editor->showHelpForKey("filterEnabled");
     } else if (e.eventComponent == &filterCutoffSlider.getSlider()) {
