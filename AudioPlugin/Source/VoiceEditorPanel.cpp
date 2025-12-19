@@ -1183,6 +1183,10 @@ void VoiceEditorPanel::setController(FMRackController* controller_) {
 void VoiceEditorPanel::setModuleIndex(int idx) {
     moduleIndex = idx;
     std::cout << "[VoiceEditorPanel::setModuleIndex] moduleIndex set to " << idx << std::endl;
+    
+    // Update oscilloscope to monitor this module's output
+    oscilloscope.setMonitoredModuleIndex(idx);
+    
     initializeIfReady();
     // When re-targeting the editor to a different module (or reopening), immediately pull
     // current state from the engine so UI reflects reality (e.g., OPE bitmask).

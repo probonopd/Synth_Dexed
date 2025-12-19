@@ -207,16 +207,38 @@ void FMRackController::processAudio(float* leftOut, float* rightOut, int numSamp
     // No try-catch in real-time audio path - exceptions shouldn't happen here
     std::lock_guard<std::mutex> lock(mutex);
     if (rack) {
+        // Process all audio
         rack->processAudio(leftOut, rightOut, numSamples);
         
-        // Push samples to oscilloscope (mix L+R to mono for display)
-        if (oscilloscope && leftOut && rightOut) {
-            // Create a temporary buffer for mono mix
-            std::vector<float> monoBuffer(numSamples);
-            for (int i = 0; i < numSamples; ++i) {
-                monoBuffer[i] = (leftOut[i] + rightOut[i]) * 0.5f;
+        // Capture audio for oscilloscope from the last processed module buffers
+        // (no re-processing, just copying from internal buffers)
+        if (oscilloscope) {
+            int monitoredModule = oscilloscope->getMonitoredModuleIndex();
+            
+            if (monitoredModule >= 0) {
+                // Monitor a specific module's output (pre-effects, dry only)
+                std::vector<float> moduleLeftBuffer(numSamples);
+                std::vector<float> moduleRightBuffer(numSamples);
+                
+                if (rack->captureModuleOutput(monitoredModule, 
+                                             moduleLeftBuffer.data(), 
+                                             moduleRightBuffer.data(), 
+                                             numSamples)) {
+                    // Mix L+R to mono for display
+                    std::vector<float> monoBuffer(numSamples);
+                    for (int i = 0; i < numSamples; ++i) {
+                        monoBuffer[i] = (moduleLeftBuffer[i] + moduleRightBuffer[i]) * 0.5f;
+                    }
+                    oscilloscope->pushSamples(monoBuffer.data(), numSamples);
+                }
+            } else {
+                // Monitor final output (default behavior)
+                std::vector<float> monoBuffer(numSamples);
+                for (int i = 0; i < numSamples; ++i) {
+                    monoBuffer[i] = (leftOut[i] + rightOut[i]) * 0.5f;
+                }
+                oscilloscope->pushSamples(monoBuffer.data(), numSamples);
             }
-            oscilloscope->pushSamples(monoBuffer.data(), numSamples);
         }
     } else {
         // Clear output if no rack

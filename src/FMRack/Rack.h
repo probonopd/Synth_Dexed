@@ -43,6 +43,11 @@ public:
 
     // Audio processing
     void processAudio(float* leftOut, float* rightOut, int numSamples);
+    
+    // Capture the last processed module's output (must be called immediately after processAudio)
+    // Does NOT re-process the module, just copies from internal buffers
+    // Returns false if moduleIndex is invalid
+    bool captureModuleOutput(int moduleIndex, float* leftOut, float* rightOut, int numSamples);
 
     // Status
     bool isInitialized() const;

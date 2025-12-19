@@ -23,6 +23,13 @@ public:
      * @brief Set the controller to get audio samples from.
      */
     void setController(FMRackController* controller);
+    
+    /**
+     * @brief Set which module to monitor for the oscilloscope display.
+     * If moduleIndex is -1, monitor the final output instead.
+     */
+    void setMonitoredModuleIndex(int moduleIndex);
+    int getMonitoredModuleIndex() const { return monitoredModuleIndex; }
 
     /**
      * @brief Push new audio samples into the ring buffer.
@@ -58,22 +65,38 @@ private:
     static constexpr int kDisplaySamples = 1024;  // Number of samples to display
     std::array<std::atomic<float>, kBufferSize> ringBuffer;
     std::atomic<int> writeIndex{0};
+    
+    // Module monitoring
+    std::atomic<int> monitoredModuleIndex{-1};  // -1 means monitor final output
 
     // Display buffer (copied from ring buffer on UI thread)
     std::vector<float> displayBuffer;
     
-    // Trigger settings
-    float triggerLevel = 0.0f;  // Trigger at zero crossing
+    // Persistence buffers for phosphor effect
+    std::vector<float> persistenceBuffer;
+    static constexpr int kPersistenceFrames = 8;  // Number of frames for decay
+    std::array<std::vector<float>, kPersistenceFrames> traceHistory;
+    int currentTraceIndex = 0;
+    
+    // Trigger settings with hysteresis for complex waveforms
+    float triggerLevel = 0.0f;  // Center trigger level
+    float hysteresisHigh = 0.05f;  // Upper threshold
+    float hysteresisLow = -0.05f;  // Lower threshold
+    bool triggerArmed = true;  // Ready to trigger on next rising edge
     int findTriggerPoint(const std::vector<float>& buffer);
+    
+    // Automatic gain detection for adaptive triggering
+    float detectSignalPeak(const std::vector<float>& buffer);
     
     // Controller reference for getting audio samples
     FMRackController* controller = nullptr;
 
-    // Display settings
+    // Display settings - phosphor green CRT style
     float zoomLevel = 1.0f;
-    juce::Colour waveformColour = juce::Colour(0xff00ff88);  // Bright green
-    juce::Colour backgroundColour = juce::Colour(0xff1a1a1a);
-    juce::Colour gridColour = juce::Colour(0xff333333);
+    juce::Colour phosphorColour = juce::Colour(0xff33ff66);  // Phosphor green
+    juce::Colour phosphorGlowColour = juce::Colour(0xff00cc44);  // Darker glow
+    juce::Colour backgroundColour = juce::Colour(0xff0a0f0a);  // Very dark green-tinted black
+    juce::Colour gridColour = juce::Colour(0xff1a2a1a);  // Dark green grid
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscilloscopeComponent)
 };

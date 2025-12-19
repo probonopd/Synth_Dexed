@@ -348,6 +348,37 @@ void Rack::processAudio(float* leftOut, float* rightOut, int numSamples) {
     }
 }
 
+bool Rack::captureModuleOutput(int moduleIndex, float* leftOut, float* rightOut, int numSamples)
+{
+    // Capture the dry output from an already-processed module
+    // This must be called immediately after processAudio() in the same audio callback
+    // Does NOT re-process the module, just copies from the internal buffers
+    
+    if (moduleIndex < 0 || moduleIndex >= static_cast<int>(modules_.size())) {
+        // Invalid module index
+        if (leftOut) std::fill(leftOut, leftOut + numSamples, 0.0f);
+        if (rightOut) std::fill(rightOut, rightOut + numSamples, 0.0f);
+        return false;
+    }
+    
+    if (numSamples <= 0 || numSamples > kMaxBufferSize) {
+        // Invalid sample count
+        if (leftOut) std::fill(leftOut, leftOut + numSamples, 0.0f);
+        if (rightOut) std::fill(rightOut, rightOut + numSamples, 0.0f);
+        return false;
+    }
+    
+    // Copy from the module's pre-allocated buffer (no re-processing)
+    const auto& mbuf = moduleBuffers_[moduleIndex];
+    
+    if (leftOut)
+        std::copy(mbuf.left.begin(), mbuf.left.begin() + numSamples, leftOut);
+    if (rightOut)
+        std::copy(mbuf.right.begin(), mbuf.right.begin() + numSamples, rightOut);
+    
+    return true;
+}
+
 bool Rack::isInitialized() const { return initialized; }
 
 int Rack::getActiveVoices() const {
