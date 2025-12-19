@@ -6,6 +6,7 @@
 #include "BinaryData.h"
 #include <iostream> // For logging
 #include "FMRackVerticalSlider.h"
+#include "FMRackSliderConstants.h"
 
 namespace
 {
@@ -16,7 +17,7 @@ namespace
     };
 
     constexpr int kRotaryLabelHeight = 18;
-    constexpr int kVerticalSliderWidth = 40;
+    constexpr int kVerticalSliderWidth = FMRackSliderConstants::kSliderWidth;
     constexpr int kVerticalSliderLabelHeight = 16;
 
     // layoutRotarySliderGrid removed — rotary sliders are no longer used. Kept SliderLabelPair
@@ -60,6 +61,7 @@ namespace
             if (control.label != nullptr)
             {
                 control.label->setJustificationType(juce::Justification::centred);
+                control.label->setFont(juce::Font(juce::FontOptions(FMRackSliderConstants::kSliderLabelFontSize)));
                 control.label->setBounds(x, y + sliderHeight, kVerticalSliderWidth, kVerticalSliderLabelHeight);
             }
 
@@ -442,24 +444,24 @@ void AudioPluginAudioProcessorEditor::resized()
         const int groupLabelOffset = 18;
         const int toggleHeight = 20;
         const int rowGap = 6;
-        const int columnGapRotary = 4;
 
         auto effectsContent = effectsArea.reduced(groupPadding).withTrimmedTop(groupLabelOffset);
 
-        // Toggles row - stacked vertically for narrow panel
-        auto toggleRow = effectsContent.removeFromTop(toggleHeight);
-        int toggleWidth = juce::jmax(10, toggleRow.getWidth() / 2 - 2); // Prevent negative/zero width
-        compressorEnableButton.setBounds(toggleRow.removeFromLeft(toggleWidth));
-        toggleRow.removeFromLeft(juce::jmin(4, toggleRow.getWidth())); // Don't remove more than available
-        reverbEnableButton.setBounds(toggleRow);
+        // Toggles stacked vertically (not side by side)
+        auto compressorToggleRow = effectsContent.removeFromTop(toggleHeight);
+        compressorEnableButton.setBounds(compressorToggleRow);
+        
+        effectsContent.removeFromTop(2); // Small gap between toggles
+        
+        auto reverbToggleRow = effectsContent.removeFromTop(toggleHeight);
+        reverbEnableButton.setBounds(reverbToggleRow);
 
         effectsContent.removeFromTop(rowGap);
 
         // Calculate slider layout - 3 columns x 2 rows for compact display
+        // Use global slider height constant for consistent sizing
         const int verticalColumns = 3;
-        int verticalSliderHeight = juce::jlimit(40, 70, (effectsContent.getHeight() - rowGap) / 2 - kVerticalSliderLabelHeight);
-        if (verticalSliderHeight <= 0)
-            verticalSliderHeight = 40;
+        int verticalSliderHeight = FMRackSliderConstants::kMinSliderHeight;
 
         layoutVerticalSliderGrid(effectsContent,
                                  {
@@ -473,7 +475,7 @@ void AudioPluginAudioProcessorEditor::resized()
                                  verticalColumns,
                                  verticalSliderHeight,
                                  rowGap,
-                                 columnGapRotary);
+                                 FMRackSliderConstants::kSliderGap);
 
         if (voiceEditorWindow)
             voiceEditorWindow->setBounds(100, 100, 800, 600);

@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <juce_data_structures/juce_data_structures.h>
 #include "FMRackController.h"
+#include "FMRackSliderConstants.h"
 
 using namespace juce;
 
@@ -29,34 +30,10 @@ namespace
     constexpr int kRowGap = 4;
     constexpr int kRowVerticalPadding = 1;
     constexpr int kRowHorizontalPadding = 2;
-    constexpr int kSliderGap = 2;  // Match the tight spacing of global params
-    constexpr int kSliderLabelHeight = 10;
-    constexpr int kSliderTextBoxHeight = 12;
-    constexpr int kMinSliderWidth = 22;
-
-    void layoutSliderWithLabel(FMRackVerticalSlider& slider,
-                               juce::Label& label,
-                               const juce::String& text,
-                               const juce::Rectangle<int>& totalBounds,
-                               int textBoxHeight)
-    {
-        // Label at bottom with minimal gap
-        label.setText(text, juce::dontSendNotification);
-        label.setJustificationType(juce::Justification::centred);
-        juce::Rectangle<int> labelBounds(totalBounds.getX(),
-                                         totalBounds.getBottom() - kSliderLabelHeight,
-                                         totalBounds.getWidth(),
-                                         kSliderLabelHeight);
-        label.setBounds(labelBounds);
-        
-        // Slider takes rest, value at top, editable
-        auto sliderBounds = totalBounds.withHeight(totalBounds.getHeight() - kSliderLabelHeight - 1);
-        slider.setBounds(sliderBounds);
-        slider.setTextBoxStyle(juce::Slider::TextBoxAbove, false, sliderBounds.getWidth(), textBoxHeight);
-        slider.setNumDecimalPlacesToDisplay(0);
-        slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
-        slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-    }
+    constexpr int kSliderGap = FMRackSliderConstants::kSliderGap;  // Use global constant
+    constexpr int kSliderLabelHeight = FMRackSliderConstants::kLabelHeight;
+    constexpr int kSliderTextBoxHeight = FMRackSliderConstants::kTextBoxHeight;
+    constexpr int kMinSliderWidth = FMRackSliderConstants::kSliderWidth;
 }
 
 VoiceEditorPanel::VoiceEditorPanel()
@@ -160,8 +137,7 @@ VoiceEditorPanel::VoiceEditorPanel()
                 if (it2 != operatorSliderParamOffsets.end())
                     setDexedParam(it2->second, static_cast<uint8_t>(globalSliders[i].getSlider().getValue()));
             };
-            // Use true for wantsEventsForAllNestedChildComponents to receive events from child slider
-            globalSliders[i].addMouseListener(this, true);
+            globalSliders[i].addMouseListener(this, true);  // true = listen to child components too
         }
         // PEG Envelope
         // Remove the label and add only the widget
@@ -374,9 +350,9 @@ void VoiceEditorPanel::resized() {
     // Layout global sliders in the right panel (stacked vertically in rows)
     {
         auto globalContent = globalPanelArea.reduced(2, 0);
-    const int sliderWidth = 24;
+    const int sliderWidth = FMRackSliderConstants::kSliderWidth;
     const int sliderHeight = precomputedSliderHeight;
-        const int hGap = 2;
+        const int hGap = FMRackSliderConstants::kSliderGap;
         const int vGap = 4;
         const int slidersPerRow = juce::jmax(1, (globalContent.getWidth() + hGap) / (sliderWidth + hGap));
         
@@ -1041,7 +1017,7 @@ void VoiceEditorPanel::OperatorSliders::sliderMouseExit(int sliderIdx)
 // --- VoiceEditorPanel hover help for global sliders ---
 void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
     for (int i = 0; i < numGlobalSliders; ++i) {
-        // Check both the container component and the internal slider
+        // Check both the labeled slider component and its internal slider
         if (e.eventComponent == &globalSliders[i] || 
             e.eventComponent == &globalSliders[i].getSlider()) {
             showHelpForKey(globalSliderKeys[i]);
@@ -1052,8 +1028,8 @@ void VoiceEditorPanel::mouseEnter(const juce::MouseEvent& e) {
 
 void VoiceEditorPanel::mouseExit(const juce::MouseEvent& e) {
     for (int i = 0; i < numGlobalSliders; ++i) {
-        // Check both the container component and the internal slider
-        if (e.eventComponent == &globalSliders[i] ||
+        // Check both the labeled slider component and its internal slider
+        if (e.eventComponent == &globalSliders[i] || 
             e.eventComponent == &globalSliders[i].getSlider()) {
             restoreDefaultHelp();
             return;

@@ -1,12 +1,14 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "FMRackSliderConstants.h"
 
 
 /**
  * Custom vertical slider widget used throughout the FMRack plugin.
  * Ensures consistent appearance and dimensions for all vertical sliders.
  * Value shown at top, editable, no box outline.
+ * Uses global constants from FMRackSliderConstants.h for consistent sizing.
  */
 
 
@@ -43,7 +45,7 @@ class FMRackVerticalSlider : public juce::Slider
         }
         juce::Font getLabelFont(juce::Label& label) override {
             juce::ignoreUnused(label);
-            return juce::Font(juce::FontOptions(12.0f));
+            return juce::Font(juce::FontOptions(FMRackSliderConstants::kSliderValueFontSize));
         }
     };
 
@@ -53,7 +55,9 @@ public:
     explicit FMRackVerticalSlider()
     {
         setSliderStyle(juce::Slider::LinearVertical);
-        setTextBoxStyle(juce::Slider::TextBoxAbove, false, 32, 12);
+        setTextBoxStyle(juce::Slider::TextBoxAbove, false, 
+                        FMRackSliderConstants::kTextBoxWidth, 
+                        FMRackSliderConstants::kTextBoxHeight);
         setLookAndFeel(&tealLookAndFeel);
         setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
         setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
@@ -62,10 +66,10 @@ public:
 
     ~FMRackVerticalSlider() override = default;
 
-    // Fixed dimensions for consistency - compact
-    static constexpr int kWidth = 32;
-    static constexpr int kMinHeight = 80;
-    static constexpr int kMaxHeight = 80;
+    // Use global constants for consistent sizing across the application
+    static constexpr int kWidth = FMRackSliderConstants::kSliderWidth;
+    static constexpr int kMinHeight = FMRackSliderConstants::kMinSliderHeight;
+    static constexpr int kMaxHeight = FMRackSliderConstants::kMaxSliderHeight;
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FMRackVerticalSlider)

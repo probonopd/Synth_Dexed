@@ -11,6 +11,7 @@
 #include "../../src/FMRack/VoiceData.h" // NEW: Include VoiceData for conversion function
 #include <juce_gui_extra/juce_gui_extra.h>
 #include "FMRackVerticalSlider.h"
+#include "FMRackSliderConstants.h"
 
 
 
@@ -20,7 +21,7 @@ namespace
     constexpr int kGroupLabelOffset = 24;
     constexpr int kSliderLabelHeight = 18;
     constexpr int kSliderLabelGap = 4;
-    constexpr int kMinSliderWidth = 52;
+    constexpr int kMinSliderWidth = FMRackSliderConstants::kSliderWidth;  // Use global constant
 
     struct SliderLabelPair
     {
@@ -482,20 +483,20 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     addAndMakeVisible(portamentoTimeSlider);
     portamentoTimeSlider.getSlider().setRange(0, 99, 1);
 
-    portamentoGlissandoLabel.setText("", juce::dontSendNotification);
+    portamentoGlissandoLabel.setText("PGL", juce::dontSendNotification);
     addAndMakeVisible(portamentoGlissandoLabel);
-    portamentoGlissandoButton.setButtonText("PGL");
+    portamentoGlissandoButton.setButtonText("");
     addAndMakeVisible(portamentoGlissandoButton);
 
-    portamentoModeLabel.setText("", juce::dontSendNotification);
+    portamentoModeLabel.setText("PMD", juce::dontSendNotification);
     addAndMakeVisible(portamentoModeLabel);
-    portamentoModeButton.setButtonText("PMD");
+    portamentoModeButton.setButtonText("");
     addAndMakeVisible(portamentoModeButton);
 
     // Mono Mode (TX816Perf: PMO)
-    monoModeLabel.setText("", juce::dontSendNotification);
+    monoModeLabel.setText("PMO", juce::dontSendNotification);
     addAndMakeVisible(monoModeLabel);
-    monoModeButton.setButtonText("PMO");
+    monoModeButton.setButtonText("");
     addAndMakeVisible(monoModeButton);
 
     // Controller Assignments (TX816Perf: MWS, MWA, FCS, FCA, ATS, ATA, BCS, BCA)
@@ -547,7 +548,7 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     // Filter
     filterEnabledLabel.setText("Filter", juce::dontSendNotification);
     addAndMakeVisible(filterEnabledLabel);
-    filterEnabledButton.setButtonText("On");
+    filterEnabledButton.setButtonText("");  // Empty - label shows the name
     addAndMakeVisible(filterEnabledButton);
 
     filterCutoffSlider.setLabelText("Cut");
@@ -731,6 +732,16 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         const bool currentValue = part.portamentoMode != 0;
         if (currentValue != newValue) {
             part.portamentoMode = static_cast<uint8_t>(newValue);
+            getController()->setPerformance(*perf);
+        }
+    };
+    portamentoGlissandoButton.onClick = [this] {
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        const bool newValue = portamentoGlissandoButton.getToggleState();
+        const bool currentValue = part.portamentoGlissando != 0;
+        if (currentValue != newValue) {
+            part.portamentoGlissando = static_cast<uint8_t>(newValue);
             getController()->setPerformance(*perf);
         }
     };
@@ -957,10 +968,9 @@ void ModuleTabComponent::resized()
     const int outerMargin = 4;
     const int groupGap = 4;
     const int rowGap = 4;
-    const int controlGap = 2;
+    const int controlGap = FMRackSliderConstants::kSliderGap;
     const int buttonHeight = 20;
     const int meterWidth = 24;
-    const int toggleWidth = 40;
 
     juce::Rectangle<int> area = getLocalBounds().reduced(outerMargin);
 
@@ -971,10 +981,10 @@ void ModuleTabComponent::resized()
     area.removeFromRight(groupGap);
 
     // Calculate slider dimensions based on available height
-    // We want 2 rows of controls
+    // Use global constant for consistent slider heights
     const int availableHeight = area.getHeight();
     const int rowHeight = (availableHeight - rowGap) / 2;
-    const int sliderHeight = 70;
+    const int sliderHeight = FMRackSliderConstants::kMinSliderHeight;
     const int sliderRowHeight = sliderHeight + kSliderLabelHeight;
 
     // === ROW 1: Voice | Main | Filter | Portamento & Mono ===
@@ -1065,9 +1075,12 @@ void ModuleTabComponent::resized()
     auto filterArea = row1.removeFromLeft(filterW);
     filterGroup.setBounds(filterArea);
     auto filterContent = makeGroupContentBounds(filterArea, sliderRowHeight);
-    // Toggle at top
+    // Toggle at top - checkbox on left, label on right (like PMD, PGL, PMO)
+    const int checkboxWidth = 18;
+    const int labelGap = 2;
     juce::Rectangle<int> filterToggleRow(filterContent.getX(), filterContent.getY(), filterContent.getWidth(), buttonHeight);
-    filterEnabledButton.setBounds(filterToggleRow.removeFromRight(toggleWidth));
+    filterEnabledButton.setBounds(filterToggleRow.removeFromLeft(checkboxWidth));
+    filterToggleRow.removeFromLeft(labelGap);
     filterEnabledLabel.setBounds(filterToggleRow);
     filterEnabledLabel.setJustificationType(juce::Justification::centredLeft);
     // Sliders below
@@ -1083,39 +1096,49 @@ void ModuleTabComponent::resized()
     
     const int toggleRowH = 16;
     const int innerGap = 1;
+    const int portaCheckboxWidth = 18;  // Checkbox width
+    const int portaLabelGap = 2;        // Gap between checkbox and label
     
+    // Split content: slider on right (full height), checkboxes on left
+    const int sliderColumnGap = 4;
+    auto sliderColumn = portaMonoContent.removeFromRight(kMinSliderWidth);
+    portaMonoContent.removeFromRight(sliderColumnGap);
+    
+    // PRT slider on right - use full available height
+    layoutLabeledSliderRow(sliderColumn, { &portamentoTimeSlider }, sliderHeight, controlGap);
+    
+    // Checkboxes stacked on left side
     // Portamento Mode toggle at top (PMD - Normal/Fingered)
+    // Checkbox on left, label on right
     juce::Rectangle<int> pmdRow(portaMonoContent.getX(), portaMonoContent.getY(), 
                                    portaMonoContent.getWidth(), toggleRowH);
-    portamentoModeButton.setBounds(pmdRow.removeFromRight(toggleWidth));
+    portamentoModeButton.setBounds(pmdRow.removeFromLeft(portaCheckboxWidth));
+    pmdRow.removeFromLeft(portaLabelGap);
     portamentoModeLabel.setBounds(pmdRow);
     portamentoModeLabel.setJustificationType(juce::Justification::centredLeft);
     
     // Portamento Glissando toggle (PGL)
+    // Checkbox on left, label on right
     int yAfterPMD = portaMonoContent.getY() + toggleRowH + innerGap;
     juce::Rectangle<int> pglRow(portaMonoContent.getX(), yAfterPMD,
                                 portaMonoContent.getWidth(), toggleRowH);
-    portamentoGlissandoButton.setBounds(pglRow.removeFromRight(toggleWidth));
+    portamentoGlissandoButton.setBounds(pglRow.removeFromLeft(portaCheckboxWidth));
+    pglRow.removeFromLeft(portaLabelGap);
     portamentoGlissandoLabel.setBounds(pglRow);
     portamentoGlissandoLabel.setJustificationType(juce::Justification::centredLeft);
     
-    // Time slider in middle
-    int sliderY = yAfterPMD + toggleRowH + innerGap;
-    int remainingH = portaMonoContent.getHeight() - toggleRowH * 3 - innerGap * 3;
-    int actualSliderH = juce::jmin(sliderHeight, remainingH - kSliderLabelHeight);
-    juce::Rectangle<int> timeSliderArea(portaMonoContent.getX(), sliderY, 
-                                         portaMonoContent.getWidth(), actualSliderH);
-    layoutLabeledSliderRow(timeSliderArea, { &portamentoTimeSlider }, actualSliderH, controlGap);
-    
-    // Mono toggle at bottom (PMO)
-    juce::Rectangle<int> monoRow(portaMonoContent.getX(), 
-                                  portaMonoContent.getBottom() - toggleRowH,
+    // Mono toggle (PMO) 
+    // Checkbox on left, label on right
+    int yAfterPGL = yAfterPMD + toggleRowH + innerGap;
+    juce::Rectangle<int> monoRow(portaMonoContent.getX(), yAfterPGL,
                                   portaMonoContent.getWidth(), toggleRowH);
-    monoModeButton.setBounds(monoRow.removeFromRight(toggleWidth));
+    monoModeButton.setBounds(monoRow.removeFromLeft(portaCheckboxWidth));
+    monoRow.removeFromLeft(portaLabelGap);
     monoModeLabel.setBounds(monoRow);
     monoModeLabel.setJustificationType(juce::Justification::centredLeft);
 
     area.removeFromTop(rowGap);
+
 
     // === ROW 2: Unison | Note Range | MIDI & Pitch (3 sections now) ===
     auto row2 = area;
