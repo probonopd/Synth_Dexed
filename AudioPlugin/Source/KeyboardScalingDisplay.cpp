@@ -195,25 +195,31 @@ void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juc
                     }
                 }
                 if (opIdx >= 0) {
+                    // Convert UI operatorIndex to Dexed data index
+                    // UI: 0=OP1, 5=OP6. Dexed: 0=OP6, 5=OP1 (reverse order)
+                    const int dexedOpIdx = 5 - opIdx;
                     uint8_t paramAddress = 0;
                     if (hoveredParam == 0) { // BP
                         // Continuous
                         float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
                         breakPoint = juce::jlimit(0.0f, 1.0f, breakPoint + delta);
                         uint8_t value = static_cast<uint8_t>(breakPoint * 99.0f + 0.5f);
-                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 8);
+                        rawBreakPoint = static_cast<int>(value);
+                        paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + 8);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 1) { // LD
                         float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
                         leftDepth = juce::jlimit(0.0f, 1.0f, leftDepth + delta);
                         uint8_t value = static_cast<uint8_t>(leftDepth * 99.0f + 0.5f);
-                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 9);
+                        rawLeftDepth = static_cast<int>(value);
+                        paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + 9);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 2) { // RD
                         float delta = wheel.deltaY > 0 ? 0.01f : -0.01f;
                         rightDepth = juce::jlimit(0.0f, 1.0f, rightDepth + delta);
                         uint8_t value = static_cast<uint8_t>(rightDepth * 99.0f + 0.5f);
-                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 10);
+                        rawRightDepth = static_cast<int>(value);
+                        paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + 10);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 3) { // LC
                         // Discrete: 0=linear, 1=exp+, 2=exp-, 3=exp++
@@ -225,7 +231,8 @@ void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juc
                         idx = (idx + dir + n) % n;
                         leftCurve = curveVals[idx];
                         uint8_t value = static_cast<uint8_t>(idx);
-                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 11);
+                        rawLeftCurve = static_cast<int>(idx);
+                        paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + 11);
                         vep->setDexedParam(paramAddress, value);
                     } else if (hoveredParam == 4) { // RC
                         static const float curveVals[4] = { 0.0f, 1.0f, -1.0f, 2.0f };
@@ -236,7 +243,8 @@ void KeyboardScalingDisplay::mouseWheelMove(const juce::MouseEvent& e, const juc
                         idx = (idx + dir + n) % n;
                         rightCurve = curveVals[idx];
                         uint8_t value = static_cast<uint8_t>(idx);
-                        paramAddress = static_cast<uint8_t>(opIdx * 21 + 12);
+                        rawRightCurve = static_cast<int>(idx);
+                        paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + 12);
                         vep->setDexedParam(paramAddress, value);
                     }
                 }

@@ -167,12 +167,16 @@ void EnvelopeDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::Mous
                     }
                 }
                 if (opIdx >= 0) {
+                    // Convert UI operatorIndex to Dexed data index
+                    // UI: 0=OP1, 5=OP6. Dexed: 0=OP6, 5=OP1 (reverse order)
+                    const int dexedOpIdx = 5 - opIdx;
                     if (hoveredParam < 4) {
                         // Envelope rate (R1-R4): offsets 0-3
                         paramOffset = hoveredParam;
                         envRates[hoveredParam] = juce::jlimit(0.0f, 1.0f, envRates[hoveredParam] + delta);
                         uint8_t value = static_cast<uint8_t>(envRates[hoveredParam] * 99.0f + 0.5f);
-                        uint8_t paramAddress = static_cast<uint8_t>(opIdx * 21 + paramOffset);
+                        rawRates[hoveredParam] = static_cast<int>(value);
+                        uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + paramOffset);
                         vep->setDexedParam(paramAddress, value);
                     } else {
                         // Envelope level (L1-L4): offsets 4-7
@@ -180,7 +184,8 @@ void EnvelopeDisplay::mouseWheelMove(const juce::MouseEvent& e, const juce::Mous
                         paramOffset = 4 + idx;
                         envLevels[idx] = juce::jlimit(0.0f, 1.0f, envLevels[idx] + delta);
                         uint8_t value = static_cast<uint8_t>(envLevels[idx] * 99.0f + 0.5f);
-                        uint8_t paramAddress = static_cast<uint8_t>(opIdx * 21 + paramOffset);
+                        rawLevels[idx] = static_cast<int>(value);
+                        uint8_t paramAddress = static_cast<uint8_t>(dexedOpIdx * 21 + paramOffset);
                         vep->setDexedParam(paramAddress, value);
                     }
                 }
