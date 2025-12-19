@@ -11,6 +11,8 @@ OscilloscopeComponent::OscilloscopeComponent()
     
     displayBuffer.resize(kDisplaySamples, 0.0f);
     persistenceBuffer.resize(kDisplaySamples, 0.0f);
+    fftData.resize(kFFTSize / 2, 0.0f);
+    fftBuffer.resize(kFFTSize, 0.0f);
     
     // Initialize trace history for phosphor persistence
     for (auto& trace : traceHistory)
@@ -86,6 +88,11 @@ void OscilloscopeComponent::paint(juce::Graphics& g)
     if (displayBuffer.empty() || bounds.getWidth() < 2)
         return;
     
+    // ========== Oscilloscope section: 70% of height ==========
+    float oscHeight = bounds.getHeight() * 0.7f;
+    juce::Rectangle<float> oscBounds(bounds.getX(), bounds.getY(), bounds.getWidth(), oscHeight);
+    float oscCenterY = oscBounds.getCentreY();  // Center of oscilloscope area only
+    
     // Calculate peak amplitude for auto-scaling
     float displayPeak = 0.0f;
     for (size_t i = 0; i < displayBuffer.size(); ++i)
@@ -105,9 +112,10 @@ void OscilloscopeComponent::paint(juce::Graphics& g)
         autoScaleGain = 1.0f;  // No signal, use default scaling
     }
     
-    float xScale = bounds.getWidth() / static_cast<float>(displayBuffer.size());
-    float baseYScale = bounds.getHeight() * 0.45f;  // Base scale (leave margin)
-    float yScale = baseYScale * zoomLevel * autoScaleGain;  // Apply auto-scaling gain
+    float xScale = oscBounds.getWidth() / static_cast<float>(displayBuffer.size());
+    float baseYScale = oscBounds.getHeight() * 0.45f;  // Base scale (leave margin)
+    float yScale = baseYScale * autoScaleGain;  // Apply auto-scaling gain
+    float xScaleZoomed = xScale * zoomLevel;  // Apply zoom to X-axis (time/horizontal)
     
     // Draw persistence traces (older traces with decreasing opacity)
     for (int traceIdx = 0; traceIdx < kPersistenceFrames; ++traceIdx)
@@ -130,9 +138,9 @@ void OscilloscopeComponent::paint(juce::Graphics& g)
         
         for (size_t i = 0; i < trace.size(); ++i)
         {
-            float x = bounds.getX() + static_cast<float>(i) * xScale;
-            float y = centerY - trace[i] * yScale;
-            y = juce::jlimit(bounds.getY() + 2, bounds.getBottom() - 2, y);
+            float x = oscBounds.getX() + static_cast<float>(i) * xScaleZoomed;
+            float y = oscCenterY - trace[i] * yScale;
+            y = juce::jlimit(oscBounds.getY() + 2, oscBounds.getBottom() - 2, y);
             
             if (!pathStarted)
             {
@@ -155,9 +163,9 @@ void OscilloscopeComponent::paint(juce::Graphics& g)
     
     for (size_t i = 0; i < displayBuffer.size(); ++i)
     {
-        float x = bounds.getX() + static_cast<float>(i) * xScale;
-        float y = centerY - displayBuffer[i] * yScale;
-        y = juce::jlimit(bounds.getY() + 2, bounds.getBottom() - 2, y);
+        float x = oscBounds.getX() + static_cast<float>(i) * xScaleZoomed;
+        float y = oscCenterY - displayBuffer[i] * yScale;
+        y = juce::jlimit(oscBounds.getY() + 2, oscBounds.getBottom() - 2, y);
         
         if (!pathStarted)
         {
@@ -184,12 +192,177 @@ void OscilloscopeComponent::paint(juce::Graphics& g)
     // Draw label
     g.setColour(juce::Colours::white.withAlpha(0.6f));
     g.setFont(juce::Font(juce::FontOptions(10.0f)));
-    g.drawText("Oscilloscope", bounds.reduced(4), juce::Justification::topLeft);
+    g.drawText("Oscilloscope", oscBounds.reduced(4), juce::Justification::topLeft);
+    
+    // ========== Draw Spectrum / FFT display below oscilloscope ==========
+    float specHeight = bounds.getHeight() * 0.28f;  // Use 28% for spectrum (smaller to save space)
+    float specY = oscBounds.getBottom() + 2;
+    juce::Rectangle<float> specBounds(bounds.getX(), specY, bounds.getWidth(), specHeight);
+    juce::ColourGradient specGradient(
+        backgroundColour.brighter(0.05f), specBounds.getCentreX(), specBounds.getCentreY(),
+        backgroundColour, specBounds.getX(), specBounds.getY(), true);
+    g.setGradientFill(specGradient);
+    g.fillRoundedRectangle(specBounds, 4.0f);
+    
+    // Draw spectrum border
+    g.setColour(gridColour.brighter(0.3f));
+    g.drawRoundedRectangle(specBounds.reduced(0.5f), 4.0f, 1.0f);
+    
+    // Draw frequency spectrum bars with fixed range (20Hz - 8kHz)
+    if (!fftData.empty())
+    {
+        const float sampleRate = 44100.0f;
+        const float nyquistFreq = sampleRate / 2.0f;  // 22050 Hz
+        const float minFreq = 20.0f;   // 20 Hz (human hearing lower limit)
+        const float maxFreq = 8000.0f; // 8 kHz
+        
+        float specBaselineY = specBounds.getBottom() - 18.0f;  // Leave room for axis labels
+        
+        // Find peaks for labeling (find all local maxima above threshold)
+        std::vector<std::pair<int, float>> peaks;  // (bin, dB value)
+        float peakThreshold = -30.0f;  // Only label peaks above -30dB
+        
+        for (size_t i = 1; i < fftData.size() - 1; ++i)
+        {
+            // Local maximum check
+            if (fftData[i] > fftData[i-1] && fftData[i] > fftData[i+1] && fftData[i] > peakThreshold)
+            {
+                peaks.push_back({static_cast<int>(i), fftData[i]});
+            }
+        }
+        
+        // Sort peaks by dB value (descending) and keep top 3
+        std::sort(peaks.begin(), peaks.end(), 
+            [](const auto& a, const auto& b) { return a.second > b.second; });
+        if (peaks.size() > 3)
+            peaks.resize(3);
+        
+        // Draw spectrum bars 
+        for (size_t i = 0; i < fftData.size(); ++i)
+        {
+            // Calculate frequency for this bin (linear)
+            float binFreq = (static_cast<float>(i) / static_cast<float>(fftData.size())) * nyquistFreq;
+            
+            // Convert dB value to bar height (-80 dB to 0 dB range)
+            float dBValue = juce::jlimit(-80.0f, 0.0f, fftData[i]);
+            float normalizedHeight = (dBValue + 80.0f) / 80.0f;  // 0 to 1
+            float barHeight = normalizedHeight * (specHeight * 0.7f);  // Leave more room for labels
+            
+            // Linear frequency to pixel mapping (20Hz-8kHz range)
+            float freqNormalized = (binFreq - minFreq) / (maxFreq - minFreq);
+            freqNormalized = juce::jlimit(0.0f, 1.0f, freqNormalized);
+            
+            float x = specBounds.getX() + freqNormalized * specBounds.getWidth();
+            float y = specBaselineY - barHeight;
+            
+            // Fixed bar width of 2 pixels
+            const float barWidth = 2.0f;
+            
+            // Color based on frequency (lower = red, mid = green, high = blue)
+            float hue = freqNormalized * 0.3f;
+            juce::Colour barColour = juce::Colour::fromHSV(hue, 0.8f, 0.9f, 0.8f);
+            
+            g.setColour(barColour);
+            g.fillRect(x, y, barWidth, barHeight);
+        }
+        
+        // Label multiple peaks (always show labels for peaks, even small ones)
+        for (const auto& peak : peaks)
+        {
+            int binIdx = peak.first;
+            float binFreq = (static_cast<float>(binIdx) / static_cast<float>(fftData.size())) * nyquistFreq;
+            float dBValue = juce::jlimit(-80.0f, 0.0f, fftData[binIdx]);
+            float normalizedHeight = (dBValue + 80.0f) / 80.0f;
+            float barHeight = normalizedHeight * (specHeight * 0.7f);
+            
+            float freqNormalized = (binFreq - minFreq) / (maxFreq - minFreq);
+            freqNormalized = juce::jlimit(0.0f, 1.0f, freqNormalized);
+            float x = specBounds.getX() + freqNormalized * specBounds.getWidth();
+            float y = specBaselineY - barHeight;
+            
+            // Always show peak frequency labels, regardless of bar height
+            juce::String freqText = juce::String(static_cast<int>(binFreq)) + "Hz";
+            float textY = y - 14.0f;
+            
+            g.setColour(juce::Colours::white);
+            g.setFont(juce::Font(juce::FontOptions(10.0f)));
+            g.drawText(freqText, 
+                juce::Rectangle<float>(x - 25, textY, 50, 12),
+                juce::Justification::centred);
+        }
+    }
+    
+    // Draw frequency axis labels (20Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz) at bottom
+    {
+        const float minFreq = 20.0f;
+        const float maxFreq = 8000.0f;
+        float axisY = specBounds.getBottom() - 15.0f;
+        
+        std::vector<float> axisFreqs = {20.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f};
+        g.setColour(juce::Colours::white.withAlpha(0.6f));
+        g.setFont(juce::Font(juce::FontOptions(9.0f)));
+        
+        for (float freq : axisFreqs)
+        {
+            float freqNormalized = (freq - minFreq) / (maxFreq - minFreq);
+            freqNormalized = juce::jlimit(0.0f, 1.0f, freqNormalized);
+            float x = specBounds.getX() + freqNormalized * specBounds.getWidth();
+            
+            // Draw small tick mark
+            g.drawVerticalLine(static_cast<int>(x), 
+                static_cast<int>(specBounds.getBottom() - 16), 
+                static_cast<int>(specBounds.getBottom() - 12));
+            
+            // Draw frequency label
+            juce::String label = freq >= 1000.0f ? 
+                juce::String(freq / 1000.0f, 1) + "k" : 
+                juce::String(static_cast<int>(freq));
+            
+            g.drawText(label,
+                juce::Rectangle<float>(x - 18, axisY, 36, 12),
+                juce::Justification::centred);
+        }
+    }
+    
+    // Draw spectrum label
+    g.setColour(juce::Colours::white.withAlpha(0.6f));
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.drawText("Spectrum", specBounds.reduced(4), juce::Justification::topLeft);
 }
 
 void OscilloscopeComponent::resized()
 {
     // Nothing special needed here
+}
+
+void OscilloscopeComponent::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    (void)event;  // Unused parameter
+    
+    // Zoom horizontally (X-axis / time) with scroll wheel
+    // Positive delta = scroll up = zoom in (more samples visible = smaller zoom level)
+    // Negative delta = scroll down = zoom out (fewer samples visible = larger zoom level)
+    float zoomFactor = wheel.deltaY > 0 ? 0.9f : 1.1f;
+    
+    zoomLevel *= zoomFactor;
+    
+    // Calculate dynamic bounds based on display data
+    float xScale = getLocalBounds().getWidth() / static_cast<float>(displayBuffer.size());
+    
+    // Maximum zoom out: all samples fit exactly in available width with no gaps
+    // Total width needed = displayBuffer.size() * xScale * zoomLevel <= available width
+    // So: zoomLevel <= available width / (displayBuffer.size() * xScale)
+    float maxZoomOut = 1.0f;  // At minimum, don't zoom out beyond 1.0 (native resolution)
+    if (displayBuffer.size() > 0 && xScale > 0.0f)
+    {
+        maxZoomOut = getLocalBounds().getWidth() / (displayBuffer.size() * xScale);
+    }
+    
+    // Clamp zoom level to reasonable bounds
+    // 0.1 = 10x zoom in (very detailed view), maxZoomOut = fit all data in window
+    zoomLevel = juce::jlimit(0.1f, maxZoomOut, zoomLevel);
+    
+    repaint();
 }
 
 void OscilloscopeComponent::start()
@@ -230,6 +403,9 @@ void OscilloscopeComponent::timerCallback()
         else
             displayBuffer[i] = 0.0f;
     }
+    
+    // Compute FFT for frequency spectrum
+    computeFFT();
     
     repaint();
 }
@@ -345,4 +521,60 @@ int OscilloscopeComponent::findTriggerPoint(const std::vector<float>& buffer)
     }
     
     return bestTriggerPoint;
+}
+
+void OscilloscopeComponent::computeFFT()
+{
+    // FFT computation using DFT with proper normalization
+    // Copy display buffer to FFT buffer, remove DC offset, and apply window
+    std::fill(fftBuffer.begin(), fftBuffer.end(), 0.0f);
+    
+    int fftSize = static_cast<int>(fftBuffer.size());
+    int displaySize = static_cast<int>(displayBuffer.size());
+    int copySize = std::min(fftSize, displaySize);
+    
+    // Step 1: Remove DC offset (mean)
+    float dcOffset = 0.0f;
+    for (int i = 0; i < copySize; ++i)
+    {
+        dcOffset += displayBuffer[i];
+    }
+    dcOffset /= static_cast<float>(copySize);
+    
+    // Step 2: Apply Hann window while copying (removes DC offset)
+    for (int i = 0; i < copySize; ++i)
+    {
+        float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * i / (copySize - 1)));
+        fftBuffer[i] = (displayBuffer[i] - dcOffset) * window;
+    }
+    
+    // Step 3: Calculate magnitude at each frequency bin using DFT
+    int numBins = static_cast<int>(fftData.size());
+    
+    for (int bin = 0; bin < numBins; ++bin)
+    {
+        float realPart = 0.0f;
+        float imagPart = 0.0f;
+        
+        // DFT: sum of samples * exp(-2πijk/N) for each sample
+        for (int k = 0; k < fftSize; ++k)
+        {
+            float angle = -2.0f * juce::MathConstants<float>::pi * bin * k / fftSize;
+            realPart += fftBuffer[k] * std::cos(angle);
+            imagPart += fftBuffer[k] * std::sin(angle);
+        }
+        
+        // Magnitude: normalize by FFT size
+        float magnitude = std::sqrt(realPart * realPart + imagPart * imagPart) / static_cast<float>(fftSize);
+        
+        // For real signals, the positive frequency content is doubled (except DC and Nyquist)
+        if (bin > 0 && bin < numBins - 1)
+            magnitude *= 2.0f;
+        
+        // Convert to dB scale (log)
+        if (magnitude > 1e-6f)
+            fftData[bin] = 20.0f * std::log10(magnitude);  // 20*log for amplitude (not power)
+        else
+            fftData[bin] = -80.0f;  // Minimum dB value
+    }
 }

@@ -382,8 +382,9 @@ void VoiceEditorPanel::resized() {
         int pegY = y + sliderHeight + vGap * 2;
         int remainingHeight = globalContent.getBottom() - pegY;
         
-        // Split remaining space between PEG widget and oscilloscope
-        int pegHeight = remainingHeight / 2 - vGap;
+        // Reduce PEG widget height to give more room to oscilloscope
+        // PEG gets 35% of remaining space, oscilloscope gets 65%
+        int pegHeight = static_cast<int>(remainingHeight * 0.35f) - vGap;
         int oscY = pegY + pegHeight + vGap * 2;
         int oscHeight = globalContent.getBottom() - oscY;
         

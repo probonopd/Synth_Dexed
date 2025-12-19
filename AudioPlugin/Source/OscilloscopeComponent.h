@@ -46,6 +46,11 @@ public:
      * @brief Called when the component is resized.
      */
     void resized() override;
+    
+    /**
+     * @brief Handle mouse wheel for zoom.
+     */
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override;
 
     /**
      * @brief Start the display timer.
@@ -98,6 +103,12 @@ private:
     juce::Colour phosphorGlowColour = juce::Colour(0xff00cc44);  // Darker glow
     juce::Colour backgroundColour = juce::Colour(0xff0a0f0a);  // Very dark green-tinted black
     juce::Colour gridColour = juce::Colour(0xff1a2a1a);  // Dark green grid
+    
+    // FFT spectrum data
+    static constexpr int kFFTSize = 512;  // FFT size for frequency analysis
+    std::vector<float> fftData;  // Frequency spectrum magnitude
+    std::vector<float> fftBuffer;  // Temporary buffer for FFT computation
+    void computeFFT();  // Compute frequency spectrum from display buffer
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscilloscopeComponent)
 };
