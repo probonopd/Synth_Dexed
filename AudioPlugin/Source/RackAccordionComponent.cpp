@@ -483,18 +483,20 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     addAndMakeVisible(portamentoTimeSlider);
     portamentoTimeSlider.getSlider().setRange(0, 99, 1);
 
-    portamentoGlissandoLabel.setText("PGL", juce::dontSendNotification);
+    // PGL
+    portamentoGlissandoLabel.setText("Gliss", juce::dontSendNotification);
     addAndMakeVisible(portamentoGlissandoLabel);
     portamentoGlissandoButton.setButtonText("");
     addAndMakeVisible(portamentoGlissandoButton);
 
-    portamentoModeLabel.setText("PMD", juce::dontSendNotification);
+    // PMD
+    portamentoModeLabel.setText("Porta", juce::dontSendNotification);
     addAndMakeVisible(portamentoModeLabel);
     portamentoModeButton.setButtonText("");
     addAndMakeVisible(portamentoModeButton);
 
-    // Mono Mode (TX816Perf: PMO)
-    monoModeLabel.setText("PMO", juce::dontSendNotification);
+    // PMO
+    monoModeLabel.setText("Mono", juce::dontSendNotification);
     addAndMakeVisible(monoModeLabel);
     monoModeButton.setButtonText("");
     addAndMakeVisible(monoModeButton);
@@ -1035,15 +1037,14 @@ void ModuleTabComponent::resized()
     int portaW = portaMonoMin;
 
     int sumMin = mainW + filterW + portaW;
-    // If we have extra space, expand main first, then others. If not enough, shrink proportionally but not below a floor.
+    // If we have extra space, give it to filter (keep main at minimum). If not enough, shrink proportionally but not below a floor.
     const int minFloor = 2 * kContentPadding + kMinSliderWidth; // very smallest allowed
     if (sumMin <= remaining) {
         int extra = remaining - sumMin;
-        // Give most extra to main, then filter, then porta
-        int giveMain = extra * 60 / 100;
-        int giveFilter = extra * 25 / 100;
-        int givePorta = extra - giveMain - giveFilter;
-        mainW += giveMain;
+        // Keep Main at minimum width, give most extra to Filter, rest to Porta
+        // Main stays at mainMin (no extra)
+        int giveFilter = extra * 70 / 100;  // Give most to Filter
+        int givePorta = extra - giveFilter;
         filterW += giveFilter;
         portaW += givePorta;
     } else {
@@ -1075,18 +1076,26 @@ void ModuleTabComponent::resized()
     auto filterArea = row1.removeFromLeft(filterW);
     filterGroup.setBounds(filterArea);
     auto filterContent = makeGroupContentBounds(filterArea, sliderRowHeight);
-    // Toggle at top - checkbox on left, label on right (like PMD, PGL, PMO)
-    const int checkboxWidth = 18;
-    const int labelGap = 2;
-    juce::Rectangle<int> filterToggleRow(filterContent.getX(), filterContent.getY(), filterContent.getWidth(), buttonHeight);
-    filterEnabledButton.setBounds(filterToggleRow.removeFromLeft(checkboxWidth));
-    filterToggleRow.removeFromLeft(labelGap);
+    
+    const int filterCheckboxWidth = 18;
+    const int filterLabelGap = 2;
+    const int filterSliderColumnGap = 4;
+    const int filterToggleRowH = 16;
+    
+    // Split content: sliders on right (full height), checkbox on left
+    auto filterSliderColumn = filterContent.removeFromRight(kMinSliderWidth * 2 + controlGap);
+    filterContent.removeFromRight(filterSliderColumnGap);
+    
+    // Checkbox and label on left side at top
+    juce::Rectangle<int> filterToggleRow(filterContent.getX(), filterContent.getY(), 
+                                          filterContent.getWidth(), filterToggleRowH);
+    filterEnabledButton.setBounds(filterToggleRow.removeFromLeft(filterCheckboxWidth));
+    filterToggleRow.removeFromLeft(filterLabelGap);
     filterEnabledLabel.setBounds(filterToggleRow);
     filterEnabledLabel.setJustificationType(juce::Justification::centredLeft);
-    // Sliders below
-    juce::Rectangle<int> filterSliderArea(filterContent.getX(), filterContent.getY() + buttonHeight + 2, 
-                                           filterContent.getWidth(), sliderHeight);
-    layoutLabeledSliderRow(filterSliderArea, { &filterCutoffSlider, &filterResonanceSlider }, sliderHeight, controlGap);
+    
+    // Sliders on right - use full available height
+    layoutLabeledSliderRow(filterSliderColumn, { &filterCutoffSlider, &filterResonanceSlider }, sliderHeight, controlGap);
     row1.removeFromLeft(groupGap);
 
     // Portamento & Mono group (moved to row 1)
