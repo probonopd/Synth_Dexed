@@ -86,8 +86,28 @@ void OscilloscopeComponent::paint(juce::Graphics& g)
     if (displayBuffer.empty() || bounds.getWidth() < 2)
         return;
     
+    // Calculate peak amplitude for auto-scaling
+    float displayPeak = 0.0f;
+    for (size_t i = 0; i < displayBuffer.size(); ++i)
+    {
+        displayPeak = std::max(displayPeak, std::abs(displayBuffer[i]));
+    }
+    
+    // Auto-scale to use ~90% of available vertical space
+    // If peak is very small, use a sensible minimum scaling
+    float targetPeak = 0.9f;  // Target peak should use 90% of available space
+    if (displayPeak > 0.01f)
+    {
+        autoScaleGain = targetPeak / displayPeak;
+    }
+    else
+    {
+        autoScaleGain = 1.0f;  // No signal, use default scaling
+    }
+    
     float xScale = bounds.getWidth() / static_cast<float>(displayBuffer.size());
-    float yScale = bounds.getHeight() * 0.42f * zoomLevel;  // Leave margin
+    float baseYScale = bounds.getHeight() * 0.45f;  // Base scale (leave margin)
+    float yScale = baseYScale * zoomLevel * autoScaleGain;  // Apply auto-scaling gain
     
     // Draw persistence traces (older traces with decreasing opacity)
     for (int traceIdx = 0; traceIdx < kPersistenceFrames; ++traceIdx)

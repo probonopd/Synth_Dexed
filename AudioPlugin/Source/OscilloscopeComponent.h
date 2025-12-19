@@ -93,6 +93,7 @@ private:
 
     // Display settings - phosphor green CRT style
     float zoomLevel = 1.0f;
+    float autoScaleGain = 1.0f;  // Auto-scaling gain based on signal amplitude
     juce::Colour phosphorColour = juce::Colour(0xff33ff66);  // Phosphor green
     juce::Colour phosphorGlowColour = juce::Colour(0xff00cc44);  // Darker glow
     juce::Colour backgroundColour = juce::Colour(0xff0a0f0a);  // Very dark green-tinted black
