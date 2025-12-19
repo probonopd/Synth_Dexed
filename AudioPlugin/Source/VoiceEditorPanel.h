@@ -21,6 +21,10 @@ public:
     void showHelpForKey(const juce::String& key);
     void restoreDefaultHelp();
 
+    // Copy/paste voice data via clipboard
+    void copyVoiceDataToClipboard();
+    void pasteVoiceDataFromClipboard();
+
     // MouseListener overrides for global slider hover help
     void mouseEnter(const juce::MouseEvent&) override;
     void mouseExit(const juce::MouseEvent&) override;
@@ -134,6 +138,7 @@ private:
     FMRackController* controller = nullptr;
     int moduleIndex = 0; // which module/part to edit
     juce::TextButton requestDumpButton;
+    juce::TextButton dataButton;
     void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
     bool isInitialized = false;
     void initializeIfReady();

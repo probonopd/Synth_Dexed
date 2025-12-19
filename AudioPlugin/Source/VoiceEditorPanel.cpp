@@ -7,6 +7,7 @@
 
 #include "DX7LookAndFeel.h"
 #include <filesystem>
+#include <memory>
 #include <juce_data_structures/juce_data_structures.h>
 #include "FMRackController.h"
 #include "FMRackSliderConstants.h"
@@ -78,6 +79,13 @@ VoiceEditorPanel::VoiceEditorPanel()
         addAndMakeVisible(requestDumpButton);
         requestDumpButton.onClick = [this]() {
             if (controller) controller->requestSingleVoiceDump(channelSelector.getSelectedId());
+        };
+
+        // Data button
+        dataButton.setButtonText("Data");
+        addAndMakeVisible(dataButton);
+        dataButton.onClick = [this]() {
+            copyVoiceDataToClipboard();
         };
 
         // Help panel
@@ -209,12 +217,24 @@ VoiceEditorPanel::~VoiceEditorPanel() {
 }
 
 bool VoiceEditorPanel::keyPressed(const juce::KeyPress& key, juce::Component* /*originatingComponent*/) {
+    std::cout << "[VoiceEditorPanel::keyPressed] Key pressed: " << key.getTextDescription() << std::endl;
+    
     if (key == juce::KeyPress::escapeKey) {
         // Find the parent VoiceEditorWindow and close it
         if (auto* window = findParentComponentOfClass<VoiceEditorWindow>()) {
             window->setVisible(false);
             return true;
         }
+    } else if (key.isKeyCode('C') && key.getModifiers().isCtrlDown()) {
+        // Ctrl+C: Copy voice data to clipboard
+        std::cout << "[VoiceEditorPanel] Ctrl+C detected - copying voice data" << std::endl;
+        copyVoiceDataToClipboard();
+        return true;
+    } else if (key.isKeyCode('V') && key.getModifiers().isCtrlDown()) {
+        // Ctrl+V: Paste voice data from clipboard
+        std::cout << "[VoiceEditorPanel] Ctrl+V detected - pasting voice data" << std::endl;
+        pasteVoiceDataFromClipboard();
+        return true;
     }
     return false;
 }
@@ -335,6 +355,8 @@ void VoiceEditorPanel::resized() {
     headerFlex.items.add(fixedItem(channelSelector, 86.0f));
     addGap(18.0f);
     headerFlex.items.add(fixedItem(requestDumpButton, 148.0f));
+    addGap(6.0f);
+    headerFlex.items.add(fixedItem(dataButton, 80.0f));
     headerFlex.performLayout(headerBounds.toFloat());
 
     layoutBounds.removeFromTop(kSectionGap);
@@ -1288,6 +1310,186 @@ void VoiceEditorPanel::setDexedParam(uint8_t address, uint8_t value) {
     if (controller) {
         controller->setDexedParamForModule(moduleIndex, address, value);
     }
+}
+
+
+void VoiceEditorPanel::copyVoiceDataToClipboard() {
+    std::cout << "[VoiceEditorPanel] ========================================" << std::endl;
+    std::cout << "[VoiceEditorPanel] Copy operation initiated (Ctrl+C or Data button)" << std::endl;
+    
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel] ERROR: Cannot copy - panel not initialized" << std::endl;
+        return;
+    }
+    if (!controller) {
+        std::cout << "[VoiceEditorPanel] ERROR: Cannot copy - no controller" << std::endl;
+        return;
+    }
+
+    // Get all 156 bytes of voice data
+    std::vector<uint8_t> voiceData;
+    for (int i = 0; i < 156; ++i) {
+        voiceData.push_back(getDexedParam(static_cast<uint8_t>(i)));
+    }
+
+    // Build F0 sysex string: F0 43 12 00 <156 bytes data> F7
+    juce::String sysexHex = "F0 43 12 00 ";
+    
+    for (int i = 0; i < 156; ++i) {
+        sysexHex << juce::String::toHexString(voiceData[i]).paddedLeft('0', 2);
+        if (i < 155) sysexHex << " ";
+    }
+    
+    sysexHex << " F7";
+
+    // Copy to clipboard
+    juce::SystemClipboard::copyTextToClipboard(sysexHex);
+
+    // Log to console
+    std::cout << "[VoiceEditorPanel] Voice data copied to clipboard (" << sysexHex.length() << " characters)" << std::endl;
+    std::cout << "[VoiceEditorPanel] Data: " << sysexHex.substring(0, 80) << "..." << std::endl;
+    std::cout << "[VoiceEditorPanel] ========================================" << std::endl;
+}
+
+void VoiceEditorPanel::pasteVoiceDataFromClipboard() {
+    std::cout << "[VoiceEditorPanel] ========================================" << std::endl;
+    std::cout << "[VoiceEditorPanel] Paste operation initiated (Ctrl+V)" << std::endl;
+    
+    if (!isInitialized) {
+        std::cout << "[VoiceEditorPanel] ERROR: Cannot paste - panel not initialized" << std::endl;
+        return;
+    }
+    if (!controller) {
+        std::cout << "[VoiceEditorPanel] ERROR: Cannot paste - no controller" << std::endl;
+        return;
+    }
+
+    juce::String clipboardText = juce::SystemClipboard::getTextFromClipboard();
+    std::cout << "[VoiceEditorPanel] Clipboard length: " << clipboardText.length() << " characters" << std::endl;
+    
+    if (clipboardText.isEmpty()) {
+        std::cout << "[VoiceEditorPanel] ERROR: Clipboard is empty" << std::endl;
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Paste Voice Data", "Clipboard is empty.\n\nExpected format: F0 43 12 00 [156 hex bytes] F7");
+        return;
+    }
+    
+    std::cout << "[VoiceEditorPanel] Clipboard text (first 100 chars): " << clipboardText.substring(0, 100) << std::endl;
+
+    // Parse the sysex data
+    // Expected format: F0 43 12 00 [156 hex bytes] F7 or similar variants
+    
+    // Remove all whitespace and convert to uppercase
+    juce::String cleanedText = clipboardText.removeCharacters(" \n\r\t").toUpperCase();
+    std::cout << "[VoiceEditorPanel] After cleanup: " << cleanedText.length() << " characters" << std::endl;
+    
+    // Try to extract hex data between F0 and F7
+    int startIdx = cleanedText.indexOf("F0");
+    int endIdx = cleanedText.lastIndexOf("F7");
+    
+    if (startIdx == -1 || endIdx == -1 || endIdx <= startIdx) {
+        std::cout << "[VoiceEditorPanel] ERROR: Invalid sysex format - F0/F7 markers not found" << std::endl;
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Paste Voice Data", "Invalid sysex format: F0/F7 markers not found.\n\nExpected format: F0 43 12 00 [156 hex bytes] F7");
+        return;
+    }
+
+    // Extract the data portion (skip F0 at start, skip F7 at end)
+    juce::String hexData = cleanedText.substring(startIdx + 2, endIdx);
+    std::cout << "[VoiceEditorPanel] Extracted hex data length: " << hexData.length() << " characters" << std::endl;
+    
+    // Expected: 43 12 00 followed by 156 bytes (312 hex characters)
+    // Skip manufacturer ID and voice-specific header
+    if (hexData.length() < 6) {
+        std::cout << "[VoiceEditorPanel] ERROR: Data too short (header missing)" << std::endl;
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Paste Voice Data", "Data too short - sysex header missing.");
+        return;
+    }
+
+    // Skip the "43 12 00" header (6 characters)
+    juce::String voiceHexData = hexData.substring(6);
+    std::cout << "[VoiceEditorPanel] Voice data length: " << voiceHexData.length() << " hex characters (" << (voiceHexData.length() / 2) << " bytes)" << std::endl;
+    
+    // Each byte is 2 hex characters, so 156 bytes = 312 characters
+    if (voiceHexData.length() < 312) {
+        std::cout << "[VoiceEditorPanel] ERROR: Incomplete voice data - expected 312 hex chars, got " << voiceHexData.length() << std::endl;
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+            "Paste Voice Data", "Incomplete voice data.\n\nExpected 156 bytes (312 hex characters), got " + 
+            juce::String(voiceHexData.length() / 2) + " bytes.");
+        return;
+    }
+
+    // Parse the hex bytes into a vector (validation pass)
+    std::vector<uint8_t> parsedData;
+    parsedData.reserve(156);
+    
+    for (int i = 0; i < 156; ++i) {
+        juce::String hexByte = voiceHexData.substring(i * 2, i * 2 + 2);
+        int value = hexByte.getHexValue32();
+        
+        if (value < 0 || value > 255) {
+            std::cout << "[VoiceEditorPanel] ERROR: Invalid hex value at byte " << i << ": '" << hexByte << "'" << std::endl;
+            juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                "Paste Voice Data", "Invalid hex value at byte " + juce::String(i) + ": '" + hexByte + "'");
+            return;
+        }
+        parsedData.push_back(static_cast<uint8_t>(value));
+    }
+
+    // Extract voice name from bytes 145-154 (10 ASCII characters)
+    juce::String voiceName;
+    for (int i = 145; i < 155 && i < static_cast<int>(parsedData.size()); ++i) {
+        char c = static_cast<char>(parsedData[i]);
+        if (c >= 32 && c < 127) {
+            voiceName += c;
+        } else {
+            voiceName += ' ';
+        }
+    }
+    voiceName = voiceName.trim();
+    if (voiceName.isEmpty()) {
+        voiceName = "(unnamed)";
+    }
+
+    std::cout << "[VoiceEditorPanel] Parsed successfully: 156 bytes, voice name: '" << voiceName << "'" << std::endl;
+    std::cout << "[VoiceEditorPanel] Showing confirmation dialog..." << std::endl;
+
+    // Show confirmation dialog before applying
+    // We need to capture parsedData by value since we're using an async callback
+    auto dataToApply = std::make_shared<std::vector<uint8_t>>(std::move(parsedData));
+    
+    juce::AlertWindow::showOkCancelBox(
+        juce::MessageBoxIconType::QuestionIcon,
+        "Paste Voice Data",
+        "Apply pasted voice data?\n\nVoice name: " + voiceName + "\nData size: 156 bytes",
+        "Apply",
+        "Cancel",
+        this,
+        juce::ModalCallbackFunction::create([this, dataToApply, voiceName](int result) {
+            if (result == 1) {
+                std::cout << "[VoiceEditorPanel] User confirmed paste - applying " << dataToApply->size() << " bytes" << std::endl;
+                
+                // Apply all 156 bytes
+                for (int i = 0; i < static_cast<int>(dataToApply->size()); ++i) {
+                    setDexedParam(static_cast<uint8_t>(i), (*dataToApply)[i]);
+                    if (i % 21 == 0) {
+                        std::cout << "  [Paste] Applied bytes " << i << "-" << (i + 20) << " (Operator " << (6 - (i / 21)) << ")" << std::endl;
+                    }
+                }
+                
+                std::cout << "[VoiceEditorPanel] ========================================" << std::endl;
+                std::cout << "[VoiceEditorPanel] Paste complete: " << dataToApply->size() << " bytes applied" << std::endl;
+                std::cout << "[VoiceEditorPanel] Voice name: '" << voiceName << "'" << std::endl;
+                std::cout << "[VoiceEditorPanel] ========================================" << std::endl;
+                
+                // Refresh the UI to show the new values
+                syncAllOperatorSlidersWithDexed();
+            } else {
+                std::cout << "[VoiceEditorPanel] User cancelled paste operation" << std::endl;
+            }
+        })
+    );
 }
 
 // --- Operator parameter offset mapping ---
