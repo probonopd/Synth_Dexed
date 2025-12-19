@@ -401,35 +401,57 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
       mainPartGroup("mainPartGroup", "Main") // NEW
 {
     // Add and make visible all group components
-    addAndMakeVisible(voiceGroup);
-    addAndMakeVisible(unisonGroup);
-    addAndMakeVisible(midiPitchGroup);
-    addAndMakeVisible(noteRangeGroup);
-    addAndMakeVisible(portaMonoGroup);
-    addAndMakeVisible(filterGroup);
-    addAndMakeVisible(mainPartGroup); // NEW
+    juce::GroupComponent* groups[] = { &voiceGroup, &unisonGroup, &midiPitchGroup, 
+                                       &noteRangeGroup, &portaMonoGroup, &filterGroup, &mainPartGroup };
+    for (auto* group : groups)
+        addAndMakeVisible(*group);
 
-    // Remove setSize() calls from all sliders, as their size is set in resized().
-    unisonVoicesSlider.setLabelText("Voices");
-    addAndMakeVisible(unisonVoicesSlider);
-    unisonVoicesSlider.getSlider().setRange(1, 4, 1);
-    unisonVoicesSlider.getSlider().setValue(1);
+    // Helper to setup sliders with label, visibility, and range
+    auto setupSlider = [this](FMRackLabeledVerticalSlider& slider, const char* label, 
+                              double min, double max, double step, double defaultVal = 0) {
+        slider.setLabelText(label);
+        addAndMakeVisible(slider);
+        slider.getSlider().setRange(min, max, step);
+        if (defaultVal != 0) slider.getSlider().setValue(defaultVal);
+    };
+    
+    auto setupLabelAndButton = [this](juce::Label& label, juce::ToggleButton& button, const char* text) {
+        label.setText(text, juce::dontSendNotification);
+        addAndMakeVisible(label);
+        button.setButtonText("");
+        addAndMakeVisible(button);
+    };
 
-    unisonDetuneSlider.setLabelText("Detune");
-    addAndMakeVisible(unisonDetuneSlider);
-    // Slider is normalized; we map it to cents nonlinearly for better low-end resolution.
-    unisonDetuneSlider.getSlider().setRange(0.0, 1.0, 0.001);
-    unisonDetuneSlider.getSlider().setValue(unisonCentsToUiNorm(0.0f));
-
-    unisonPanSlider.setLabelText("Spread");
-    addAndMakeVisible(unisonPanSlider);
-    unisonPanSlider.getSlider().setRange(0.0, 1.0, 0.01);
-    unisonPanSlider.getSlider().setValue(0.5);
-
-    midiChannelSlider.setLabelText("Ch");
-    addAndMakeVisible(midiChannelSlider);
-    midiChannelSlider.getSlider().setRange(0, 16, 1); // 0 = Omni, 1-16 = specific channels
-    midiChannelSlider.getSlider().setValue(idx + 1); // Default to 1-based index
+    // Setup all sliders
+    setupSlider(unisonVoicesSlider, "Voices", 1, 4, 1, 1);
+    setupSlider(unisonDetuneSlider, "Detune", 0.0, 1.0, 0.001, unisonCentsToUiNorm(0.0f));
+    setupSlider(unisonPanSlider, "Spread", 0.0, 1.0, 0.01, 0.5);
+    setupSlider(reverbSendSlider, "Rvb", 0, 99, 1);
+    setupSlider(volumeSlider, "Vol", 0, 127, 1);
+    setupSlider(panSlider, "Pan", 0, 127, 1);
+    setupSlider(detuneSlider, "Fine", -64, 63, 1);
+    setupSlider(noteLimitLowSlider, "Low", 0, 127, 1);
+    setupSlider(noteLimitHighSlider, "High", 0, 127, 1);
+    setupSlider(noteShiftSlider, "Shift", -24, 24, 1);
+    setupSlider(pitchBendRangeSlider, "PBR", 0, 12, 1);
+    setupSlider(pitchBendStepSlider, "PBS", 0, 12, 1);
+    setupSlider(portamentoTimeSlider, "PRT", 0, 99, 1);
+    setupSlider(modWheelSensSlider, "MWS", 0, 15, 1);
+    setupSlider(modWheelAssignSlider, "MWA", 0, 7, 1);
+    setupSlider(footCtrlSensSlider, "FCS", 0, 15, 1);
+    setupSlider(footCtrlAssignSlider, "FCA", 0, 7, 1);
+    setupSlider(afterTouchSensSlider, "ATS", 0, 15, 1);
+    setupSlider(afterTouchAssignSlider, "ATA", 0, 7, 1);
+    setupSlider(breathCtrlSensSlider, "BCS", 0, 15, 1);
+    setupSlider(breathCtrlAssignSlider, "BCA", 0, 7, 1);
+    setupSlider(velocityScaleSlider, "Vel", 0, 127, 1);
+    setupSlider(audioAttenuatorSlider, "ATT", 0, 7, 1);
+    setupSlider(masterTuneSlider, "MTU", 0, 127, 1);
+    setupSlider(filterCutoffSlider, "Cut", 0, 127, 1);
+    setupSlider(filterResonanceSlider, "Res", 0, 127, 1);
+    
+    // MIDI Channel slider with custom text functions
+    setupSlider(midiChannelSlider, "Ch", 0, 16, 1, idx + 1);
     midiChannelSlider.getSlider().textFromValueFunction = [](double value) {
         int ch = (int)value;
         return ch == 0 ? "Omni" : juce::String(ch);
@@ -438,386 +460,148 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
         if (text.equalsIgnoreCase("Omni")) return 0.0;
         return text.getDoubleValue();
     };
+    
+    // Labels and buttons
+    setupLabelAndButton(portamentoGlissandoLabel, portamentoGlissandoButton, "Gliss");
+    setupLabelAndButton(portamentoModeLabel, portamentoModeButton, "Porta");
+    setupLabelAndButton(monoModeLabel, monoModeButton, "Mono");
+    setupLabelAndButton(filterEnabledLabel, filterEnabledButton, "Filter");
 
-    reverbSendSlider.setLabelText("Rvb");
-    addAndMakeVisible(reverbSendSlider);
-    reverbSendSlider.getSlider().setRange(0, 99, 1);
-
-    volumeSlider.setLabelText("Vol");
-    addAndMakeVisible(volumeSlider);
-    volumeSlider.getSlider().setRange(0, 127, 1);
-
-    panSlider.setLabelText("Pan");
-    addAndMakeVisible(panSlider);
-    panSlider.getSlider().setRange(0, 127, 1);
-
-    detuneSlider.setLabelText("Fine");
-    addAndMakeVisible(detuneSlider);
-    // TX816/TX802-style fine tune works in cents. Keep the UI in a sensible musical range.
-    detuneSlider.getSlider().setRange(-64, 63, 1);
-
-    // Note Range controls
-    noteLimitLowSlider.setLabelText("Low");
-    addAndMakeVisible(noteLimitLowSlider);
-    noteLimitLowSlider.getSlider().setRange(0, 127, 1);
-
-    noteLimitHighSlider.setLabelText("High");
-    addAndMakeVisible(noteLimitHighSlider);
-    noteLimitHighSlider.getSlider().setRange(0, 127, 1);
-
-    noteShiftSlider.setLabelText("Shift");
-    addAndMakeVisible(noteShiftSlider);
-    noteShiftSlider.getSlider().setRange(-24, 24, 1);
-
-    // Pitch Bend (TX816Perf: PBR, PBS)
-    pitchBendRangeSlider.setLabelText("PBR");
-    addAndMakeVisible(pitchBendRangeSlider);
-    pitchBendRangeSlider.getSlider().setRange(0, 12, 1);
-
-    pitchBendStepSlider.setLabelText("PBS");
-    addAndMakeVisible(pitchBendStepSlider);
-    pitchBendStepSlider.getSlider().setRange(0, 12, 1);
-
-    // Portamento (TX816Perf: PRT, PGL, PMD)
-    portamentoTimeSlider.setLabelText("PRT");
-    addAndMakeVisible(portamentoTimeSlider);
-    portamentoTimeSlider.getSlider().setRange(0, 99, 1);
-
-    // PGL
-    portamentoGlissandoLabel.setText("Gliss", juce::dontSendNotification);
-    addAndMakeVisible(portamentoGlissandoLabel);
-    portamentoGlissandoButton.setButtonText("");
-    addAndMakeVisible(portamentoGlissandoButton);
-
-    // PMD
-    portamentoModeLabel.setText("Porta", juce::dontSendNotification);
-    addAndMakeVisible(portamentoModeLabel);
-    portamentoModeButton.setButtonText("");
-    addAndMakeVisible(portamentoModeButton);
-
-    // PMO
-    monoModeLabel.setText("Mono", juce::dontSendNotification);
-    addAndMakeVisible(monoModeLabel);
-    monoModeButton.setButtonText("");
-    addAndMakeVisible(monoModeButton);
-
-    // Controller Assignments (TX816Perf: MWS, MWA, FCS, FCA, ATS, ATA, BCS, BCA)
-    modWheelSensSlider.setLabelText("MWS");
-    addAndMakeVisible(modWheelSensSlider);
-    modWheelSensSlider.getSlider().setRange(0, 15, 1);
-
-    modWheelAssignSlider.setLabelText("MWA");
-    addAndMakeVisible(modWheelAssignSlider);
-    modWheelAssignSlider.getSlider().setRange(0, 7, 1);
-
-    footCtrlSensSlider.setLabelText("FCS");
-    addAndMakeVisible(footCtrlSensSlider);
-    footCtrlSensSlider.getSlider().setRange(0, 15, 1);
-
-    footCtrlAssignSlider.setLabelText("FCA");
-    addAndMakeVisible(footCtrlAssignSlider);
-    footCtrlAssignSlider.getSlider().setRange(0, 7, 1);
-
-    afterTouchSensSlider.setLabelText("ATS");
-    addAndMakeVisible(afterTouchSensSlider);
-    afterTouchSensSlider.getSlider().setRange(0, 15, 1);
-
-    afterTouchAssignSlider.setLabelText("ATA");
-    addAndMakeVisible(afterTouchAssignSlider);
-    afterTouchAssignSlider.getSlider().setRange(0, 7, 1);
-
-    breathCtrlSensSlider.setLabelText("BCS");
-    addAndMakeVisible(breathCtrlSensSlider);
-    breathCtrlSensSlider.getSlider().setRange(0, 15, 1);
-
-    breathCtrlAssignSlider.setLabelText("BCA");
-    addAndMakeVisible(breathCtrlAssignSlider);
-    breathCtrlAssignSlider.getSlider().setRange(0, 7, 1);
-
-    // Misc (TX816Perf: ATT, MTU)
-    velocityScaleSlider.setLabelText("Vel");
-    addAndMakeVisible(velocityScaleSlider);
-    velocityScaleSlider.getSlider().setRange(0, 127, 1);
-
-    audioAttenuatorSlider.setLabelText("ATT");
-    addAndMakeVisible(audioAttenuatorSlider);
-    audioAttenuatorSlider.getSlider().setRange(0, 7, 1);
-
-    masterTuneSlider.setLabelText("MTU");
-    addAndMakeVisible(masterTuneSlider);
-    masterTuneSlider.getSlider().setRange(0, 127, 1);
-
-    // Filter
-    filterEnabledLabel.setText("Filter", juce::dontSendNotification);
-    addAndMakeVisible(filterEnabledLabel);
-    filterEnabledButton.setButtonText("");  // Empty - label shows the name
-    addAndMakeVisible(filterEnabledButton);
-
-    filterCutoffSlider.setLabelText("Cut");
-    addAndMakeVisible(filterCutoffSlider);
-    filterCutoffSlider.getSlider().setRange(0, 127, 1);
-
-    filterResonanceSlider.setLabelText("Res");
-    addAndMakeVisible(filterResonanceSlider);
-    filterResonanceSlider.getSlider().setRange(0, 127, 1);
+    // Helper lambdas for setting up value change handlers (reduces code duplication)
+    auto setupUint8SliderHandler = [this](FMRackLabeledVerticalSlider& slider, uint8_t FMRack::Performance::PartConfig::*member) {
+        slider.onValueChange = [this, &slider, member] {
+            auto* perf = getPerformance(); if (!perf) return;
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            const auto newValue = static_cast<uint8_t>(slider.getSlider().getValue());
+            if (part.*member != newValue) {
+                part.*member = newValue;
+                getController()->setPerformance(*perf);
+            }
+        };
+    };
+    
+    auto setupInt8SliderHandler = [this](FMRackLabeledVerticalSlider& slider, int8_t FMRack::Performance::PartConfig::*member) {
+        slider.onValueChange = [this, &slider, member] {
+            auto* perf = getPerformance(); if (!perf) return;
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            const auto newValue = static_cast<int8_t>(slider.getSlider().getValue());
+            if (part.*member != newValue) {
+                part.*member = newValue;
+                getController()->setPerformance(*perf);
+            }
+        };
+    };
+    
+    auto setupInt16SliderHandler = [this](FMRackLabeledVerticalSlider& slider, int16_t FMRack::Performance::PartConfig::*member) {
+        slider.onValueChange = [this, &slider, member] {
+            auto* perf = getPerformance(); if (!perf) return;
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            const auto newValue = static_cast<int16_t>(slider.getSlider().getValue());
+            if (part.*member != newValue) {
+                part.*member = newValue;
+                getController()->setPerformance(*perf);
+            }
+        };
+    };
+    
+    auto setupFloatSliderHandler = [this](FMRackLabeledVerticalSlider& slider, float FMRack::Performance::PartConfig::*member) {
+        slider.onValueChange = [this, &slider, member] {
+            auto* perf = getPerformance(); if (!perf) return;
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            const float newValue = static_cast<float>(slider.getSlider().getValue());
+            if (part.*member != newValue) {
+                part.*member = newValue;
+                getController()->setPerformance(*perf);
+            }
+        };
+    };
+    
+    auto setupToggleButtonHandler = [this](juce::ToggleButton& button, uint8_t FMRack::Performance::PartConfig::*member) {
+        button.onClick = [this, &button, member] {
+            auto* perf = getPerformance(); if (!perf) return;
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            const bool newValue = button.getToggleState();
+            const bool currentValue = part.*member != 0;
+            if (currentValue != newValue) {
+                part.*member = static_cast<uint8_t>(newValue);
+                getController()->setPerformance(*perf);
+            }
+        };
+    };
+    
+    auto setupBoolToggleButtonHandler = [this](juce::ToggleButton& button, bool FMRack::Performance::PartConfig::*member) {
+        button.onClick = [this, &button, member] {
+            auto* perf = getPerformance(); if (!perf) return;
+            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+            const bool newValue = button.getToggleState();
+            if (part.*member != newValue) {
+                part.*member = newValue;
+                getController()->setPerformance(*perf);
+            }
+        };
+    };
 
     // Wire up controls to update Performance, not module directly
+    
+    // Special handlers for unison (with detune conversion logic)
     unisonVoicesSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            uint8_t newValue = (uint8_t)unisonVoicesSlider.getSlider().getValue();
-            if (part.unisonVoices != newValue) {
-                // Preserve perceived detune width when changing voice count:
-                // slider represents max-outer-cents, but Performance stores per-step cents.
-                const float currentMaxOuter = uiNormToUnisonCents((float)unisonDetuneSlider.getSlider().getValue());
-                part.unisonVoices = newValue;
-                part.unisonDetune = perStepDetuneFromMaxOuter(currentMaxOuter, (int)part.unisonVoices);
-                controller->setPerformance(*perf);
-            }
+        auto* perf = getPerformance(); if (!perf) return;
+        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
+        uint8_t newValue = (uint8_t)unisonVoicesSlider.getSlider().getValue();
+        if (part.unisonVoices != newValue) {
+            const float currentMaxOuter = uiNormToUnisonCents((float)unisonDetuneSlider.getSlider().getValue());
+            part.unisonVoices = newValue;
+            part.unisonDetune = perStepDetuneFromMaxOuter(currentMaxOuter, (int)part.unisonVoices);
+            getController()->setPerformance(*perf);
         }
     };
     unisonDetuneSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            const float uiNorm = (float)unisonDetuneSlider.getSlider().getValue();
-            const float maxOuterCents = uiNormToUnisonCents(uiNorm);
-            const int voices = (int)part.unisonVoices;
-            const float perStepCents = perStepDetuneFromMaxOuter(maxOuterCents, voices);
-            if (part.unisonDetune != perStepCents) {
-                part.unisonDetune = perStepCents;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-    unisonPanSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            float newValue = (float)unisonPanSlider.getSlider().getValue();
-            if (part.unisonSpread != newValue) {
-                part.unisonSpread = newValue;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-    midiChannelSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            uint8_t newValue = (uint8_t)midiChannelSlider.getSlider().getValue();
-            if (part.midiChannel != newValue) {
-                part.midiChannel = newValue;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-
-    reverbSendSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            uint8_t newValue = (uint8_t)reverbSendSlider.getSlider().getValue();
-            if (part.reverbSend != newValue) {
-                part.reverbSend = newValue;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-
-    volumeSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            uint8_t newValue = (uint8_t)volumeSlider.getSlider().getValue();
-            if (part.volume != newValue) {
-                part.volume = newValue;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-
-    panSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            uint8_t newValue = (uint8_t)panSlider.getSlider().getValue();
-            if (part.pan != newValue) {
-                part.pan = newValue;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-
-    detuneSlider.onValueChange = [this] {
-        auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
-        auto* processor = editor ? editor->getProcessor() : nullptr;
-        auto* controller = processor ? processor->getController() : nullptr;
-        auto* perf = controller ? controller->getPerformance() : nullptr;
-        if (perf) {
-            auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-            int8_t newValue = (int8_t)detuneSlider.getSlider().getValue();
-            if (part.detune != newValue) {
-                part.detune = newValue;
-                controller->setPerformance(*perf);
-            }
-        }
-    };
-
-    // Note Range handlers
-    noteLimitLowSlider.onValueChange = [this] {
         auto* perf = getPerformance(); if (!perf) return;
         auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        uint8_t newValue = (uint8_t)noteLimitLowSlider.getSlider().getValue();
-        if (part.noteLimitLow != newValue) {
-            part.noteLimitLow = newValue;
+        const float uiNorm = (float)unisonDetuneSlider.getSlider().getValue();
+        const float maxOuterCents = uiNormToUnisonCents(uiNorm);
+        const int voices = (int)part.unisonVoices;
+        const float perStepCents = perStepDetuneFromMaxOuter(maxOuterCents, voices);
+        if (part.unisonDetune != perStepCents) {
+            part.unisonDetune = perStepCents;
             getController()->setPerformance(*perf);
         }
     };
-    noteLimitHighSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<uint8_t>(noteLimitHighSlider.getSlider().getValue());
-        if (part.noteLimitHigh != newValue) {
-            part.noteLimitHigh = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-    noteShiftSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<int8_t>(noteShiftSlider.getSlider().getValue());
-        if (part.noteShift != newValue) {
-            part.noteShift = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-
-    // Pitch Bend handler
-    pitchBendRangeSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<uint8_t>(pitchBendRangeSlider.getSlider().getValue());
-        if (part.pitchBendRange != newValue) {
-            part.pitchBendRange = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-
-    // Portamento handlers
-    portamentoModeButton.onClick = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const bool newValue = portamentoModeButton.getToggleState();
-        const bool currentValue = part.portamentoMode != 0;
-        if (currentValue != newValue) {
-            part.portamentoMode = static_cast<uint8_t>(newValue);
-            getController()->setPerformance(*perf);
-        }
-    };
-    portamentoGlissandoButton.onClick = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const bool newValue = portamentoGlissandoButton.getToggleState();
-        const bool currentValue = part.portamentoGlissando != 0;
-        if (currentValue != newValue) {
-            part.portamentoGlissando = static_cast<uint8_t>(newValue);
-            getController()->setPerformance(*perf);
-        }
-    };
-    portamentoTimeSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<uint8_t>(portamentoTimeSlider.getSlider().getValue());
-        if (part.portamentoTime != newValue) {
-            part.portamentoTime = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-
-    // Mono Mode handler
-    monoModeButton.onClick = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const bool newValue = monoModeButton.getToggleState();
-        const bool currentValue = part.monoMode != 0;
-        if (currentValue != newValue) {
-            part.monoMode = static_cast<uint8_t>(newValue);
-            getController()->setPerformance(*perf);
-        }
-    };
-
-    // Misc handlers
-    velocityScaleSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<uint8_t>(velocityScaleSlider.getSlider().getValue());
-        if (part.velocityScale != newValue) {
-            part.velocityScale = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-    masterTuneSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<int16_t>(masterTuneSlider.getSlider().getValue());
-        if (part.masterTune != newValue) {
-            part.masterTune = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-
-    // Filter handlers
-    filterEnabledButton.onClick = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const bool newValue = filterEnabledButton.getToggleState();
-        const bool currentValue = part.filterEnabled != 0;
-        if (currentValue != newValue) {
-            part.filterEnabled = static_cast<uint8_t>(newValue);
-            getController()->setPerformance(*perf);
-        }
-    };
-    filterCutoffSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<uint8_t>(filterCutoffSlider.getSlider().getValue());
-        if (part.filterCutoff != newValue) {
-            part.filterCutoff = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
-    filterResonanceSlider.onValueChange = [this] {
-        auto* perf = getPerformance(); if (!perf) return;
-        auto& part = const_cast<FMRack::Performance::PartConfig&>(perf->getPartConfig(moduleIndex));
-        const auto newValue = static_cast<uint8_t>(filterResonanceSlider.getSlider().getValue());
-        if (part.filterResonance != newValue) {
-            part.filterResonance = newValue;
-            getController()->setPerformance(*perf);
-        }
-    };
+    
+    // Standard handlers using helper functions
+    setupFloatSliderHandler(unisonPanSlider, &FMRack::Performance::PartConfig::unisonSpread);
+    setupUint8SliderHandler(midiChannelSlider, &FMRack::Performance::PartConfig::midiChannel);
+    setupUint8SliderHandler(reverbSendSlider, &FMRack::Performance::PartConfig::reverbSend);
+    setupUint8SliderHandler(volumeSlider, &FMRack::Performance::PartConfig::volume);
+    setupUint8SliderHandler(panSlider, &FMRack::Performance::PartConfig::pan);
+    setupInt8SliderHandler(detuneSlider, &FMRack::Performance::PartConfig::detune);
+    setupUint8SliderHandler(noteLimitLowSlider, &FMRack::Performance::PartConfig::noteLimitLow);
+    setupUint8SliderHandler(noteLimitHighSlider, &FMRack::Performance::PartConfig::noteLimitHigh);
+    setupInt8SliderHandler(noteShiftSlider, &FMRack::Performance::PartConfig::noteShift);
+    setupUint8SliderHandler(pitchBendRangeSlider, &FMRack::Performance::PartConfig::pitchBendRange);
+    setupUint8SliderHandler(pitchBendStepSlider, &FMRack::Performance::PartConfig::pitchBendStep);
+    setupUint8SliderHandler(portamentoTimeSlider, &FMRack::Performance::PartConfig::portamentoTime);
+    setupUint8SliderHandler(velocityScaleSlider, &FMRack::Performance::PartConfig::velocityScale);
+    setupUint8SliderHandler(audioAttenuatorSlider, &FMRack::Performance::PartConfig::cutoff);
+    setupInt16SliderHandler(masterTuneSlider, &FMRack::Performance::PartConfig::masterTune);
+    setupUint8SliderHandler(filterCutoffSlider, &FMRack::Performance::PartConfig::filterCutoff);
+    setupUint8SliderHandler(filterResonanceSlider, &FMRack::Performance::PartConfig::filterResonance);
+    
+    // Controller assignments
+    setupUint8SliderHandler(modWheelSensSlider, &FMRack::Performance::PartConfig::modulationWheelRange);
+    setupUint8SliderHandler(modWheelAssignSlider, &FMRack::Performance::PartConfig::modulationWheelTarget);
+    setupUint8SliderHandler(footCtrlSensSlider, &FMRack::Performance::PartConfig::footControlRange);
+    setupUint8SliderHandler(footCtrlAssignSlider, &FMRack::Performance::PartConfig::footControlTarget);
+    setupUint8SliderHandler(afterTouchSensSlider, &FMRack::Performance::PartConfig::aftertouchRange);
+    setupUint8SliderHandler(afterTouchAssignSlider, &FMRack::Performance::PartConfig::aftertouchTarget);
+    setupUint8SliderHandler(breathCtrlSensSlider, &FMRack::Performance::PartConfig::breathControlRange);
+    setupUint8SliderHandler(breathCtrlAssignSlider, &FMRack::Performance::PartConfig::breathControlTarget);
+    
+    // Toggle button handlers
+    setupToggleButtonHandler(portamentoModeButton, &FMRack::Performance::PartConfig::portamentoMode);
+    setupToggleButtonHandler(portamentoGlissandoButton, &FMRack::Performance::PartConfig::portamentoGlissando);
+    setupToggleButtonHandler(monoModeButton, &FMRack::Performance::PartConfig::monoMode);
+    setupBoolToggleButtonHandler(filterEnabledButton, &FMRack::Performance::PartConfig::filterEnabled);
 
     // File dialog state flag
     fileDialogOpen = false;
@@ -896,40 +680,21 @@ ModuleTabComponent::ModuleTabComponent(int idx, RackAccordionComponent* parent)
     };
 
     // Add mouse listeners for hover help on all controls
-    loadVoiceButton.addMouseListener(this, false);
-    browsePatchesButton.addMouseListener(this, false);
-    openVoiceEditorButton.addMouseListener(this, false);
-    volumeSlider.getSlider().addMouseListener(this, false);
-    panSlider.getSlider().addMouseListener(this, false);
-    detuneSlider.getSlider().addMouseListener(this, false);
-    reverbSendSlider.getSlider().addMouseListener(this, false);
-    unisonVoicesSlider.getSlider().addMouseListener(this, false);
-    unisonDetuneSlider.getSlider().addMouseListener(this, false);
-    unisonPanSlider.getSlider().addMouseListener(this, false);
-    midiChannelSlider.getSlider().addMouseListener(this, false);
-    noteLimitLowSlider.getSlider().addMouseListener(this, false);
-    noteLimitHighSlider.getSlider().addMouseListener(this, false);
-    noteShiftSlider.getSlider().addMouseListener(this, false);
-    pitchBendRangeSlider.getSlider().addMouseListener(this, false);
-    pitchBendStepSlider.getSlider().addMouseListener(this, false);
-    portamentoGlissandoButton.addMouseListener(this, false);
-    portamentoModeButton.addMouseListener(this, false);
-    portamentoTimeSlider.getSlider().addMouseListener(this, false);
-    monoModeButton.addMouseListener(this, false);
-    modWheelSensSlider.getSlider().addMouseListener(this, false);
-    modWheelAssignSlider.getSlider().addMouseListener(this, false);
-    footCtrlSensSlider.getSlider().addMouseListener(this, false);
-    footCtrlAssignSlider.getSlider().addMouseListener(this, false);
-    afterTouchSensSlider.getSlider().addMouseListener(this, false);
-    afterTouchAssignSlider.getSlider().addMouseListener(this, false);
-    breathCtrlSensSlider.getSlider().addMouseListener(this, false);
-    breathCtrlAssignSlider.getSlider().addMouseListener(this, false);
-    audioAttenuatorSlider.getSlider().addMouseListener(this, false);
-    velocityScaleSlider.getSlider().addMouseListener(this, false);
-    masterTuneSlider.getSlider().addMouseListener(this, false);
-    filterEnabledButton.addMouseListener(this, false);
-    filterCutoffSlider.getSlider().addMouseListener(this, false);
-    filterResonanceSlider.getSlider().addMouseListener(this, false);
+    juce::Component* mouseListenerComponents[] = {
+        &loadVoiceButton, &browsePatchesButton, &openVoiceEditorButton,
+        &volumeSlider.getSlider(), &panSlider.getSlider(), &detuneSlider.getSlider(), &reverbSendSlider.getSlider(),
+        &unisonVoicesSlider.getSlider(), &unisonDetuneSlider.getSlider(), &unisonPanSlider.getSlider(),
+        &midiChannelSlider.getSlider(), &noteLimitLowSlider.getSlider(), &noteLimitHighSlider.getSlider(),
+        &noteShiftSlider.getSlider(), &pitchBendRangeSlider.getSlider(), &pitchBendStepSlider.getSlider(),
+        &portamentoGlissandoButton, &portamentoModeButton, &portamentoTimeSlider.getSlider(), &monoModeButton,
+        &modWheelSensSlider.getSlider(), &modWheelAssignSlider.getSlider(), &footCtrlSensSlider.getSlider(),
+        &footCtrlAssignSlider.getSlider(), &afterTouchSensSlider.getSlider(), &afterTouchAssignSlider.getSlider(),
+        &breathCtrlSensSlider.getSlider(), &breathCtrlAssignSlider.getSlider(), &audioAttenuatorSlider.getSlider(),
+        &velocityScaleSlider.getSlider(), &masterTuneSlider.getSlider(), &filterEnabledButton,
+        &filterCutoffSlider.getSlider(), &filterResonanceSlider.getSlider()
+    };
+    for (auto* comp : mouseListenerComponents)
+        comp->addMouseListener(this, false);
 
     updateFromModule(); // Initial sync
 }
@@ -957,11 +722,29 @@ void ModuleTabComponent::updateFromModule()
         noteLimitHighSlider.getSlider().setValue(part.noteLimitHigh, juce::dontSendNotification);
         noteShiftSlider.getSlider().setValue(part.noteShift, juce::dontSendNotification);
         pitchBendRangeSlider.getSlider().setValue(part.pitchBendRange, juce::dontSendNotification);
+        pitchBendStepSlider.getSlider().setValue(part.pitchBendStep, juce::dontSendNotification);
         portamentoTimeSlider.getSlider().setValue(part.portamentoTime, juce::dontSendNotification);
         velocityScaleSlider.getSlider().setValue(part.velocityScale, juce::dontSendNotification);
+        audioAttenuatorSlider.getSlider().setValue(part.cutoff, juce::dontSendNotification);
         masterTuneSlider.getSlider().setValue(part.masterTune, juce::dontSendNotification);
         filterCutoffSlider.getSlider().setValue(part.filterCutoff, juce::dontSendNotification);
         filterResonanceSlider.getSlider().setValue(part.filterResonance, juce::dontSendNotification);
+        
+        // Controller assignments
+        modWheelSensSlider.getSlider().setValue(part.modulationWheelRange, juce::dontSendNotification);
+        modWheelAssignSlider.getSlider().setValue(part.modulationWheelTarget, juce::dontSendNotification);
+        footCtrlSensSlider.getSlider().setValue(part.footControlRange, juce::dontSendNotification);
+        footCtrlAssignSlider.getSlider().setValue(part.footControlTarget, juce::dontSendNotification);
+        afterTouchSensSlider.getSlider().setValue(part.aftertouchRange, juce::dontSendNotification);
+        afterTouchAssignSlider.getSlider().setValue(part.aftertouchTarget, juce::dontSendNotification);
+        breathCtrlSensSlider.getSlider().setValue(part.breathControlRange, juce::dontSendNotification);
+        breathCtrlAssignSlider.getSlider().setValue(part.breathControlTarget, juce::dontSendNotification);
+        
+        // Toggle buttons
+        portamentoModeButton.setToggleState(part.portamentoMode != 0, juce::dontSendNotification);
+        portamentoGlissandoButton.setToggleState(part.portamentoGlissando != 0, juce::dontSendNotification);
+        monoModeButton.setToggleState(part.monoMode != 0, juce::dontSendNotification);
+        filterEnabledButton.setToggleState(part.filterEnabled, juce::dontSendNotification);
     }
 }
 
@@ -1005,11 +788,12 @@ void ModuleTabComponent::resized()
         auto voiceContent = voiceArea.reduced(kContentPadding).withTrimmedTop(kGroupLabelOffset);
         int x = voiceContent.getCentreX() - voiceButtonWidth / 2;
         int y = voiceContent.getY() + (voiceContent.getHeight() - totalButtonHeight) / 2;
-        loadVoiceButton.setBounds(x, y, voiceButtonWidth, buttonHeight);
-        y += buttonHeight + voiceButtonSpacing;
-        browsePatchesButton.setBounds(x, y, voiceButtonWidth, buttonHeight);
-        y += buttonHeight + voiceButtonSpacing;
-        openVoiceEditorButton.setBounds(x, y, voiceButtonWidth, buttonHeight);
+        
+        juce::TextButton* voiceButtons[] = { &loadVoiceButton, &browsePatchesButton, &openVoiceEditorButton };
+        for (auto* button : voiceButtons) {
+            button->setBounds(x, y, voiceButtonWidth, buttonHeight);
+            y += buttonHeight + voiceButtonSpacing;
+        }
     }
     row1.removeFromLeft(groupGap);
 
@@ -1019,52 +803,51 @@ void ModuleTabComponent::resized()
         const int contentW = sliderCount * sliderW + gap * juce::jmax(0, sliderCount - 1);
         return contentW + 2 * kContentPadding;
     };
+    
+    // Helper to distribute available width among groups
+    auto distributeWidth = [](int available, int* widths, int count, const int* minWidths, const int* priorities) {
+        const int minFloor = 24; // Minimum acceptable width
+        int sum = 0;
+        for (int i = 0; i < count; ++i) {
+            widths[i] = minWidths[i];
+            sum += minWidths[i];
+        }
+        
+        if (sum <= available) {
+            int extra = available - sum;
+            int totalPriority = 0;
+            for (int i = 0; i < count; ++i) totalPriority += priorities[i];
+            for (int i = 0; i < count; ++i) {
+                int give = (i == count - 1) ? extra : (extra * priorities[i] / totalPriority);
+                widths[i] += give;
+                extra -= give;
+            }
+        } else {
+            float scale = (float)available / (float)sum;
+            for (int i = 0; i < count; ++i)
+                widths[i] = juce::jmax(minFloor, (int)std::floor(widths[i] * scale));
+            int adjusted = 0;
+            for (int i = 0; i < count; ++i) adjusted += widths[i];
+            while (adjusted > available) {
+                for (int i = 0; i < count && adjusted > available; ++i) {
+                    if (widths[i] > minFloor) { widths[i]--; adjusted--; }
+                }
+            }
+        }
+    };
 
     const int mainMin = computeSliderGroupMin(5, controlGap); // Ch, Vol, Pan, Fine, Rvb
     const int filterMin = computeSliderGroupMin(2, controlGap); // Cut, Res
     const int portaMonoMin = juce::jmax(computeSliderGroupMin(1, controlGap), 110); // Time + toggles
 
-    // Available width remaining after voice and the gap we already removed above
-    int remaining = row1.getWidth();
-    // We'll subtract group gaps between the three groups (main, filter, porta)
-    // There are two gaps between these three groups.
-    const int gapsTotal = groupGap * 2;
-    remaining -= gapsTotal;
-
-    // Start with minimal sizes
-    int mainW = mainMin;
-    int filterW = filterMin;
-    int portaW = portaMonoMin;
-
-    int sumMin = mainW + filterW + portaW;
-    // If we have extra space, give it to filter (keep main at minimum). If not enough, shrink proportionally but not below a floor.
-    const int minFloor = 2 * kContentPadding + kMinSliderWidth; // very smallest allowed
-    if (sumMin <= remaining) {
-        int extra = remaining - sumMin;
-        // Keep Main at minimum width, give most extra to Filter, rest to Porta
-        // Main stays at mainMin (no extra)
-        int giveFilter = extra * 70 / 100;  // Give most to Filter
-        int givePorta = extra - giveFilter;
-        filterW += giveFilter;
-        portaW += givePorta;
-    } else {
-        // Need to shrink. Compute proportional shrink but respect minFloor
-        float scale = (float)remaining / (float)sumMin;
-        mainW = juce::jmax(minFloor, (int)std::floor(mainW * scale));
-        filterW = juce::jmax(minFloor, (int)std::floor(filterW * scale));
-        portaW = juce::jmax(minFloor, (int)std::floor(portaW * scale));
-        // If rounding caused us to still exceed remaining, trim from main
-        int adjustedSum = mainW + filterW + portaW;
-        while (adjustedSum > remaining) {
-            if (mainW > minFloor) { mainW--; }
-            else if (filterW > minFloor) { filterW--; }
-            else if (portaW > minFloor) { portaW--; }
-            adjustedSum = mainW + filterW + portaW;
-        }
-    }
+    // Distribute width for row 1
+    int row1Widths[3];
+    const int row1Mins[] = { mainMin, filterMin, portaMonoMin };
+    const int row1Priorities[] = { 0, 70, 30 }; // Main gets no extra, Filter gets 70%, Porta gets 30%
+    distributeWidth(row1.getWidth() - groupGap * 2, row1Widths, 3, row1Mins, row1Priorities);
 
     // Main group (Ch, Vol, Pan, Fine, Reverb)
-    auto mainArea = row1.removeFromLeft(mainW);
+    auto mainArea = row1.removeFromLeft(row1Widths[0]);
     mainPartGroup.setBounds(mainArea);
     auto mainContent = makeGroupContentBounds(mainArea, sliderRowHeight);
     layoutLabeledSliderRow(mainContent.withHeight(sliderHeight),
@@ -1073,7 +856,7 @@ void ModuleTabComponent::resized()
     row1.removeFromLeft(groupGap);
 
     // Filter group
-    auto filterArea = row1.removeFromLeft(filterW);
+    auto filterArea = row1.removeFromLeft(row1Widths[1]);
     filterGroup.setBounds(filterArea);
     auto filterContent = makeGroupContentBounds(filterArea, sliderRowHeight);
     
@@ -1117,34 +900,23 @@ void ModuleTabComponent::resized()
     layoutLabeledSliderRow(sliderColumn, { &portamentoTimeSlider }, sliderHeight, controlGap);
     
     // Checkboxes stacked on left side
-    // Portamento Mode toggle at top (PMD - Normal/Fingered)
-    // Checkbox on left, label on right
-    juce::Rectangle<int> pmdRow(portaMonoContent.getX(), portaMonoContent.getY(), 
-                                   portaMonoContent.getWidth(), toggleRowH);
-    portamentoModeButton.setBounds(pmdRow.removeFromLeft(portaCheckboxWidth));
-    pmdRow.removeFromLeft(portaLabelGap);
-    portamentoModeLabel.setBounds(pmdRow);
-    portamentoModeLabel.setJustificationType(juce::Justification::centredLeft);
+    // Portamento Mode (PMD), Glissando (PGL), Mono (PMO) - all with checkbox on left, label on right
+    struct CheckboxRow { juce::ToggleButton* button; juce::Label* label; };
+    CheckboxRow checkboxRows[] = {
+        { &portamentoModeButton, &portamentoModeLabel },
+        { &portamentoGlissandoButton, &portamentoGlissandoLabel },
+        { &monoModeButton, &monoModeLabel }
+    };
     
-    // Portamento Glissando toggle (PGL)
-    // Checkbox on left, label on right
-    int yAfterPMD = portaMonoContent.getY() + toggleRowH + innerGap;
-    juce::Rectangle<int> pglRow(portaMonoContent.getX(), yAfterPMD,
-                                portaMonoContent.getWidth(), toggleRowH);
-    portamentoGlissandoButton.setBounds(pglRow.removeFromLeft(portaCheckboxWidth));
-    pglRow.removeFromLeft(portaLabelGap);
-    portamentoGlissandoLabel.setBounds(pglRow);
-    portamentoGlissandoLabel.setJustificationType(juce::Justification::centredLeft);
-    
-    // Mono toggle (PMO) 
-    // Checkbox on left, label on right
-    int yAfterPGL = yAfterPMD + toggleRowH + innerGap;
-    juce::Rectangle<int> monoRow(portaMonoContent.getX(), yAfterPGL,
-                                  portaMonoContent.getWidth(), toggleRowH);
-    monoModeButton.setBounds(monoRow.removeFromLeft(portaCheckboxWidth));
-    monoRow.removeFromLeft(portaLabelGap);
-    monoModeLabel.setBounds(monoRow);
-    monoModeLabel.setJustificationType(juce::Justification::centredLeft);
+    int yPos = portaMonoContent.getY();
+    for (auto& row : checkboxRows) {
+        juce::Rectangle<int> rowRect(portaMonoContent.getX(), yPos, portaMonoContent.getWidth(), toggleRowH);
+        row.button->setBounds(rowRect.removeFromLeft(portaCheckboxWidth));
+        rowRect.removeFromLeft(portaLabelGap);
+        row.label->setBounds(rowRect);
+        row.label->setJustificationType(juce::Justification::centredLeft);
+        yPos += toggleRowH + innerGap;
+    }
 
     area.removeFromTop(rowGap);
 
@@ -1152,45 +924,18 @@ void ModuleTabComponent::resized()
     // === ROW 2: Unison | Note Range | MIDI & Pitch (3 sections now) ===
     auto row2 = area;
 
-    // Compute minimal widths for the three groups
+    // Distribute width for row 2
     const int unisonMin = computeSliderGroupMin(3, controlGap);
     const int noteRangeMin = computeSliderGroupMin(3, controlGap);
-    const int midiPitchMin = computeSliderGroupMin(13, controlGap); // PBR, PBS, MTU, Vel, ATT, MWS, MWA, FCS, FCA, ATS, ATA, BCS, BCA
-
-    int avail2 = row2.getWidth();
-    const int gapsRow2 = groupGap * 2; // two gaps between three groups
-    avail2 -= gapsRow2;
-
-    int uW = unisonMin;
-    int nW = noteRangeMin;
-    int mW = midiPitchMin;
-    int sum2 = uW + nW + mW;
-    if (sum2 <= avail2) {
-        int extra = avail2 - sum2;
-        // Give most extra to MIDI, then split the rest
-        int giveMidi = extra * 60 / 100;
-        int giveUnison = extra * 20 / 100;
-        int giveNote = extra - giveMidi - giveUnison;
-        mW += giveMidi;
-        uW += giveUnison;
-        nW += giveNote;
-    } else {
-        float scale = (float)avail2 / (float)sum2;
-        const int floorW = 2 * kContentPadding + kMinSliderWidth;
-        uW = juce::jmax(floorW, (int)std::floor(uW * scale));
-        nW = juce::jmax(floorW, (int)std::floor(nW * scale));
-        mW = juce::jmax(floorW, (int)std::floor(mW * scale));
-        int adjusted = uW + nW + mW;
-        while (adjusted > avail2) {
-            if (mW > floorW) { mW--; }
-            else if (uW > floorW) { uW--; }
-            else if (nW > floorW) { nW--; }
-            adjusted = uW + nW + mW;
-        }
-    }
+    const int midiPitchMin = computeSliderGroupMin(13, controlGap);
+    
+    int row2Widths[3];
+    const int row2Mins[] = { unisonMin, noteRangeMin, midiPitchMin };
+    const int row2Priorities[] = { 20, 20, 60 }; // MIDI gets most extra
+    distributeWidth(row2.getWidth() - groupGap * 2, row2Widths, 3, row2Mins, row2Priorities);
 
     // Place the three groups
-    auto unisonArea = row2.removeFromLeft(uW);
+    auto unisonArea = row2.removeFromLeft(row2Widths[0]);
     unisonGroup.setBounds(unisonArea);
     auto unisonContent = makeGroupContentBounds(unisonArea, sliderRowHeight);
     layoutLabeledSliderRow(unisonContent.withHeight(sliderHeight),
@@ -1198,7 +943,7 @@ void ModuleTabComponent::resized()
                           sliderHeight, controlGap);
     row2.removeFromLeft(groupGap);
 
-    auto noteRangeArea = row2.removeFromLeft(nW);
+    auto noteRangeArea = row2.removeFromLeft(row2Widths[1]);
     noteRangeGroup.setBounds(noteRangeArea);
     auto noteRangeContent = makeGroupContentBounds(noteRangeArea, sliderRowHeight);
     layoutLabeledSliderRow(noteRangeContent.withHeight(sliderHeight),
@@ -1206,7 +951,7 @@ void ModuleTabComponent::resized()
                           sliderHeight, controlGap);
     row2.removeFromLeft(groupGap);
 
-    auto midiPitchArea = row2.removeFromLeft(mW);
+    auto midiPitchArea = row2.removeFromLeft(row2Widths[2]);
     midiPitchGroup.setBounds(midiPitchArea);
     auto midiPitchContent = makeGroupContentBounds(midiPitchArea, sliderRowHeight);
     layoutLabeledSliderRow(midiPitchContent.withHeight(sliderHeight),
@@ -1353,75 +1098,32 @@ void ModuleTabComponent::mouseEnter(const juce::MouseEvent& e) {
     auto* editor = parentAccordion ? parentAccordion->getEditor() : nullptr;
     if (!editor) return;
     
-    // Map controls to help keys
-    if (e.eventComponent == &loadVoiceButton) {
-        editor->showHelpForKey("loadVoice");
-    } else if (e.eventComponent == &browsePatchesButton) {
-        editor->showHelpForKey("browsePatches");
-    } else if (e.eventComponent == &openVoiceEditorButton) {
-        editor->showHelpForKey("editVoice");
-    } else if (e.eventComponent == &volumeSlider.getSlider()) {
-        editor->showHelpForKey("volume");
-    } else if (e.eventComponent == &panSlider.getSlider()) {
-        editor->showHelpForKey("pan");
-    } else if (e.eventComponent == &detuneSlider.getSlider()) {
-        editor->showHelpForKey("detune");
-    } else if (e.eventComponent == &reverbSendSlider.getSlider()) {
-        editor->showHelpForKey("reverbSend");
-    } else if (e.eventComponent == &unisonVoicesSlider.getSlider()) {
-        editor->showHelpForKey("unisonVoices");
-    } else if (e.eventComponent == &unisonDetuneSlider.getSlider()) {
-        editor->showHelpForKey("unisonDetune");
-    } else if (e.eventComponent == &unisonPanSlider.getSlider()) {
-        editor->showHelpForKey("unisonPan");
-    } else if (e.eventComponent == &midiChannelSlider.getSlider()) {
-        editor->showHelpForKey("midiChannel");
-    } else if (e.eventComponent == &noteLimitLowSlider.getSlider()) {
-        editor->showHelpForKey("noteLimitLow");
-    } else if (e.eventComponent == &noteLimitHighSlider.getSlider()) {
-        editor->showHelpForKey("noteLimitHigh");
-    } else if (e.eventComponent == &noteShiftSlider.getSlider()) {
-        editor->showHelpForKey("noteShift");
-    } else if (e.eventComponent == &pitchBendRangeSlider.getSlider()) {
-        editor->showHelpForKey("pitchBendRange");
-    } else if (e.eventComponent == &pitchBendStepSlider.getSlider()) {
-        editor->showHelpForKey("PBS");
-    } else if (e.eventComponent == &portamentoGlissandoButton) {
-        editor->showHelpForKey("PGL");
-    } else if (e.eventComponent == &portamentoModeButton) {
-        editor->showHelpForKey("PMD");
-    } else if (e.eventComponent == &portamentoTimeSlider.getSlider()) {
-        editor->showHelpForKey("PRT");
-    } else if (e.eventComponent == &monoModeButton) {
-        editor->showHelpForKey("PMO");
-    } else if (e.eventComponent == &modWheelSensSlider.getSlider()) {
-        editor->showHelpForKey("MWS");
-    } else if (e.eventComponent == &modWheelAssignSlider.getSlider()) {
-        editor->showHelpForKey("MWA");
-    } else if (e.eventComponent == &footCtrlSensSlider.getSlider()) {
-        editor->showHelpForKey("FCS");
-    } else if (e.eventComponent == &footCtrlAssignSlider.getSlider()) {
-        editor->showHelpForKey("FCA");
-    } else if (e.eventComponent == &afterTouchSensSlider.getSlider()) {
-        editor->showHelpForKey("ATS");
-    } else if (e.eventComponent == &afterTouchAssignSlider.getSlider()) {
-        editor->showHelpForKey("ATA");
-    } else if (e.eventComponent == &breathCtrlSensSlider.getSlider()) {
-        editor->showHelpForKey("BCS");
-    } else if (e.eventComponent == &breathCtrlAssignSlider.getSlider()) {
-        editor->showHelpForKey("BCA");
-    } else if (e.eventComponent == &audioAttenuatorSlider.getSlider()) {
-        editor->showHelpForKey("ATT");
-    } else if (e.eventComponent == &velocityScaleSlider.getSlider()) {
-        editor->showHelpForKey("velocityScale");
-    } else if (e.eventComponent == &masterTuneSlider.getSlider()) {
-        editor->showHelpForKey("MTU");
-    } else if (e.eventComponent == &filterEnabledButton) {
-        editor->showHelpForKey("filterEnabled");
-    } else if (e.eventComponent == &filterCutoffSlider.getSlider()) {
-        editor->showHelpForKey("filterCutoff");
-    } else if (e.eventComponent == &filterResonanceSlider.getSlider()) {
-        editor->showHelpForKey("filterResonance");
+    // Map controls to help keys using a lookup table
+    struct HelpMapping { juce::Component* comp; const char* helpKey; };
+    const HelpMapping helpMappings[] = {
+        { &loadVoiceButton, "loadVoice" }, { &browsePatchesButton, "browsePatches" }, { &openVoiceEditorButton, "editVoice" },
+        { &volumeSlider.getSlider(), "volume" }, { &panSlider.getSlider(), "pan" }, { &detuneSlider.getSlider(), "detune" },
+        { &reverbSendSlider.getSlider(), "reverbSend" }, { &unisonVoicesSlider.getSlider(), "unisonVoices" },
+        { &unisonDetuneSlider.getSlider(), "unisonDetune" }, { &unisonPanSlider.getSlider(), "unisonPan" },
+        { &midiChannelSlider.getSlider(), "midiChannel" }, { &noteLimitLowSlider.getSlider(), "noteLimitLow" },
+        { &noteLimitHighSlider.getSlider(), "noteLimitHigh" }, { &noteShiftSlider.getSlider(), "noteShift" },
+        { &pitchBendRangeSlider.getSlider(), "pitchBendRange" }, { &pitchBendStepSlider.getSlider(), "PBS" },
+        { &portamentoGlissandoButton, "PGL" }, { &portamentoModeButton, "PMD" },
+        { &portamentoTimeSlider.getSlider(), "PRT" }, { &monoModeButton, "PMO" },
+        { &modWheelSensSlider.getSlider(), "MWS" }, { &modWheelAssignSlider.getSlider(), "MWA" },
+        { &footCtrlSensSlider.getSlider(), "FCS" }, { &footCtrlAssignSlider.getSlider(), "FCA" },
+        { &afterTouchSensSlider.getSlider(), "ATS" }, { &afterTouchAssignSlider.getSlider(), "ATA" },
+        { &breathCtrlSensSlider.getSlider(), "BCS" }, { &breathCtrlAssignSlider.getSlider(), "BCA" },
+        { &audioAttenuatorSlider.getSlider(), "ATT" }, { &velocityScaleSlider.getSlider(), "velocityScale" },
+        { &masterTuneSlider.getSlider(), "MTU" }, { &filterEnabledButton, "filterEnabled" },
+        { &filterCutoffSlider.getSlider(), "filterCutoff" }, { &filterResonanceSlider.getSlider(), "filterResonance" }
+    };
+    
+    for (const auto& mapping : helpMappings) {
+        if (e.eventComponent == mapping.comp) {
+            editor->showHelpForKey(mapping.helpKey);
+            break;
+        }
     }
 }
 
