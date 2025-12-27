@@ -2,6 +2,20 @@
 
 cmake_minimum_required(VERSION 3.24)
 
+# Enable new MSVC runtime library selection policy (CMP0091)
+# This allows CMAKE_MSVC_RUNTIME_LIBRARY to work properly
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
+# Configure static linking for MSVC runtime on Windows BEFORE project()
+# This ensures we don't depend on MSVCP140.dll and VCRUNTIME140.dll
+# Must be set before project() to apply to all targets including dependencies
+if(MSVC OR CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    # Use /MT for Release builds (static runtime) and /MTd for Debug builds
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>" CACHE STRING "MSVC runtime library")
+endif()
+
 project(FMRack VERSION 0.0.1)
 
 set(CMAKE_CXX_STANDARD 17)
