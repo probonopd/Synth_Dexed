@@ -34,3 +34,19 @@ For a seamless development experience with JUCE, follow these guidelines:
 
 https://github.com/TheAudioProgrammer/JuceAudioPluginTemplate/ was a big help to get started.
 This should be how JUCE projects are created by default.
+
+## Windows Static Linking
+
+The Windows builds are configured to link statically with the MSVC runtime library (`/MT` for Release, `/MTd` for Debug).
+This means the resulting VST3 plugin and standalone application do not depend on external MSVC runtime DLLs like `MSVCP140.dll` or `VCRUNTIME140.dll`.
+
+This configuration is set in `CMakeLists.txt` using `CMAKE_MSVC_RUNTIME_LIBRARY` before the `project()` call,
+ensuring all targets including JUCE dependencies are built with static runtime linking.
+
+To verify the static linking after building on Windows, you can use:
+```powershell
+dumpbin /dependents build\FMRack_artefacts\Release\VST3\FMRack.vst3\Contents\x86_64-win\FMRack.vst3
+dumpbin /dependents build\FMRack_artefacts\Release\Standalone\FMRack.exe
+```
+
+The output should not include `MSVCP140.dll` or `VCRUNTIME140.dll` in the list of dependencies.
