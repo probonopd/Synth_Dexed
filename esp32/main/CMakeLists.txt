@@ -6,6 +6,7 @@ idf_component_register(
         "esp32_wifi.cpp"
         "esp32_storage.cpp"
         "esp32_config.cpp"
+        "esp32_led.cpp"
         "fmrack_wrapper.cpp"
         "atomic_compat.c"
     INCLUDE_DIRS
@@ -23,6 +24,7 @@ idf_component_register(
         lwip
         esp_psram
         usb
+        esp_driver_rmt
 )
 
 # Add the Dexed engine source files

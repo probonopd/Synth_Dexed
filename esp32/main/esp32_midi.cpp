@@ -291,11 +291,19 @@ static bool find_midi_interface(usb_device_handle_t dev_hdl, midi_device_t *midi
         return false;
     }
 
+    ESP_LOGI(TAG, "Walking descriptors: wTotalLength=%d, looking for Audio/MIDI Streaming (class=1 subclass=3)...",
+             config_desc->wTotalLength);
+
     int offset = 0;
     const usb_standard_desc_t *cur_desc = (const usb_standard_desc_t *)config_desc;
     uint16_t wTotalLength = config_desc->wTotalLength;
+    int desc_count = 0;
 
     while (cur_desc != NULL) {
+        desc_count++;
+        ESP_LOGD(TAG, "  Descriptor #%d: type=0x%02X len=%d",
+                 desc_count, cur_desc->bDescriptorType, cur_desc->bLength);
+
         if (cur_desc->bDescriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
             const usb_intf_desc_t *intf = (const usb_intf_desc_t *)cur_desc;
 
@@ -336,6 +344,7 @@ static bool find_midi_interface(usb_device_handle_t dev_hdl, midi_device_t *midi
         cur_desc = usb_parse_next_descriptor(cur_desc, wTotalLength, &offset);
     }
 
+    ESP_LOGW(TAG, "No MIDI Streaming interface found after scanning %d descriptors", desc_count);
     return false;
 }
 
@@ -348,11 +357,21 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
         int num_bytes = transfer->actual_num_bytes;
         uint8_t *data = transfer->data_buffer;
 
+        if (num_bytes > 0) {
+            ESP_LOGD(TAG, "USB MIDI IN: %d bytes", num_bytes);
+            /* Log raw data at debug level for first few bytes */
+            if (num_bytes <= 16) {
+                ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, num_bytes, ESP_LOG_DEBUG);
+            }
+        }
+
         /* Process 4-byte USB-MIDI packets */
         for (int i = 0; i + 3 < num_bytes; i += 4) {
             /* Skip padding packets (all zeros) */
             if (data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 0)
                 continue;
+            ESP_LOGI(TAG, "MIDI pkt: [%02X %02X %02X %02X]",
+                     data[i], data[i+1], data[i+2], data[i+3]);
             usb_midi_process_packet(&data[i]);
         }
     } else if (transfer->status == USB_TRANSFER_STATUS_NO_DEVICE) {
@@ -377,25 +396,60 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
  * ---------------------------------------------------------------- */
 static void open_midi_device(uint8_t dev_addr)
 {
+    ESP_LOGI(TAG, "Opening USB device at address %d...", dev_addr);
+
     usb_device_handle_t dev_hdl = NULL;
     esp_err_t err = usb_host_device_open(s_client_hdl, dev_addr, &dev_hdl);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to open device %d: %s", dev_addr, esp_err_to_name(err));
         return;
     }
+    ESP_LOGI(TAG, "Device %d opened successfully", dev_addr);
 
     /* Log device info */
     const usb_device_desc_t *dev_desc = NULL;
     usb_host_get_device_descriptor(dev_hdl, &dev_desc);
     if (dev_desc) {
-        ESP_LOGI(TAG, "USB device: VID=0x%04X PID=0x%04X class=%d",
-                 dev_desc->idVendor, dev_desc->idProduct, dev_desc->bDeviceClass);
+        ESP_LOGI(TAG, "USB device descriptor:");
+        ESP_LOGI(TAG, "  VID=0x%04X PID=0x%04X",
+                 dev_desc->idVendor, dev_desc->idProduct);
+        ESP_LOGI(TAG, "  bDeviceClass=%d bDeviceSubClass=%d bDeviceProtocol=%d",
+                 dev_desc->bDeviceClass, dev_desc->bDeviceSubClass,
+                 dev_desc->bDeviceProtocol);
+        ESP_LOGI(TAG, "  bNumConfigurations=%d", dev_desc->bNumConfigurations);
+    } else {
+        ESP_LOGW(TAG, "Could not get device descriptor!");
+    }
+
+    /* Log config descriptor */
+    const usb_config_desc_t *config_desc = NULL;
+    err = usb_host_get_active_config_descriptor(dev_hdl, &config_desc);
+    if (err == ESP_OK && config_desc) {
+        ESP_LOGI(TAG, "Config descriptor: wTotalLength=%d bNumInterfaces=%d",
+                 config_desc->wTotalLength, config_desc->bNumInterfaces);
+
+        /* Dump all interface descriptors for diagnostics */
+        int offset = 0;
+        const usb_standard_desc_t *desc = (const usb_standard_desc_t *)config_desc;
+        uint16_t wTotal = config_desc->wTotalLength;
+        while (desc != NULL) {
+            if (desc->bDescriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
+                const usb_intf_desc_t *intf = (const usb_intf_desc_t *)desc;
+                ESP_LOGI(TAG, "  Interface %d: class=%d subclass=%d protocol=%d eps=%d",
+                         intf->bInterfaceNumber, intf->bInterfaceClass,
+                         intf->bInterfaceSubClass, intf->bInterfaceProtocol,
+                         intf->bNumEndpoints);
+            }
+            desc = usb_parse_next_descriptor(desc, wTotal, &offset);
+        }
+    } else {
+        ESP_LOGW(TAG, "Could not get config descriptor: %s", esp_err_to_name(err));
     }
 
     /* Look for MIDI Streaming interface */
     memset(&s_midi_dev, 0, sizeof(s_midi_dev));
     if (!find_midi_interface(dev_hdl, &s_midi_dev)) {
-        ESP_LOGI(TAG, "Device %d is not a MIDI device, closing", dev_addr);
+        ESP_LOGW(TAG, "Device %d has no MIDI Streaming interface (class=1 subclass=3), closing", dev_addr);
         usb_host_device_close(s_client_hdl, dev_hdl);
         return;
     }
@@ -475,18 +529,20 @@ static void close_midi_device(void)
  * ---------------------------------------------------------------- */
 static void client_event_cb(const usb_host_client_event_msg_t *event_msg, void *arg)
 {
+    ESP_LOGI(TAG, "USB client event: %d", event_msg->event);
     switch (event_msg->event) {
         case USB_HOST_CLIENT_EVENT_NEW_DEV:
-            ESP_LOGI(TAG, "New USB device at address %d",
+            ESP_LOGI(TAG, ">>> New USB device at address %d",
                      event_msg->new_dev.address);
             s_new_dev_addr = event_msg->new_dev.address;
             s_actions |= MIDI_HOST_ACTION_OPEN;
             break;
         case USB_HOST_CLIENT_EVENT_DEV_GONE:
-            ESP_LOGW(TAG, "USB device gone");
+            ESP_LOGW(TAG, ">>> USB device gone");
             s_actions |= MIDI_HOST_ACTION_CLOSE;
             break;
         default:
+            ESP_LOGW(TAG, ">>> Unknown USB client event: %d", event_msg->event);
             break;
     }
 }
@@ -496,6 +552,8 @@ static void client_event_cb(const usb_host_client_event_msg_t *event_msg, void *
  * ---------------------------------------------------------------- */
 static void usb_host_lib_task(void *arg)
 {
+    ESP_LOGI(TAG, "USB Host lib task starting on core %d...", xPortGetCoreID());
+
     usb_host_config_t host_config = {
         .skip_phy_setup = false,
         .intr_flags = ESP_INTR_FLAG_LEVEL1,
@@ -510,15 +568,21 @@ static void usb_host_lib_task(void *arg)
     /* Signal the caller that host lib is ready */
     xTaskNotifyGive((TaskHandle_t)arg);
 
-    ESP_LOGI(TAG, "USB Host Library installed -- daemon running");
+    ESP_LOGI(TAG, "USB Host Library installed -- daemon running on core %d", xPortGetCoreID());
 
     while (s_usb_host_running) {
-        uint32_t event_flags;
+        uint32_t event_flags = 0;
         err = usb_host_lib_handle_events(pdMS_TO_TICKS(200), &event_flags);
         if (err == ESP_OK) {
+            if (event_flags) {
+                ESP_LOGI(TAG, "USB Host lib event flags: 0x%08lx", (unsigned long)event_flags);
+            }
             if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
+                ESP_LOGW(TAG, "USB Host: no clients, freeing all devices");
                 usb_host_device_free_all();
             }
+        } else if (err != ESP_ERR_TIMEOUT) {
+            ESP_LOGW(TAG, "USB Host lib_handle_events error: %s", esp_err_to_name(err));
         }
     }
 
@@ -548,21 +612,33 @@ static void midi_host_task(void *arg)
         return;
     }
 
-    ESP_LOGI(TAG, "USB Host MIDI client registered -- waiting for keyboard...");
+    ESP_LOGI(TAG, "USB Host MIDI client registered on core %d -- waiting for keyboard...",
+             xPortGetCoreID());
 
+    uint32_t loop_count = 0;
     while (s_usb_host_running) {
         /* Process actions from callbacks */
         if (s_actions & MIDI_HOST_ACTION_OPEN) {
             s_actions &= ~MIDI_HOST_ACTION_OPEN;
+            ESP_LOGI(TAG, "MIDI client: processing OPEN action for addr %d", s_new_dev_addr);
             open_midi_device(s_new_dev_addr);
         }
         if (s_actions & MIDI_HOST_ACTION_CLOSE) {
             s_actions &= ~MIDI_HOST_ACTION_CLOSE;
+            ESP_LOGI(TAG, "MIDI client: processing CLOSE action");
             close_midi_device();
         }
 
         /* Process client events -- THIS dispatches transfer callbacks */
         usb_host_client_handle_events(s_client_hdl, pdMS_TO_TICKS(50));
+
+        /* Periodic heartbeat every ~10 seconds */
+        if (++loop_count >= 200) {
+            loop_count = 0;
+            ESP_LOGI(TAG, "USB MIDI client heartbeat: connected=%s actions=0x%lx",
+                     s_midi_dev.connected ? "yes" : "no",
+                     (unsigned long)s_actions);
+        }
     }
 
     close_midi_device();

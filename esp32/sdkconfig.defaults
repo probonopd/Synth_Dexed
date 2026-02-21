@@ -65,6 +65,10 @@ CONFIG_SPIFFS_MAX_PARTITIONS=1
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
 CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y
 
+# USB Host — enable external hub support so keyboards attached
+# through a hub are enumerated and recognised.
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+
 # Newlib
 CONFIG_NEWLIB_STDOUT_LINE_BUFFERING=y
 

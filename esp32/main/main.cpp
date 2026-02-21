@@ -9,15 +9,15 @@
  *     - Audio task (highest priority): Renders audio and feeds I2S DMA
  *   Core 0 (protocol):
  *     - MIDI UART task: Receives hardware MIDI (31250 baud)
- *     - USB-MIDI task: Class-compliant USB-MIDI device via USB OTG
- *     - UDP MIDI task: Receives MIDI over Wi-Fi
- *     - Status task: Blinks LED, monitors health
+ *     - USB Host MIDI task: Reads from attached USB-MIDI keyboards
+ *     - UDP MIDI task: Receives MIDI over Wi-Fi (if enabled)
+ *     - LED task: Animates the WS2812 status LED
  *
  * Hardware connections:
  *   - I2S DAC: MCLK=GPIO0, BCK=GPIO5, WS=GPIO6, DOUT=GPIO7
  *   - MIDI DIN: UART1 RX=GPIO18, TX=GPIO17
- *   - USB OTG: GPIO19 (D-), GPIO20 (D+)  — class-compliant USB-MIDI
- *   - Status LED: GPIO48 (addressable RGB on DevKitC-1)
+ *   - USB Host: GPIO19 (D-), GPIO20 (D+) — for USB-MIDI keyboards
+ *   - Status LED: GPIO48 (WS2812 addressable RGB on DevKitC-1)
  */
 
 #include "esp32_config.h"
@@ -25,11 +25,11 @@
 #include "esp32_midi.h"
 #include "esp32_wifi.h"
 #include "esp32_storage.h"
+#include "esp32_led.h"
 #include "fmrack_wrapper.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_chip_info.h"
@@ -41,46 +41,71 @@ static const char *TAG = "fmrack_main";
 // Forward declaration
 extern "C" int esp32_nvs_init(void);
 
-// Status LED task
-#if FMRACK_STATUS_LED_PIN >= 0
-static void status_task(void *param)
+/* ===================================================
+ * Startup sound — three-note ascending chord (C4-E4-G4)
+ * played tone-by-tone through the synth engine, then
+ * all three notes released together.
+ * =================================================== */
+static void play_startup_sound(void)
 {
-    gpio_config_t io_conf = {};
-    io_conf.pin_bit_mask = (1ULL << FMRACK_STATUS_LED_PIN);
-    io_conf.mode = GPIO_MODE_OUTPUT;
-    io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
-    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
-    io_conf.intr_type = GPIO_INTR_DISABLE;
-    gpio_config(&io_conf);
+    const uint8_t channel = 0;   // MIDI channel 1
+    const uint8_t vel     = 80;
 
-    bool led_state = false;
-    int blink_count = 0;
+    // C4 (MIDI 60)
+    fmrack_handle_midi(0x90 | channel, 60, vel);
+    vTaskDelay(pdMS_TO_TICKS(180));
 
+    // E4 (MIDI 64)
+    fmrack_handle_midi(0x90 | channel, 64, vel);
+    vTaskDelay(pdMS_TO_TICKS(180));
+
+    // G4 (MIDI 67)
+    fmrack_handle_midi(0x90 | channel, 67, vel);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    // Release all three notes
+    fmrack_handle_midi(0x80 | channel, 60, 0);
+    fmrack_handle_midi(0x80 | channel, 64, 0);
+    fmrack_handle_midi(0x80 | channel, 67, 0);
+
+    // Let the release tail ring out
+    vTaskDelay(pdMS_TO_TICKS(600));
+}
+
+/* ===================================================
+ * Background task: update LED state based on system
+ * status (USB keyboard connected, notes playing, etc.)
+ * =================================================== */
+static void led_monitor_task(void *param)
+{
     while (true) {
-        if (fmrack_is_initialized() && esp32_audio_is_running()) {
-            // Normal operation: slow heartbeat blink
-            int active = fmrack_get_active_voices();
-            if (active > 0) {
-                // Fast blink when notes are playing
-                led_state = !led_state;
-                gpio_set_level((gpio_num_t)FMRACK_STATUS_LED_PIN, led_state);
-                vTaskDelay(pdMS_TO_TICKS(50));
-            } else {
-                // Slow heartbeat
-                led_state = (blink_count % 40) < 2;
-                gpio_set_level((gpio_num_t)FMRACK_STATUS_LED_PIN, led_state);
-                vTaskDelay(pdMS_TO_TICKS(50));
-                blink_count++;
-            }
-        } else {
-            // Not ready: rapid blink
-            led_state = !led_state;
-            gpio_set_level((gpio_num_t)FMRACK_STATUS_LED_PIN, led_state);
-            vTaskDelay(pdMS_TO_TICKS(200));
+        led_state_t current = esp32_led_get_state();
+
+        /* Don't override boot-time states */
+        if (current == LED_STATE_BOOTING ||
+            current == LED_STATE_ENGINE_INIT ||
+            current == LED_STATE_STARTUP_SOUND ||
+            current == LED_STATE_ERROR) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
         }
+
+        /* Check for active voices (takes precedence) */
+        if (fmrack_is_initialized() && fmrack_get_active_voices() > 0) {
+            esp32_led_set_state(LED_STATE_PLAYING);
+        }
+        /* Check USB keyboard connection */
+        else if (esp32_midi_usb_connected()) {
+            esp32_led_set_state(LED_STATE_USB_CONNECTED);
+        }
+        /* Idle — ready */
+        else {
+            esp32_led_set_state(LED_STATE_READY);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }
-#endif
 
 static void print_system_info(void)
 {
@@ -111,16 +136,26 @@ static void print_system_info(void)
     ESP_LOGI(TAG, "  MIDI DIN: UART%d RX=%d TX=%d",
              FMRACK_MIDI_UART_NUM, FMRACK_MIDI_RX_PIN, FMRACK_MIDI_TX_PIN);
 #if FMRACK_MIDI_USB_ENABLE
-    ESP_LOGI(TAG, "  USB-MIDI: enabled (GPIO19=D-, GPIO20=D+)");
+    ESP_LOGI(TAG, "  USB Host MIDI: enabled (GPIO19=D-, GPIO20=D+)");
 #endif
 #if FMRACK_MIDI_UDP_ENABLE
     ESP_LOGI(TAG, "  UDP MIDI: port %d", FMRACK_MIDI_UDP_PORT);
+#else
+    ESP_LOGI(TAG, "  UDP MIDI: disabled");
 #endif
     ESP_LOGI(TAG, "========================================");
 }
 
 extern "C" void app_main(void)
 {
+    // =====================
+    // Very first: init LED so we can show boot status
+    // =====================
+    if (esp32_led_init() == 0) {
+        esp32_led_set_state(LED_STATE_BOOTING);
+        esp32_led_start();
+    }
+
     // Print system information
     print_system_info();
 
@@ -130,6 +165,7 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "[1/6] Initializing NVS...");
     if (esp32_nvs_init() != 0) {
         ESP_LOGE(TAG, "NVS initialization failed!");
+        esp32_led_set_state(LED_STATE_ERROR);
         return;
     }
 
@@ -146,8 +182,11 @@ extern "C" void app_main(void)
     // Phase 3: FMRack synthesis engine
     // =====================
     ESP_LOGI(TAG, "[3/6] Initializing FMRack engine...");
+    esp32_led_set_state(LED_STATE_ENGINE_INIT);
+
     if (fmrack_init(FMRACK_SAMPLE_RATE, FMRACK_NUM_MODULES) != 0) {
         ESP_LOGE(TAG, "FMRack engine initialization failed!");
+        esp32_led_set_state(LED_STATE_ERROR);
         return;
     }
 
@@ -165,11 +204,13 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "[4/6] Initializing audio output...");
     if (esp32_audio_init() != 0) {
         ESP_LOGE(TAG, "Audio initialization failed!");
+        esp32_led_set_state(LED_STATE_ERROR);
         return;
     }
 
     if (esp32_audio_start() != 0) {
         ESP_LOGE(TAG, "Audio task start failed!");
+        esp32_led_set_state(LED_STATE_ERROR);
         return;
     }
 
@@ -184,7 +225,7 @@ extern "C" void app_main(void)
     }
 
     // =====================
-    // Phase 6: Wi-Fi and UDP MIDI
+    // Phase 6: Wi-Fi and UDP MIDI (disabled by default)
     // =====================
 #if FMRACK_MIDI_UDP_ENABLE
     ESP_LOGI(TAG, "[6/6] Initializing Wi-Fi...");
@@ -192,24 +233,25 @@ extern "C" void app_main(void)
         esp32_wifi_udp_start();
     }
 #else
-    ESP_LOGI(TAG, "[6/6] Wi-Fi disabled in configuration");
+    ESP_LOGI(TAG, "[6/6] Wi-Fi disabled (enable via menuconfig)");
 #endif
 
     // =====================
-    // Start status LED task
+    // Startup sound: C major chord (C4-E4-G4)
     // =====================
-#if FMRACK_STATUS_LED_PIN >= 0
-    xTaskCreate(status_task, "status", STATUS_TASK_STACK_SIZE,
-                NULL, STATUS_TASK_PRIORITY, NULL);
-#endif
+    ESP_LOGI(TAG, "Playing startup sound...");
+    esp32_led_set_state(LED_STATE_STARTUP_SOUND);
+    play_startup_sound();
 
     // =====================
-    // System ready
+    // System ready — switch LED to operational mode
     // =====================
+    esp32_led_set_state(LED_STATE_READY);
+
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "  FMRack is ready!");
     ESP_LOGI(TAG, "  Enabled parts: %d", fmrack_get_enabled_parts());
-    ESP_LOGI(TAG, "  Send MIDI to start playing");
+    ESP_LOGI(TAG, "  Plug a USB-MIDI keyboard into the USB port");
     ESP_LOGI(TAG, "========================================");
 
     // Print heap info after full initialization
@@ -223,38 +265,27 @@ extern "C" void app_main(void)
              (unsigned long)esp_get_minimum_free_heap_size());
 
     // =====================
-    // Test tone: play a note every second to verify audio chain
-    // Remove this block once audio output is confirmed working.
+    // Start LED monitor task (updates LED based on USB/voice state)
     // =====================
-    ESP_LOGW(TAG, "TEST TONE: Playing C4 every second (remove once audio verified)");
-    {
-        const uint8_t channel = 0;   // MIDI channel 1
-        const uint8_t note    = 60;  // Middle C (C4)
-        const uint8_t vel     = 100; // Velocity
-        int cycle = 0;
+    xTaskCreatePinnedToCore(
+        led_monitor_task,
+        "led_mon",
+        2048,
+        NULL,
+        STATUS_TASK_PRIORITY,
+        NULL,
+        0
+    );
 
-        while (true) {
-            // Note On
-            fmrack_handle_midi(0x90 | channel, note, vel);
-            ESP_LOGI(TAG, "TEST: Note ON  (C4, vel=%d) cycle=%d voices=%d",
-                     vel, cycle, fmrack_get_active_voices());
-            vTaskDelay(pdMS_TO_TICKS(500));
-
-            // Note Off
-            fmrack_handle_midi(0x80 | channel, note, 0);
-            ESP_LOGI(TAG, "TEST: Note OFF (C4) voices=%d",
-                     fmrack_get_active_voices());
-            vTaskDelay(pdMS_TO_TICKS(500));
-
-            cycle++;
-
-            // Also log status every 10 cycles
-            if (cycle % 10 == 0) {
-                ESP_LOGI(TAG, "Status: voices=%d parts=%d heap=%lu",
-                         fmrack_get_active_voices(),
-                         fmrack_get_enabled_parts(),
-                         (unsigned long)esp_get_free_heap_size());
-            }
-        }
+    // =====================
+    // Periodic status logging
+    // =====================
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(10000));
+        ESP_LOGI(TAG, "Status: voices=%d parts=%d usb=%s heap=%lu",
+                 fmrack_get_active_voices(),
+                 fmrack_get_enabled_parts(),
+                 esp32_midi_usb_connected() ? "yes" : "no",
+                 (unsigned long)esp_get_free_heap_size());
     }
 }

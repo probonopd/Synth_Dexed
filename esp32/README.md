@@ -4,7 +4,7 @@ Complete port of FMRack (the non-JUCE multi-timbral DX7 FM synthesizer rack) to 
 
 ## Hardware
 
-- **Board**: ESP32-S3-DevKitC-1-N8R8 (Espressif)
+- **Board**: ESP32-S3-DevKitC-1-N8R8 (Espressif) (left port: USB Host, right port: USB CH340 Serial for flashing and logging)
 - **CPU**: Dual-core Xtensa LX7, 240 MHz
 - **Flash**: 8 MB (QIO 80 MHz)
 - **PSRAM**: 8 MB (Octal SPI 80 MHz)
@@ -18,7 +18,7 @@ Complete port of FMRack (the non-JUCE multi-timbral DX7 FM synthesizer rack) to 
 - **Dual-core architecture**: Core 1 for real-time audio, core 0 for protocols
 - **USB Host MIDI** — plug a USB-MIDI keyboard directly into the ESP32's USB port
 - Hardware MIDI DIN input (UART at 31250 baud)
-- UDP MIDI over Wi-Fi
+- UDP MIDI over WLAN
 - SysEx support (4 KB buffer — handles DX7 32-voice bulk dumps)
 - Performance file loading from SPIFFS
 - I2S stereo audio output (16-bit, 48 kHz) with MCLK
@@ -120,10 +120,10 @@ I (3230) fmrack_midi: USB MIDI keyboard connected -- streaming from EP 0x81
 2. Connect your MIDI keyboard's MIDI OUT to the optocoupler's MIDI IN
 3. Play — notes are processed immediately
 
-#### Option 3: UDP MIDI over Wi-Fi
+#### Option 3: UDP MIDI over WLAN
 
-1. Configure Wi-Fi credentials via `idf.py menuconfig` → FMRack Configuration
-2. After boot, the ESP32 connects to Wi-Fi and listens for UDP MIDI on port 21928
+1. Configure WLAN credentials via `idf.py menuconfig` → FMRack Configuration
+2. After boot, the ESP32 connects to WLAN and listens for UDP MIDI on port 21928
 3. Send raw MIDI bytes via UDP from any software (e.g., `sendmidi`, custom scripts)
 
 ### Sending SysEx Voice Data
@@ -242,7 +242,7 @@ spiffs_data/
   │  └──────────────┘  │  │  │ Plate Reverb   │  │ │
   │  ┌──────────────┐  │  │  └────────────────┘  │ │
   │  │ UDP MIDI     │──┤  │                      │ │
-  │  │ (Wi-Fi)      │  │  │  processAudio()      │ │
+  │  │ (WLAN)      │  │  │  processAudio()      │ │
   │  └──────────────┘  │  │  → I2S DMA write     │ │
   │  ┌──────────────┐  │  │                      │ │
   │  │ Status LED   │  │  └──────────────────────┘ │
@@ -257,7 +257,7 @@ spiffs_data/
 3. **Phase 3**: FMRack engine init (modules allocated in PSRAM)
 4. **Phase 4**: I2S audio output start (48 kHz, audio task on core 1)
 5. **Phase 5**: MIDI init (UART + USB Host MIDI)
-6. **Phase 6**: Wi-Fi + UDP MIDI (if configured)
+6. **Phase 6**: WLAN + UDP MIDI (if configured)
 
 After phase 5, the USB port enters Host mode — plug in a USB-MIDI keyboard.
 
@@ -284,7 +284,7 @@ Use `idf.py menuconfig` to adjust settings. Key options:
 | I2S Pins        | BCK / WS / DOUT / MCLK| 5 / 6 / 7 / 0 |
 | MIDI            | UART RX / TX pins      | 18 / 17    |
 | MIDI            | USB-MIDI enable        | Yes        |
-| Wi-Fi           | SSID / Password        | (empty)    |
+| WLAN           | SSID / Password        | (empty)    |
 | Performance     | Default file path      | /spiffs/default.ini |
 
 ## Troubleshooting

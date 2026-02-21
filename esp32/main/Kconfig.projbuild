@@ -87,7 +87,7 @@ menu "FMRack Configuration"
 
         config FMRACK_MIDI_UDP_ENABLE
             bool "Enable UDP MIDI over Wi-Fi"
-            default y
+            default n
             help
                 Enable MIDI input via UDP packets over Wi-Fi.
 
@@ -135,8 +135,8 @@ menu "FMRack Configuration"
 
     menu "Hardware"
         config FMRACK_STATUS_LED_PIN
-            int "Status LED GPIO"
-            default 8
+            int "Status LED GPIO (WS2812 addressable RGB)"
+            default 48
             range -1 48
             help
                 GPIO for status LED. Set to -1 to disable.
