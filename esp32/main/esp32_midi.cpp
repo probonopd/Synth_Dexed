@@ -37,6 +37,32 @@
 
 static const char *TAG = "fmrack_midi";
 
+#if FMRACK_MIDI_USB_ENABLE
+static void usb_enable_verbose_logging(void)
+{
+    // ESP-IDF USB host stack uses these tags (as seen in errors like CHECK_SHORT_DEV_DESC)
+    esp_log_level_set("USBH", ESP_LOG_VERBOSE);
+    esp_log_level_set("ENUM", ESP_LOG_VERBOSE);
+    esp_log_level_set("HUB", ESP_LOG_VERBOSE);
+
+    // Some IDF builds use additional/alternate tags
+    esp_log_level_set("usb_host", ESP_LOG_VERBOSE);
+    esp_log_level_set("usb", ESP_LOG_VERBOSE);
+}
+
+static void usb_log_event_flags(uint32_t event_flags)
+{
+    if (event_flags == 0) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "USB Host lib event flags: 0x%08lx%s%s",
+             (unsigned long)event_flags,
+             (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) ? " NO_CLIENTS" : "",
+             (event_flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) ? " ALL_FREE" : "");
+}
+#endif
+
 // Task handles
 static TaskHandle_t s_midi_uart_task = NULL;
 static volatile bool s_midi_running = false;
@@ -556,7 +582,12 @@ static void usb_host_lib_task(void *arg)
 
     usb_host_config_t host_config = {
         .skip_phy_setup = false,
+        // Manually control root port power so we can add a stable power-on delay.
+        // This can improve reliability with some hubs/devices that are slow to
+        // power up or that misbehave during immediate enumeration.
+        .root_port_unpowered = true,
         .intr_flags = ESP_INTR_FLAG_LEVEL1,
+        .enum_filter_cb = NULL,
     };
     esp_err_t err = usb_host_install(&host_config);
     if (err != ESP_OK) {
@@ -564,6 +595,25 @@ static void usb_host_lib_task(void *arg)
         vTaskDelete(NULL);
         return;
     }
+
+    usb_host_lib_info_t info = {};
+    err = usb_host_lib_info(&info);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "USB Host lib info: num_devices=%d num_clients=%d",
+                 info.num_devices, info.num_clients);
+    } else {
+        ESP_LOGW(TAG, "USB Host lib get_info failed: %s", esp_err_to_name(err));
+    }
+
+    // Power cycle + delay before enumeration
+    ESP_LOGI(TAG, "USB: power cycling root port...");
+    (void)usb_host_lib_set_root_port_power(false);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    err = usb_host_lib_set_root_port_power(true);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "USB: failed to power root port: %s", esp_err_to_name(err));
+    }
+    vTaskDelay(pdMS_TO_TICKS(250));
 
     /* Signal the caller that host lib is ready */
     xTaskNotifyGive((TaskHandle_t)arg);
@@ -574,9 +624,7 @@ static void usb_host_lib_task(void *arg)
         uint32_t event_flags = 0;
         err = usb_host_lib_handle_events(pdMS_TO_TICKS(200), &event_flags);
         if (err == ESP_OK) {
-            if (event_flags) {
-                ESP_LOGI(TAG, "USB Host lib event flags: 0x%08lx", (unsigned long)event_flags);
-            }
+            usb_log_event_flags(event_flags);
             if (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) {
                 ESP_LOGW(TAG, "USB Host: no clients, freeing all devices");
                 usb_host_device_free_all();
@@ -759,6 +807,7 @@ int esp32_midi_init(void)
 
     // --- USB Host MIDI ---
 #if FMRACK_MIDI_USB_ENABLE
+    usb_enable_verbose_logging();
     if (usb_midi_host_init() != 0) {
         ESP_LOGW(TAG, "USB Host MIDI init failed (non-fatal, continuing without USB)");
     }

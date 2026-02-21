@@ -40,40 +40,6 @@ static int16_t *s_dma_buffer = NULL;
 static float *s_left_buffer = NULL;
 static float *s_right_buffer = NULL;
 
-// Optional boot-time test tone (generated in audio task)
-static portMUX_TYPE s_tone_mux = portMUX_INITIALIZER_UNLOCKED;
-static volatile int s_tone_samples_left = 0;
-static float s_tone_phase = 0.0f;
-static float s_tone_phase_inc = 0.0f;
-static float s_tone_amp = 0.0f;
-static bool s_tone_logged_done = false;
-
-void esp32_audio_start_test_tone(float freq_hz, float seconds, float amplitude)
-{
-    if (freq_hz <= 0.0f || seconds <= 0.0f) {
-        return;
-    }
-
-    if (amplitude < 0.0f) amplitude = 0.0f;
-    if (amplitude > 0.95f) amplitude = 0.95f;
-
-    const float phase_inc = (2.0f * 3.14159265358979323846f) * (freq_hz / (float)FMRACK_SAMPLE_RATE);
-    const int samples = (int)(seconds * (float)FMRACK_SAMPLE_RATE);
-    if (samples <= 0) {
-        return;
-    }
-
-    portENTER_CRITICAL(&s_tone_mux);
-    s_tone_phase = 0.0f;
-    s_tone_phase_inc = phase_inc;
-    s_tone_amp = amplitude;
-    s_tone_samples_left = samples;
-    s_tone_logged_done = false;
-    portEXIT_CRITICAL(&s_tone_mux);
-
-    ESP_LOGI(TAG, "Test tone scheduled: %.1f Hz for %.2f s (amp=%.2f)", freq_hz, seconds, amplitude);
-}
-
 int esp32_audio_init(void)
 {
     ESP_LOGI(TAG, "Initializing I2S audio output...");
@@ -178,59 +144,14 @@ static void audio_task(void *param)
     const int num_samples = FMRACK_BUFFER_SIZE;
     size_t bytes_written = 0;
     size_t buf_bytes = num_samples * 2 * sizeof(int16_t);
-    uint32_t render_count = 0;
-    float peak_l = 0.0f, peak_r = 0.0f;
 
     while (s_audio_running) {
         // Clear float buffers
         memset(s_left_buffer, 0, num_samples * sizeof(float));
         memset(s_right_buffer, 0, num_samples * sizeof(float));
 
-        // If a test tone is scheduled, generate it here (bypass synth)
-        int tone_left = s_tone_samples_left;
-        if (tone_left > 0) {
-            float phase;
-            float inc;
-            float amp;
-            portENTER_CRITICAL(&s_tone_mux);
-            phase = s_tone_phase;
-            inc = s_tone_phase_inc;
-            amp = s_tone_amp;
-            portEXIT_CRITICAL(&s_tone_mux);
-
-            const float two_pi = 2.0f * 3.14159265358979323846f;
-            const int gen_n = (tone_left < num_samples) ? tone_left : num_samples;
-
-            for (int i = 0; i < gen_n; i++) {
-                float x = sinf(phase) * amp;
-                s_left_buffer[i] = x;
-                s_right_buffer[i] = x;
-                phase += inc;
-                if (phase >= two_pi) phase -= two_pi;
-            }
-
-            tone_left -= gen_n;
-            portENTER_CRITICAL(&s_tone_mux);
-            s_tone_phase = phase;
-            s_tone_samples_left = tone_left;
-            portEXIT_CRITICAL(&s_tone_mux);
-
-            if (tone_left <= 0 && !s_tone_logged_done) {
-                s_tone_logged_done = true;
-                ESP_LOGI(TAG, "Test tone finished");
-            }
-        } else {
-            // Render audio from FMRack engine
-            fmrack_process_audio(s_left_buffer, s_right_buffer, num_samples);
-        }
-
-        // Track peak levels for diagnostics
-        for (int i = 0; i < num_samples; i++) {
-            float al = fabsf(s_left_buffer[i]);
-            float ar = fabsf(s_right_buffer[i]);
-            if (al > peak_l) peak_l = al;
-            if (ar > peak_r) peak_r = ar;
-        }
+        // Render audio from FMRack engine
+        fmrack_process_audio(s_left_buffer, s_right_buffer, num_samples);
 
         // Convert float [-1.0, 1.0] to interleaved 16-bit PCM
         for (int i = 0; i < num_samples; i++) {
@@ -252,23 +173,6 @@ static void audio_task(void *param)
                                            &bytes_written, portMAX_DELAY);
         if (ret != ESP_OK) {
             ESP_LOGW(TAG, "I2S write error: %s", esp_err_to_name(ret));
-        }
-
-        // Log audio level every ~2 seconds (~375 renders at 48kHz/256)
-        render_count++;
-        if (render_count >= 375) {
-            if (peak_l > 0.0001f || peak_r > 0.0001f) {
-                ESP_LOGI(TAG, "AUDIO peak L=%.6f R=%.6f (16-bit: %d/%d) written=%d",
-                         peak_l, peak_r,
-                         (int)(peak_l * 32767.0f), (int)(peak_r * 32767.0f),
-                         (int)bytes_written);
-            } else {
-                ESP_LOGI(TAG, "AUDIO silent for 2s (peak=0), written=%d",
-                         (int)bytes_written);
-            }
-            peak_l = 0.0f;
-            peak_r = 0.0f;
-            render_count = 0;
         }
     }
 

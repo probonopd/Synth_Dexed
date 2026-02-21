@@ -51,6 +51,11 @@ CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
 # Log level
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
+# Compile-time maximum log level (keep runtime default at INFO)
+# Needed so ESP-IDF USB Host stack debug/verbose traces are not compiled out.
+# CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT is not set
+CONFIG_LOG_MAXIMUM_LEVEL_VERBOSE=y
+
 # Watchdog - increase timeout for audio processing
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 CONFIG_ESP_INT_WDT_TIMEOUT_MS=800
@@ -58,16 +63,26 @@ CONFIG_ESP_INT_WDT_TIMEOUT_MS=800
 # SPIFFS
 CONFIG_SPIFFS_MAX_PARTITIONS=1
 
-# Console via UART0 (primary) + USB Serial/JTAG (secondary).
-# The secondary console mirrors output to the USB Serial/JTAG
-# so you can read boot logs via /dev/ttyACM0 before the USB Host
-# stack takes over GPIO19/20 for MIDI keyboard input.
+# Console via UART0.
+# Note: USB OTG (GPIO19/20) is used in Host mode for USB-MIDI.
 CONFIG_ESP_CONSOLE_UART_DEFAULT=y
-CONFIG_ESP_CONSOLE_SECONDARY_USB_SERIAL_JTAG=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# Disable USB Serial/JTAG peripheral to avoid conflicts with USB OTG host mode
+# (GPIO19/20).
+# CONFIG_USJ_ENABLE_USB_SERIAL_JTAG is not set
 
 # USB Host — enable external hub support so keyboards attached
 # through a hub are enumerated and recognised.
 CONFIG_USB_HOST_HUBS_SUPPORTED=y
+
+# USB Host timing tweaks (improves reliability with some hubs/keyboards)
+CONFIG_USB_HOST_DEBOUNCE_DELAY_MS=500
+CONFIG_USB_HOST_RESET_RECOVERY_MS=100
+CONFIG_USB_HOST_SET_ADDR_RECOVERY_MS=50
+CONFIG_USB_HOST_EXT_PORT_RESET_RECOVERY_DELAY_MS=100
+CONFIG_USB_HOST_EXT_PORT_CUSTOM_POWER_ON_DELAY_ENABLE=y
+CONFIG_USB_HOST_EXT_PORT_CUSTOM_POWER_ON_DELAY_MS=500
 
 # Newlib
 CONFIG_NEWLIB_STDOUT_LINE_BUFFERING=y

@@ -45,16 +45,6 @@ void esp32_audio_stop(void);
  */
 bool esp32_audio_is_running(void);
 
-/**
- * Start a short test sine wave (generated in the audio task).
- * Useful to validate I2S wiring / amplifier independently of the synth engine.
- *
- * @param freq_hz Frequency in Hz (e.g. 440.0f)
- * @param seconds Duration in seconds (e.g. 1.0f)
- * @param amplitude Linear amplitude [0..1], keep <= 0.3 for comfort.
- */
-void esp32_audio_start_test_tone(float freq_hz, float seconds, float amplitude);
-
 #ifdef __cplusplus
 }
 #endif
