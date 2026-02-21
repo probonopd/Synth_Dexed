@@ -21,7 +21,7 @@
 
 #include "esp32_midi.h"
 #include "esp32_config.h"
-#include "fmrack_wrapper.h"
+#include "dexed_raw.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -35,7 +35,7 @@
 #include "usb/usb_host.h"
 #endif
 
-static const char *TAG = "fmrack_midi";
+static const char *TAG = "dexed_midi";
 
 #if FMRACK_MIDI_USB_ENABLE
 static void usb_log_event_flags(uint32_t event_flags)
@@ -110,7 +110,7 @@ static void midi_parser_process_byte(midi_parser_t *p, uint8_t byte)
                 if (s_sysex_len > 2 && s_sysex_buf[1] == 0x43) {
                     sysex_channel = (s_sysex_buf[2] & 0x0F) + 1;
                 }
-                fmrack_handle_sysex(s_sysex_buf, s_sysex_len, sysex_channel);
+                dexed_raw_handle_sysex(s_sysex_buf, s_sysex_len, sysex_channel);
             }
             s_in_sysex = false;
             s_sysex_len = 0;
@@ -146,9 +146,9 @@ static void midi_parser_process_byte(midi_parser_t *p, uint8_t byte)
 
     if (p->data_count >= p->data_needed) {
         if (p->data_needed == 2) {
-            fmrack_handle_midi(p->status, p->data[0], p->data[1]);
+            dexed_raw_handle_midi(p->status, p->data[0], p->data[1]);
         } else if (p->data_needed == 1) {
-            fmrack_handle_midi(p->status, p->data[0], 0);
+            dexed_raw_handle_midi(p->status, p->data[0], 0);
         }
         p->data_count = 0;
     }
@@ -240,7 +240,7 @@ static void usb_midi_finish_sysex(const uint8_t *data, int count)
         uint8_t ch = 0;
         if (s_usb_sysex_len > 2 && s_usb_sysex_buf[1] == 0x43)
             ch = (s_usb_sysex_buf[2] & 0x0F) + 1;
-        fmrack_handle_sysex(s_usb_sysex_buf, s_usb_sysex_len, ch);
+        dexed_raw_handle_sysex(s_usb_sysex_buf, s_usb_sysex_len, ch);
     }
     s_usb_sysex_len = 0;
 }
@@ -259,13 +259,13 @@ static void usb_midi_process_packet(const uint8_t *pkt)
         case 0x0A: /* Poly Aftertouch */
         case 0x0B: /* Control Change */
         case 0x0E: /* Pitch Bend */
-            fmrack_handle_midi(b0, b1, b2);
+            dexed_raw_handle_midi(b0, b1, b2);
             break;
 
         /* 2-byte channel messages */
         case 0x0C: /* Program Change */
         case 0x0D: /* Channel Aftertouch */
-            fmrack_handle_midi(b0, b1, 0);
+            dexed_raw_handle_midi(b0, b1, 0);
             break;
 
         /* SysEx start / continue -- 3 data bytes */

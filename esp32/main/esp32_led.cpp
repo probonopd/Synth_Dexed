@@ -17,7 +17,7 @@
 
 #include "esp32_led.h"
 #include "esp32_config.h"
-#include "fmrack_wrapper.h"
+#include "dexed_raw.h"
 #include "esp32_midi.h"
 
 #include "freertos/FreeRTOS.h"
@@ -28,7 +28,7 @@
 #include <string.h>
 #include <math.h>
 
-static const char *TAG = "fmrack_led";
+static const char *TAG = "dexed_led";
 
 /* ── RMT / WS2812 constants ── */
 
@@ -119,7 +119,7 @@ static void led_task(void *param)
         /* Auto-transition: if in READY or USB_CONNECTED,
          * upgrade to PLAYING when voices are active */
         if (st == LED_STATE_READY || st == LED_STATE_USB_CONNECTED) {
-            if (fmrack_is_initialized() && fmrack_get_active_voices() > 0) {
+            if (dexed_raw_is_initialized() && dexed_raw_get_active_voices() > 0) {
                 st = LED_STATE_PLAYING;
             }
         }

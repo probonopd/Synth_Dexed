@@ -13,7 +13,7 @@
 
 #include "esp32_audio.h"
 #include "esp32_config.h"
-#include "fmrack_wrapper.h"
+#include "dexed_raw.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -150,8 +150,8 @@ static void audio_task(void *param)
         memset(s_left_buffer, 0, num_samples * sizeof(float));
         memset(s_right_buffer, 0, num_samples * sizeof(float));
 
-        // Render audio from FMRack engine
-        fmrack_process_audio(s_left_buffer, s_right_buffer, num_samples);
+        // Render audio from raw Dexed engine
+        dexed_raw_process_audio(s_left_buffer, s_right_buffer, num_samples);
 
         // Convert float [-1.0, 1.0] to interleaved 16-bit PCM
         for (int i = 0; i < num_samples; i++) {

@@ -8,7 +8,7 @@
 
 #include "esp32_wifi.h"
 #include "esp32_config.h"
-#include "fmrack_wrapper.h"
+#include "dexed_raw.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -21,7 +21,7 @@
 
 #include <string.h>
 
-static const char *TAG = "fmrack_wifi";
+static const char *TAG = "dexed_wifi";
 
 #if FMRACK_MIDI_UDP_ENABLE
 
@@ -151,12 +151,12 @@ static void udp_midi_task(void *param)
                     if (sysex_len > 2 && buf[i + 1] == 0x43) {
                         sysex_channel = (buf[i + 2] & 0x0F) + 1;
                     }
-                    fmrack_handle_sysex(&buf[i], sysex_len, sysex_channel);
+                    dexed_raw_handle_sysex(&buf[i], sysex_len, sysex_channel);
                 }
                 i = sysex_end;
             } else if ((status & 0xF0) >= 0x80 && (status & 0xF0) <= 0xE0 && (i + 2) < len) {
                 // Channel message (3 bytes)
-                fmrack_handle_midi(buf[i], buf[i + 1], buf[i + 2]);
+                dexed_raw_handle_midi(buf[i], buf[i + 1], buf[i + 2]);
                 i += 3;
             } else if (status >= 0xF8) {
                 // Real-time (1 byte)

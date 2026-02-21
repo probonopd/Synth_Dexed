@@ -7,12 +7,11 @@ idf_component_register(
         "esp32_storage.cpp"
         "esp32_config.cpp"
         "esp32_led.cpp"
-        "fmrack_wrapper.cpp"
+        "dexed_raw.cpp"
         "atomic_compat.c"
     INCLUDE_DIRS
         "."
         "${CMAKE_CURRENT_SOURCE_DIR}/../../src"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../src/FMRack"
     REQUIRES
         driver
         esp_wifi
@@ -46,12 +45,6 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "${DEXED_SRC_DIR}/pitchenv.cpp"
     "${DEXED_SRC_DIR}/porta.cpp"
     "${DEXED_SRC_DIR}/sin.cpp"
-    # FMRack components (excluding main.cpp, UdpServer, FileRenderer which are platform-specific)
-    "${DEXED_SRC_DIR}/FMRack/Rack.cpp"
-    "${DEXED_SRC_DIR}/FMRack/Module.cpp"
-    "${DEXED_SRC_DIR}/FMRack/Performance.cpp"
-    "${DEXED_SRC_DIR}/FMRack/AudioEffectPlateReverb.cpp"
-    "${DEXED_SRC_DIR}/FMRack/VoiceData.cpp"
 )
 
 # Compile definitions for ESP32 target (applied to ALL sources in this component)
@@ -90,10 +83,5 @@ set_source_files_properties(
     "${DEXED_SRC_DIR}/pitchenv.cpp"
     "${DEXED_SRC_DIR}/porta.cpp"
     "${DEXED_SRC_DIR}/sin.cpp"
-    "${DEXED_SRC_DIR}/FMRack/Rack.cpp"
-    "${DEXED_SRC_DIR}/FMRack/Module.cpp"
-    "${DEXED_SRC_DIR}/FMRack/Performance.cpp"
-    "${DEXED_SRC_DIR}/FMRack/AudioEffectPlateReverb.cpp"
-    "${DEXED_SRC_DIR}/FMRack/VoiceData.cpp"
     PROPERTIES COMPILE_FLAGS "-D__linux__=1 -Wno-unused-parameter -Wno-sign-compare -Wno-maybe-uninitialized"
 )
