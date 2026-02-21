@@ -1,7 +1,8 @@
 /*
- * FMRack ESP32-C5 Port - Configuration Header
+ * FMRack ESP32-S3 Port - Configuration Header
  *
- * Centralizes all compile-time configuration for the ESP32 port.
+ * Centralizes all compile-time configuration for the ESP32-S3 port.
+ * Leverages dual-core Xtensa LX7, 8 MB PSRAM, and USB OTG.
  * Values come from Kconfig (menuconfig) with sensible defaults.
  */
 
@@ -27,34 +28,34 @@
 #ifdef CONFIG_FMRACK_NUM_MODULES
 #define FMRACK_NUM_MODULES      CONFIG_FMRACK_NUM_MODULES
 #else
-#define FMRACK_NUM_MODULES      4
+#define FMRACK_NUM_MODULES      8
 #endif
 
 // =====================
-// I2S Pin Configuration
+// I2S Pin Configuration (ESP32-S3 DevKitC defaults)
 // =====================
 #ifdef CONFIG_FMRACK_I2S_BCK_PIN
 #define FMRACK_I2S_BCK_PIN     CONFIG_FMRACK_I2S_BCK_PIN
 #else
-#define FMRACK_I2S_BCK_PIN     6
+#define FMRACK_I2S_BCK_PIN     5
 #endif
 
 #ifdef CONFIG_FMRACK_I2S_WS_PIN
 #define FMRACK_I2S_WS_PIN      CONFIG_FMRACK_I2S_WS_PIN
 #else
-#define FMRACK_I2S_WS_PIN      7
+#define FMRACK_I2S_WS_PIN      6
 #endif
 
 #ifdef CONFIG_FMRACK_I2S_DOUT_PIN
 #define FMRACK_I2S_DOUT_PIN    CONFIG_FMRACK_I2S_DOUT_PIN
 #else
-#define FMRACK_I2S_DOUT_PIN    15
+#define FMRACK_I2S_DOUT_PIN    7
 #endif
 
 #ifdef CONFIG_FMRACK_I2S_MCLK_PIN
 #define FMRACK_I2S_MCLK_PIN    CONFIG_FMRACK_I2S_MCLK_PIN
 #else
-#define FMRACK_I2S_MCLK_PIN    (-1)
+#define FMRACK_I2S_MCLK_PIN    0
 #endif
 
 #ifdef CONFIG_FMRACK_I2S_NUM
@@ -75,17 +76,18 @@
 #ifdef CONFIG_FMRACK_MIDI_RX_PIN
 #define FMRACK_MIDI_RX_PIN     CONFIG_FMRACK_MIDI_RX_PIN
 #else
-#define FMRACK_MIDI_RX_PIN     4
+#define FMRACK_MIDI_RX_PIN     18
 #endif
 
 #ifdef CONFIG_FMRACK_MIDI_TX_PIN
 #define FMRACK_MIDI_TX_PIN     CONFIG_FMRACK_MIDI_TX_PIN
 #else
-#define FMRACK_MIDI_TX_PIN     5
+#define FMRACK_MIDI_TX_PIN     17
 #endif
 
+// USB-MIDI via USB OTG (ESP32-S3 native USB, GPIO19=D-, GPIO20=D+)
 #ifdef CONFIG_FMRACK_MIDI_USB_ENABLE
-#define FMRACK_MIDI_USB_ENABLE 1
+#define FMRACK_MIDI_USB_ENABLE CONFIG_FMRACK_MIDI_USB_ENABLE
 #else
 #define FMRACK_MIDI_USB_ENABLE 1
 #endif
@@ -141,10 +143,11 @@
 // =====================
 // Hardware
 // =====================
+// ESP32-S3-DevKitC-1 has an addressable RGB LED on GPIO48
 #ifdef CONFIG_FMRACK_STATUS_LED_PIN
 #define FMRACK_STATUS_LED_PIN  CONFIG_FMRACK_STATUS_LED_PIN
 #else
-#define FMRACK_STATUS_LED_PIN  8
+#define FMRACK_STATUS_LED_PIN  48
 #endif
 
 // =====================
@@ -160,6 +163,7 @@
 // Task priorities (higher = more important)
 #define AUDIO_TASK_PRIORITY         (configMAX_PRIORITIES - 1)
 #define MIDI_TASK_PRIORITY          (configMAX_PRIORITIES - 2)
+#define USB_MIDI_TASK_PRIORITY      (configMAX_PRIORITIES - 2)
 #define UDP_TASK_PRIORITY           (configMAX_PRIORITIES - 3)
 #define WIFI_TASK_PRIORITY          5
 #define STATUS_TASK_PRIORITY        2
@@ -167,9 +171,16 @@
 // Task stack sizes
 #define AUDIO_TASK_STACK_SIZE       (8 * 1024)
 #define MIDI_TASK_STACK_SIZE        (4 * 1024)
+#define USB_MIDI_TASK_STACK_SIZE    (4 * 1024)
 #define UDP_TASK_STACK_SIZE         (4 * 1024)
 #define STATUS_TASK_STACK_SIZE      (2 * 1024)
 
-// Audio task core affinity (ESP32-C5 is single-core, so always 0)
-#define AUDIO_TASK_CORE             0
+// =====================
+// Dual-core task affinity (ESP32-S3 has 2 cores)
+// Core 0: Protocol tasks (MIDI, Wi-Fi, USB)
+// Core 1: Real-time audio rendering (dedicated)
+// =====================
+#define AUDIO_TASK_CORE             1
 #define MIDI_TASK_CORE              0
+#define USB_MIDI_TASK_CORE          0
+#define WIFI_TASK_CORE              0

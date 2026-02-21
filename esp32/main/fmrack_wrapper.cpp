@@ -1,14 +1,14 @@
 /*
- * FMRack ESP32-C5 Port - Engine Wrapper Implementation
+ * FMRack ESP32-S3 Port - Engine Wrapper Implementation
  *
- * Bridges the ESP32 platform code to the C++ FMRack engine.
+ * Bridges the ESP32-S3 platform code to the C++ FMRack engine.
  * All FMRack C++ objects are managed here.
  *
- * Key adaptations for ESP32:
+ * Key adaptations for ESP32-S3:
  * - Rack and modules are allocated in PSRAM via placement new
- * - Multiprocessing is disabled (ESP32-C5 is single-core)
+ * - Multiprocessing enabled (ESP32-S3 is dual-core Xtensa LX7)
  * - std::filesystem calls are replaced with POSIX file ops
- * - Reduced default module count to fit memory constraints
+ * - 8 modules by default (dual-core + 240 MHz headroom)
  */
 
 #include "fmrack_wrapper.h"
@@ -35,7 +35,9 @@ static const char *TAG = "fmrack_engine";
 bool debugEnabled = false;
 
 // Multiprocessing flag (required by FMRack Debug.h)
-// Disabled on ESP32-C5 (single-core RISC-V)
+// Disabled: the engine's internal std::thread-based multiprocessing is not
+// suitable for FreeRTOS.  We achieve dual-core operation by pinning the
+// audio task to core 1 and protocol tasks to core 0 instead.
 int multiprocessingEnabled = 0;
 
 // The FMRack engine instance

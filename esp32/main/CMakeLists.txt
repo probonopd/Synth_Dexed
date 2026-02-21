@@ -7,6 +7,7 @@ idf_component_register(
         "esp32_storage.cpp"
         "esp32_config.cpp"
         "fmrack_wrapper.cpp"
+        "atomic_compat.c"
     INCLUDE_DIRS
         "."
         "${CMAKE_CURRENT_SOURCE_DIR}/../../src"
@@ -21,6 +22,7 @@ idf_component_register(
         esp_netif
         lwip
         esp_psram
+        usb
 )
 
 # Add the Dexed engine source files
@@ -64,9 +66,8 @@ target_compile_options(${COMPONENT_LIB} PRIVATE
 )
 
 # C++17 is required for std::filesystem (used in Rack.cpp)
-# ESP-IDF defaults to C++23 with GCC 13+, but we need to ensure linking
-# On GCC 13+, stdc++fs is integrated into libstdc++, but just in case:
-target_link_libraries(${COMPONENT_LIB} PRIVATE stdc++fs)
+# ESP-IDF v5.4 ships GCC 14.2 where stdc++fs is merged into libstdc++,
+# so no separate link library is needed.
 
 # Upstream Dexed/FMRack sources need __linux__ defined so the platform detection
 # in dexed.cpp selects the POSIX code path (gettimeofday-based millis()).

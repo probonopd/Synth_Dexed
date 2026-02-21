@@ -1,20 +1,23 @@
 /*
- * FMRack ESP32-C5 Port - Main Application
+ * FMRack ESP32-S3 Port - Main Application
  *
  * Complete port of FMRack (multi-timbral DX7 FM synthesizer rack) to the
- * ESP32-C5-DevKitC-1-N8R8 using ESP-IDF.
+ * ESP32-S3-DevKitC-1-N8R8 using ESP-IDF.
  *
- * Architecture:
- *   - Audio task (highest priority): Renders audio and feeds I2S DMA
- *   - MIDI UART task: Receives hardware MIDI (31250 baud)
- *   - MIDI USB task: Receives MIDI over USB CDC serial
- *   - UDP MIDI task: Receives MIDI over Wi-Fi
- *   - Status task: Blinks LED, monitors health
+ * Architecture (dual-core):
+ *   Core 1 (dedicated):
+ *     - Audio task (highest priority): Renders audio and feeds I2S DMA
+ *   Core 0 (protocol):
+ *     - MIDI UART task: Receives hardware MIDI (31250 baud)
+ *     - USB-MIDI task: Class-compliant USB-MIDI device via USB OTG
+ *     - UDP MIDI task: Receives MIDI over Wi-Fi
+ *     - Status task: Blinks LED, monitors health
  *
  * Hardware connections:
- *   - I2S DAC (PCM5102A/MAX98357A): BCK=GPIO6, WS=GPIO7, DOUT=GPIO15
- *   - MIDI IN: UART1 RX=GPIO4 (via optocoupler)
- *   - Status LED: GPIO8
+ *   - I2S DAC: MCLK=GPIO0, BCK=GPIO5, WS=GPIO6, DOUT=GPIO7
+ *   - MIDI DIN: UART1 RX=GPIO18, TX=GPIO17
+ *   - USB OTG: GPIO19 (D-), GPIO20 (D+)  — class-compliant USB-MIDI
+ *   - Status LED: GPIO48 (addressable RGB on DevKitC-1)
  */
 
 #include "esp32_config.h"
@@ -85,7 +88,7 @@ static void print_system_info(void)
     esp_chip_info(&chip_info);
 
     ESP_LOGI(TAG, "========================================");
-    ESP_LOGI(TAG, "  FMRack for ESP32-C5");
+    ESP_LOGI(TAG, "  FMRack for ESP32-S3");
     ESP_LOGI(TAG, "  Multi-timbral DX7 FM Synthesizer");
     ESP_LOGI(TAG, "========================================");
     ESP_LOGI(TAG, "Chip: %s (rev %d.%d), %d core(s)",
@@ -102,10 +105,14 @@ static void print_system_info(void)
     ESP_LOGI(TAG, "  Sample rate: %d Hz", FMRACK_SAMPLE_RATE);
     ESP_LOGI(TAG, "  Buffer size: %d samples", FMRACK_BUFFER_SIZE);
     ESP_LOGI(TAG, "  Modules: %d", FMRACK_NUM_MODULES);
-    ESP_LOGI(TAG, "  I2S: BCK=%d WS=%d DOUT=%d",
-             FMRACK_I2S_BCK_PIN, FMRACK_I2S_WS_PIN, FMRACK_I2S_DOUT_PIN);
-    ESP_LOGI(TAG, "  MIDI: UART%d RX=%d",
-             FMRACK_MIDI_UART_NUM, FMRACK_MIDI_RX_PIN);
+    ESP_LOGI(TAG, "  I2S: MCLK=%d BCK=%d WS=%d DOUT=%d",
+             FMRACK_I2S_MCLK_PIN, FMRACK_I2S_BCK_PIN,
+             FMRACK_I2S_WS_PIN, FMRACK_I2S_DOUT_PIN);
+    ESP_LOGI(TAG, "  MIDI DIN: UART%d RX=%d TX=%d",
+             FMRACK_MIDI_UART_NUM, FMRACK_MIDI_RX_PIN, FMRACK_MIDI_TX_PIN);
+#if FMRACK_MIDI_USB_ENABLE
+    ESP_LOGI(TAG, "  USB-MIDI: enabled (GPIO19=D-, GPIO20=D+)");
+#endif
 #if FMRACK_MIDI_UDP_ENABLE
     ESP_LOGI(TAG, "  UDP MIDI: port %d", FMRACK_MIDI_UDP_PORT);
 #endif
@@ -215,15 +222,39 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "  Min free ever: %lu bytes",
              (unsigned long)esp_get_minimum_free_heap_size());
 
-    // Main task can now sleep - all work is done in FreeRTOS tasks
-    // Periodically log status
-    while (true) {
-        vTaskDelay(pdMS_TO_TICKS(30000));  // Every 30 seconds
+    // =====================
+    // Test tone: play a note every second to verify audio chain
+    // Remove this block once audio output is confirmed working.
+    // =====================
+    ESP_LOGW(TAG, "TEST TONE: Playing C4 every second (remove once audio verified)");
+    {
+        const uint8_t channel = 0;   // MIDI channel 1
+        const uint8_t note    = 60;  // Middle C (C4)
+        const uint8_t vel     = 100; // Velocity
+        int cycle = 0;
 
-        ESP_LOGI(TAG, "Status: voices=%d parts=%d heap=%lu min_heap=%lu",
-                 fmrack_get_active_voices(),
-                 fmrack_get_enabled_parts(),
-                 (unsigned long)esp_get_free_heap_size(),
-                 (unsigned long)esp_get_minimum_free_heap_size());
+        while (true) {
+            // Note On
+            fmrack_handle_midi(0x90 | channel, note, vel);
+            ESP_LOGI(TAG, "TEST: Note ON  (C4, vel=%d) cycle=%d voices=%d",
+                     vel, cycle, fmrack_get_active_voices());
+            vTaskDelay(pdMS_TO_TICKS(500));
+
+            // Note Off
+            fmrack_handle_midi(0x80 | channel, note, 0);
+            ESP_LOGI(TAG, "TEST: Note OFF (C4) voices=%d",
+                     fmrack_get_active_voices());
+            vTaskDelay(pdMS_TO_TICKS(500));
+
+            cycle++;
+
+            // Also log status every 10 cycles
+            if (cycle % 10 == 0) {
+                ESP_LOGI(TAG, "Status: voices=%d parts=%d heap=%lu",
+                         fmrack_get_active_voices(),
+                         fmrack_get_enabled_parts(),
+                         (unsigned long)esp_get_free_heap_size());
+            }
+        }
     }
 }

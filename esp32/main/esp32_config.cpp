@@ -1,5 +1,5 @@
 /*
- * FMRack ESP32-C5 Port - Runtime Configuration
+ * FMRack ESP32-S3 Port - Runtime Configuration
  *
  * Handles runtime configuration stored in NVS (Non-Volatile Storage).
  * This allows persisting settings like volume, selected performance,
@@ -17,7 +17,7 @@ static const char *TAG = "fmrack_config";
 #define NVS_NAMESPACE "fmrack"
 
 // Initialize NVS flash (required for Wi-Fi and persistent settings)
-int esp32_nvs_init(void)
+extern "C" int esp32_nvs_init(void)
 {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

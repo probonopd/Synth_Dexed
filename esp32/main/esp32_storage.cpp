@@ -1,5 +1,5 @@
 /*
- * FMRack ESP32-C5 Port - SPIFFS Storage Implementation
+ * FMRack ESP32-S3 Port - SPIFFS Storage Implementation
  *
  * Mounts the SPIFFS partition for storing performance files,
  * DX7 voice banks (.syx), and configuration data.

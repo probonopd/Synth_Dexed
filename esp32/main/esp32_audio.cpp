@@ -1,8 +1,14 @@
 /*
- * FMRack ESP32-C5 Port - Audio Output (I2S) Implementation
+ * FMRack ESP32-S3 Port - Audio Output (I2S) Implementation
  *
  * Uses the ESP-IDF I2S driver (new API) to output stereo audio
  * from the FMRack synthesis engine to an external DAC.
+ *
+ * ESP32-S3 advantages leveraged here:
+ *   - Audio task pinned to core 1 for jitter-free real-time processing
+ *   - MCLK output for DACs that require a master clock
+ *   - Float processing buffers allocated in 8 MB octal PSRAM
+ *   - DMA buffers in internal SRAM for reliable DMA transfers
  */
 
 #include "esp32_audio.h"
@@ -39,8 +45,9 @@ int esp32_audio_init(void)
     ESP_LOGI(TAG, "Initializing I2S audio output...");
     ESP_LOGI(TAG, "  Sample rate: %d Hz", FMRACK_SAMPLE_RATE);
     ESP_LOGI(TAG, "  Buffer size: %d samples", FMRACK_BUFFER_SIZE);
-    ESP_LOGI(TAG, "  BCK pin: %d, WS pin: %d, DOUT pin: %d",
-             FMRACK_I2S_BCK_PIN, FMRACK_I2S_WS_PIN, FMRACK_I2S_DOUT_PIN);
+    ESP_LOGI(TAG, "  BCK pin: %d, WS pin: %d, DOUT pin: %d, MCLK pin: %d",
+             FMRACK_I2S_BCK_PIN, FMRACK_I2S_WS_PIN, FMRACK_I2S_DOUT_PIN,
+             FMRACK_I2S_MCLK_PIN);
 
     // Allocate DMA buffer in internal memory (required for DMA)
     size_t dma_buf_size = FMRACK_BUFFER_SIZE * 2 * sizeof(int16_t); // stereo
@@ -50,7 +57,7 @@ int esp32_audio_init(void)
         return -1;
     }
 
-    // Allocate float processing buffers in PSRAM
+    // Allocate float processing buffers in PSRAM (8 MB available on S3-N8R8)
     size_t float_buf_size = FMRACK_BUFFER_SIZE * sizeof(float);
     s_left_buffer = (float *)heap_caps_calloc(1, float_buf_size, MALLOC_CAP_SPIRAM);
     s_right_buffer = (float *)heap_caps_calloc(1, float_buf_size, MALLOC_CAP_SPIRAM);
@@ -80,12 +87,12 @@ int esp32_audio_init(void)
         return -1;
     }
 
-    // Configure I2S standard mode (Philips format)
+    // Configure I2S standard mode (Philips format) with MCLK
     i2s_std_config_t std_cfg = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(FMRACK_SAMPLE_RATE),
         .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
-            .mclk = (gpio_num_t)(FMRACK_I2S_MCLK_PIN >= 0 ? FMRACK_I2S_MCLK_PIN : I2S_GPIO_UNUSED),
+            .mclk = (gpio_num_t)FMRACK_I2S_MCLK_PIN,
             .bclk = (gpio_num_t)FMRACK_I2S_BCK_PIN,
             .ws   = (gpio_num_t)FMRACK_I2S_WS_PIN,
             .dout = (gpio_num_t)FMRACK_I2S_DOUT_PIN,
@@ -97,6 +104,9 @@ int esp32_audio_init(void)
             },
         },
     };
+
+    // ESP32-S3 can generate MCLK = 256 * sample_rate for most DACs
+    std_cfg.clk_cfg.mclk_multiple = I2S_MCLK_MULTIPLE_256;
 
     ret = i2s_channel_init_std_mode(s_tx_handle, &std_cfg);
     if (ret != ESP_OK) {
@@ -114,18 +124,22 @@ int esp32_audio_init(void)
         return -1;
     }
 
-    ESP_LOGI(TAG, "I2S audio output initialized successfully");
+    ESP_LOGI(TAG, "I2S audio output initialized (MCLK=%d x fs)",
+             256);
     return 0;
 }
 
 /**
- * Audio processing task - runs at highest priority.
+ * Audio processing task - runs at highest priority on core 1.
  * Continuously renders audio from the FMRack engine and
  * writes it to the I2S DMA buffer.
+ *
+ * Pinned to core 1 on ESP32-S3 so that MIDI, Wi-Fi, and USB
+ * processing on core 0 never preempt audio rendering.
  */
 static void audio_task(void *param)
 {
-    ESP_LOGI(TAG, "Audio task started on core %d", xPortGetCoreID());
+    ESP_LOGI(TAG, "Audio task started on core %d (dedicated)", xPortGetCoreID());
 
     const int num_samples = FMRACK_BUFFER_SIZE;
     size_t bytes_written = 0;
@@ -187,7 +201,7 @@ int esp32_audio_start(void)
         NULL,
         AUDIO_TASK_PRIORITY,
         &s_audio_task_handle,
-        AUDIO_TASK_CORE
+        AUDIO_TASK_CORE  // Core 1 - dedicated audio core
     );
 
     if (ret != pdPASS) {
@@ -196,8 +210,8 @@ int esp32_audio_start(void)
         return -1;
     }
 
-    ESP_LOGI(TAG, "Audio task started (priority %d, stack %d bytes)",
-             AUDIO_TASK_PRIORITY, AUDIO_TASK_STACK_SIZE);
+    ESP_LOGI(TAG, "Audio task started (core %d, priority %d, stack %d bytes)",
+             AUDIO_TASK_CORE, AUDIO_TASK_PRIORITY, AUDIO_TASK_STACK_SIZE);
     return 0;
 }
 

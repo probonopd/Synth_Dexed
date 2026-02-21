@@ -1,7 +1,7 @@
 /*
- * FMRack ESP32-C5 Port - Engine Wrapper
+ * FMRack ESP32-S3 Port - Engine Wrapper
  *
- * Provides a C-compatible interface between the ESP32 platform code
+ * Provides a C-compatible interface between the ESP32-S3 platform code
  * and the C++ FMRack engine (Rack, Module, Performance, etc.).
  */
 

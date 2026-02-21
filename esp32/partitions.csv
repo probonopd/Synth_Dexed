@@ -1,4 +1,4 @@
-# Partition Table for FMRack ESP32-C5
+# Partition Table for FMRack ESP32-S3
 # Name,   Type, SubType, Offset,   Size, Flags
 nvs,      data, nvs,     0x9000,   0x6000,
 phy_init, data, phy,     0xf000,   0x1000,

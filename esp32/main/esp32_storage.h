@@ -1,5 +1,5 @@
 /*
- * FMRack ESP32-C5 Port - SPIFFS Storage
+ * FMRack ESP32-S3 Port - SPIFFS Storage
  *
  * Handles mounting the SPIFFS filesystem for loading performance
  * files and DX7 voice banks.

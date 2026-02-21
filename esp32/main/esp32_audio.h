@@ -1,8 +1,11 @@
 /*
- * FMRack ESP32-C5 Port - Audio Output (I2S)
+ * FMRack ESP32-S3 Port - Audio Output (I2S)
  *
  * Handles I2S initialization and the audio processing task that
  * feeds synthesized audio to the DAC.
+ * On ESP32-S3, the audio task is pinned to core 1 for dedicated
+ * real-time processing, and MCLK output is enabled for DACs that
+ * require it.
  */
 
 #pragma once
@@ -16,17 +19,18 @@ extern "C" {
 
 /**
  * Initialize the I2S audio output peripheral.
+ * Configures I2S in Philips standard mode with MCLK on the ESP32-S3.
  * Must be called before starting the audio task.
- * @return ESP_OK on success, error code on failure.
+ * @return 0 on success, -1 on failure.
  */
 int esp32_audio_init(void);
 
 /**
- * Start the audio processing task.
+ * Start the audio processing task (pinned to core 1).
  * This creates a high-priority FreeRTOS task that continuously
  * generates audio samples from the FMRack engine and sends them
  * to the I2S DAC.
- * @return ESP_OK on success, error code on failure.
+ * @return 0 on success, -1 on failure.
  */
 int esp32_audio_start(void);
 

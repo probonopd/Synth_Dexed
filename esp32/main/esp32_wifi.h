@@ -1,7 +1,8 @@
 /*
- * FMRack ESP32-C5 Port - Wi-Fi and UDP MIDI
+ * FMRack ESP32-S3 Port - Wi-Fi and UDP MIDI
  *
  * Handles Wi-Fi connectivity and UDP MIDI input over the network.
+ * Wi-Fi runs on core 0 alongside MIDI and USB protocol tasks.
  */
 
 #pragma once

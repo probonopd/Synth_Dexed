@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and flash FMRack for ESP32-C5
+# Build and flash FMRack for ESP32-S3
 # Usage: ./build.sh [flash] [monitor]
 
 set -e
@@ -15,12 +15,12 @@ fi
 
 # Set target if not already configured
 if [ ! -f "sdkconfig" ]; then
-    echo "Setting target to esp32c5..."
-    idf.py set-target esp32c5
+    echo "Setting target to esp32s3..."
+    idf.py set-target esp32s3
 fi
 
 # Build
-echo "Building FMRack for ESP32-C5..."
+echo "Building FMRack for ESP32-S3..."
 idf.py build
 
 # Generate SPIFFS image
@@ -42,7 +42,7 @@ if [[ "$*" == *"flash"* ]]; then
     # Flash SPIFFS partition
     if [ -f "$SPIFFS_IMG" ]; then
         echo "Flashing SPIFFS partition..."
-        python3 -m esptool --chip esp32c5 write_flash 0x310000 "$SPIFFS_IMG"
+        python3 -m esptool --chip esp32s3 write_flash 0x310000 "$SPIFFS_IMG"
     fi
 fi
 

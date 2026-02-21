@@ -1,5 +1,5 @@
 /*
- * FMRack ESP32-C5 Port - Wi-Fi and UDP MIDI Implementation
+ * FMRack ESP32-S3 Port - Wi-Fi and UDP MIDI Implementation
  *
  * Provides Wi-Fi connectivity and a UDP server for receiving
  * MIDI messages over the network (compatible with the desktop
