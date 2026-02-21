@@ -952,15 +952,21 @@ void Dexed::loadVoiceParameters(uint8_t* new_data)
 #endif
 
   panic();
-  memcpy(&data, new_data, 155);
+  // Copy all 156 bytes of the DX7 voice, including the OPE bitmask at index 155.
+  // The previous code copied only 155 bytes, leaving data[155] uninitialized,
+  // which could disable all operators (silence) depending on heap contents.
+  memcpy(data, new_data, NUM_VOICE_PARAMETERS);
   
   // Synchronize OPE (Operator Enable) bitmask with sound generation engine
   // The OPE bitmask is stored at data[155] and needs to be synced with controllers.opSwitch
   // which is used by the sound generation engine in dx7note.cpp
-  uint8_t opeBitmask = data[155];
+  uint8_t opeBitmask = static_cast<uint8_t>(data[155] & 0x3F);
   if (opeBitmask == 0) {
     // If no OPE bitmask is set, default to all operators enabled (0x3F)
     opeBitmask = 0x3F;
+    data[155] = opeBitmask;
+  } else {
+    // Ensure only valid operator bits are stored
     data[155] = opeBitmask;
   }
   setOPAll(opeBitmask);  // Sync with controllers.opSwitch used by sound generation

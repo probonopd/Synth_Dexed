@@ -86,6 +86,12 @@ int fmrack_get_enabled_parts(void);
  */
 bool fmrack_is_initialized(void);
 
+/**
+ * Run a standalone Dexed engine test (bypasses Rack/Module).
+ * Logs whether the raw Dexed engine produces audio on this platform.
+ */
+void fmrack_test_dexed_standalone(void);
+
 #ifdef __cplusplus
 }
 #endif

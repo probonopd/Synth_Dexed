@@ -14,7 +14,7 @@
  *     - LED task: Animates the WS2812 status LED
  *
  * Hardware connections:
- *   - I2S DAC: MCLK=GPIO0, BCK=GPIO5, WS=GPIO6, DOUT=GPIO7
+ *   - I2S DAC/Amp: MCLK=GPIO0, BCK=GPIO6, WS=GPIO7, DOUT=GPIO15
  *   - MIDI DIN: UART1 RX=GPIO18, TX=GPIO17
  *   - USB Host: GPIO19 (D-), GPIO20 (D+) — for USB-MIDI keyboards
  *   - Status LED: GPIO48 (WS2812 addressable RGB on DevKitC-1)
@@ -215,6 +215,13 @@ extern "C" void app_main(void)
     }
 
     // =====================
+    // Quick I2S path validation (bypasses synth engine)
+    // =====================
+    ESP_LOGI(TAG, "Playing initial I2S test tone (440 Hz)...");
+    esp32_audio_start_test_tone(440.0f, 2.2f, 0.50f);
+    vTaskDelay(pdMS_TO_TICKS(2400));
+
+    // =====================
     // Phase 5: MIDI input
     // =====================
     ESP_LOGI(TAG, "[5/6] Initializing MIDI input...");
@@ -235,6 +242,11 @@ extern "C" void app_main(void)
 #else
     ESP_LOGI(TAG, "[6/6] Wi-Fi disabled (enable via menuconfig)");
 #endif
+
+    // =====================
+    // Standalone Dexed engine test (before startup sound)
+    // =====================
+    fmrack_test_dexed_standalone();
 
     // =====================
     // Startup sound: C major chord (C4-E4-G4)
