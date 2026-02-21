@@ -51,11 +51,6 @@ CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
 # Log level
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
-# Compile-time maximum log level (keep runtime default at INFO)
-# Needed so ESP-IDF USB Host stack debug/verbose traces are not compiled out.
-# CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT is not set
-CONFIG_LOG_MAXIMUM_LEVEL_VERBOSE=y
-
 # Watchdog - increase timeout for audio processing
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
 CONFIG_ESP_INT_WDT_TIMEOUT_MS=800

@@ -38,18 +38,6 @@
 static const char *TAG = "fmrack_midi";
 
 #if FMRACK_MIDI_USB_ENABLE
-static void usb_enable_verbose_logging(void)
-{
-    // ESP-IDF USB host stack uses these tags (as seen in errors like CHECK_SHORT_DEV_DESC)
-    esp_log_level_set("USBH", ESP_LOG_VERBOSE);
-    esp_log_level_set("ENUM", ESP_LOG_VERBOSE);
-    esp_log_level_set("HUB", ESP_LOG_VERBOSE);
-
-    // Some IDF builds use additional/alternate tags
-    esp_log_level_set("usb_host", ESP_LOG_VERBOSE);
-    esp_log_level_set("usb", ESP_LOG_VERBOSE);
-}
-
 static void usb_log_event_flags(uint32_t event_flags)
 {
     if (event_flags == 0) {
@@ -807,7 +795,6 @@ int esp32_midi_init(void)
 
     // --- USB Host MIDI ---
 #if FMRACK_MIDI_USB_ENABLE
-    usb_enable_verbose_logging();
     if (usb_midi_host_init() != 0) {
         ESP_LOGW(TAG, "USB Host MIDI init failed (non-fatal, continuing without USB)");
     }
