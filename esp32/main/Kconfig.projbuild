@@ -1,0 +1,145 @@
+menu "FMRack Configuration"
+
+    menu "Audio Settings"
+        config FMRACK_SAMPLE_RATE
+            int "Sample rate (Hz)"
+            default 48000
+            range 22050 48000
+            help
+                Audio sample rate in Hz. Lower values reduce CPU usage.
+                Supported: 22050, 44100, 48000.
+
+        config FMRACK_BUFFER_SIZE
+            int "Audio buffer size (samples)"
+            default 256
+            range 64 1024
+            help
+                Number of samples per audio buffer. Smaller values reduce
+                latency but increase CPU overhead. 256 is a good default.
+
+        config FMRACK_NUM_MODULES
+            int "Number of synth modules"
+            default 4
+            range 1 8
+            help
+                Number of simultaneous FM synthesizer modules (parts).
+                Each module consumes ~50KB of RAM. With 8MB PSRAM, up to
+                8 modules are possible but CPU may be the bottleneck.
+
+        config FMRACK_I2S_NUM
+            int "I2S port number"
+            default 0
+            range 0 1
+            help
+                I2S peripheral number to use for audio output.
+    endmenu
+
+    menu "I2S Pin Configuration"
+        config FMRACK_I2S_BCK_PIN
+            int "I2S BCK (Bit Clock) GPIO"
+            default 6
+            range 0 48
+
+        config FMRACK_I2S_WS_PIN
+            int "I2S WS (Word Select / LRCLK) GPIO"
+            default 7
+            range 0 48
+
+        config FMRACK_I2S_DOUT_PIN
+            int "I2S Data Out GPIO"
+            default 15
+            range 0 48
+
+        config FMRACK_I2S_MCLK_PIN
+            int "I2S MCLK GPIO (-1 to disable)"
+            default -1
+            range -1 48
+            help
+                Master clock output pin. Set to -1 if your DAC generates
+                its own clock from BCK (e.g., PCM5102A). Some DACs like
+                the UDA1334A require an MCLK signal.
+    endmenu
+
+    menu "MIDI Configuration"
+        config FMRACK_MIDI_UART_NUM
+            int "MIDI UART port number"
+            default 1
+            range 0 2
+            help
+                UART peripheral to use for hardware MIDI input.
+
+        config FMRACK_MIDI_RX_PIN
+            int "MIDI RX GPIO"
+            default 4
+            range 0 48
+
+        config FMRACK_MIDI_TX_PIN
+            int "MIDI TX GPIO (optional)"
+            default 5
+            range 0 48
+
+        config FMRACK_MIDI_USB_ENABLE
+            bool "Enable USB MIDI (CDC)"
+            default y
+            help
+                Enable MIDI input via USB CDC (serial). MIDI messages
+                are received as raw bytes over the USB serial port.
+
+        config FMRACK_MIDI_UDP_ENABLE
+            bool "Enable UDP MIDI over Wi-Fi"
+            default y
+            help
+                Enable MIDI input via UDP packets over Wi-Fi.
+
+        config FMRACK_MIDI_UDP_PORT
+            int "UDP MIDI port"
+            default 50007
+            range 1024 65535
+            depends on FMRACK_MIDI_UDP_ENABLE
+    endmenu
+
+    menu "Wi-Fi Configuration"
+        depends on FMRACK_MIDI_UDP_ENABLE
+
+        config FMRACK_WIFI_SSID
+            string "Wi-Fi SSID"
+            default "FMRack"
+            help
+                Wi-Fi network name to connect to for UDP MIDI.
+
+        config FMRACK_WIFI_PASSWORD
+            string "Wi-Fi Password"
+            default ""
+            help
+                Wi-Fi password. Leave empty for open networks.
+
+        config FMRACK_WIFI_AP_MODE
+            bool "Use Access Point mode"
+            default n
+            help
+                If enabled, the ESP32-C5 creates its own Wi-Fi network
+                instead of connecting to an existing one.
+    endmenu
+
+    menu "Storage"
+        config FMRACK_SPIFFS_MOUNT_POINT
+            string "SPIFFS mount point"
+            default "/spiffs"
+
+        config FMRACK_DEFAULT_PERFORMANCE
+            string "Default performance file path"
+            default "/spiffs/performance.ini"
+            help
+                Path to the default performance file loaded at startup.
+    endmenu
+
+    menu "Hardware"
+        config FMRACK_STATUS_LED_PIN
+            int "Status LED GPIO"
+            default 8
+            range -1 48
+            help
+                GPIO for status LED. Set to -1 to disable.
+    endmenu
+
+endmenu
