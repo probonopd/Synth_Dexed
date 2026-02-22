@@ -1,14 +1,26 @@
 /*
  * FMRack ESP32-S3 Port - Audio Output (I2S) Implementation
  *
- * Uses the ESP-IDF I2S driver (new API) to output stereo audio
- * from the FMRack synthesis engine to an external DAC.
+ * Architecture: decoupled render + write pipeline
  *
- * ESP32-S3 advantages leveraged here:
- *   - Audio task pinned to core 1 for jitter-free real-time processing
- *   - MCLK output for DACs that require a master clock
- *   - Float processing buffers allocated in 8 MB octal PSRAM
- *   - DMA buffers in internal SRAM for reliable DMA transfers
+ *   audio_render_task  (Core 1, MAX priority, IRAM_ATTR)
+ *       Renders Dexed FM audio into a pre-render ring buffer as fast as
+ *       possible — independently of I2S DMA timing.
+ *
+ *   audio_write_task   (Core 1, MAX-1 priority)
+ *       Drains the pre-render ring buffer to the I2S DMA one block at a
+ *       time.  Blocks only on DMA descriptor availability (I2S ISR).
+ *
+ * The pre-render ring (FMRACK_AUDIO_PRERENDER_BLOCKS blocks of internal SRAM)
+ * decouples these two tasks so that any transient stall in either path is
+ * absorbed without an audible glitch.
+ *
+ * Root-cause fix for the USB crackle:
+ *   sizeof(Dexed) >= 16 KB (inline render scratch buffer).  With
+ *   CONFIG_SPIRAM_USE_MALLOC=y, plain malloc() sends it to PSRAM.  PSRAM and
+ *   Flash share the SPI0 bus on ESP32-S3, so USB lib code executing from Flash
+ *   stalls PSRAM reads by the render task → overruns → crackle.  Dexed is now
+ *   explicitly allocated in internal SRAM in dexed_raw.cpp.
  */
 
 #include "esp32_audio.h"
@@ -17,9 +29,12 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "driver/i2s_std.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_timer.h"  // for timing diagnostics
+#include "esp_pm.h"
 
 #include <string.h>
 #include <math.h>
@@ -29,63 +44,139 @@ static const char *TAG = "fmrack_audio";
 // I2S channel handle
 static i2s_chan_handle_t s_tx_handle = NULL;
 
-// Audio task handle
-static TaskHandle_t s_audio_task_handle = NULL;
+// Task handles
+static TaskHandle_t s_audio_task_handle  = NULL;  // render task
+static TaskHandle_t s_audio_write_handle = NULL;  // write task
 static volatile bool s_audio_running = false;
 
-// DMA-capable audio output buffer (interleaved stereo 16-bit samples)
-static int16_t *s_dma_buffer = NULL;
+// Low-priority stats task (prints diagnostics gathered in the audio thread)
+static TaskHandle_t s_audio_stats_task_handle = NULL;
 
-// Floating-point processing buffers (allocated in PSRAM)
-static float *s_left_buffer = NULL;
-static float *s_right_buffer = NULL;
+// Mono int16 render buffer (internal SRAM).  The render task writes here,
+// then expands to stereo into the pre-render ring.
+static int16_t *s_mono_buffer = NULL;
 
-int esp32_audio_init(void)
+// -------------------------------------------------------------------------
+// Pre-render ring buffer
+//
+// Sits between the render task (producer) and the write task (consumer).
+// Allocated as a static DRAM array so it is guaranteed to be in internal
+// SRAM regardless of SPIRAM_USE_MALLOC settings.
+// -------------------------------------------------------------------------
+#define PRERENDER_RING_BLOCKS  FMRACK_AUDIO_PRERENDER_BLOCKS
+
+// stereo interleaved int16 — DRAM_ATTR forces internal SRAM placement
+static DRAM_ATTR int16_t s_pre_ring[PRERENDER_RING_BLOCKS][FMRACK_BUFFER_SIZE * 2];
+static volatile int s_pre_ring_write = 0;  // next slot for render task
+static volatile int s_pre_ring_read  = 0;  // next slot for write task
+
+// Counting semaphores: free_sem counts empty slots, data_sem counts filled slots
+static SemaphoreHandle_t s_pre_ring_free_sem = NULL;
+static SemaphoreHandle_t s_pre_ring_data_sem = NULL;
+
+// Power management locks (only effective if CONFIG_PM_ENABLE is enabled)
+static esp_pm_lock_handle_t s_pm_lock_cpu = NULL;
+static esp_pm_lock_handle_t s_pm_lock_no_ls = NULL;
+static bool s_pm_supported = false;
+static bool s_pm_locked = false;
+
+// -----------------------------------------------------------------------------
+// Audio RT diagnostics (updated in audio thread, printed elsewhere)
+// -----------------------------------------------------------------------------
+
+typedef struct {
+    uint64_t blocks;
+    uint64_t render_us_total;
+    uint32_t render_us_max;
+    uint32_t render_overruns;
+
+    uint64_t write_calls;
+    uint64_t write_us_total;
+    uint32_t write_us_max;
+    uint32_t write_errors;
+    uint32_t write_zero_bytes;
+    uint32_t write_partial_calls;
+    uint32_t write_partial_bytes;
+
+    uint32_t loop_dt_us_max;
+    uint32_t loop_dt_over_2p;
+
+    // I2S ISR-side counters
+    uint64_t isr_on_sent;
+    uint32_t isr_on_send_q_ovf;
+} audio_rt_stats_t;
+
+static audio_rt_stats_t s_rt_stats = {};
+static portMUX_TYPE s_rt_stats_mux = portMUX_INITIALIZER_UNLOCKED;
+
+// I2S event callbacks run in ISR context.
+static bool IRAM_ATTR i2s_on_sent_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_data)
 {
-    ESP_LOGI(TAG, "Initializing I2S audio output...");
-    ESP_LOGI(TAG, "  Sample rate: %d Hz", FMRACK_SAMPLE_RATE);
-    ESP_LOGI(TAG, "  Buffer size: %d samples", FMRACK_BUFFER_SIZE);
-    ESP_LOGI(TAG, "  BCK pin: %d, WS pin: %d, DOUT pin: %d, MCLK pin: %d",
-             FMRACK_I2S_BCK_PIN, FMRACK_I2S_WS_PIN, FMRACK_I2S_DOUT_PIN,
-             FMRACK_I2S_MCLK_PIN);
+    (void)handle;
+    (void)event;
+    (void)user_data;
+    portENTER_CRITICAL_ISR(&s_rt_stats_mux);
+    s_rt_stats.isr_on_sent++;
+    portEXIT_CRITICAL_ISR(&s_rt_stats_mux);
+    return false;
+}
 
-    // Allocate DMA buffer in internal memory (required for DMA)
-    size_t dma_buf_size = FMRACK_BUFFER_SIZE * 2 * sizeof(int16_t); // stereo
-    s_dma_buffer = (int16_t *)heap_caps_calloc(1, dma_buf_size, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-    if (!s_dma_buffer) {
-        ESP_LOGE(TAG, "Failed to allocate DMA buffer (%d bytes)", (int)dma_buf_size);
-        return -1;
-    }
+static bool IRAM_ATTR i2s_on_send_q_ovf_cb(i2s_chan_handle_t handle, i2s_event_data_t *event, void *user_data)
+{
+    (void)handle;
+    (void)event;
+    (void)user_data;
+    portENTER_CRITICAL_ISR(&s_rt_stats_mux);
+    s_rt_stats.isr_on_send_q_ovf++;
+    portEXIT_CRITICAL_ISR(&s_rt_stats_mux);
+    return false;
+}
 
-    // Allocate float processing buffers in PSRAM (8 MB available on S3-N8R8)
-    size_t float_buf_size = FMRACK_BUFFER_SIZE * sizeof(float);
-    s_left_buffer = (float *)heap_caps_calloc(1, float_buf_size, MALLOC_CAP_SPIRAM);
-    s_right_buffer = (float *)heap_caps_calloc(1, float_buf_size, MALLOC_CAP_SPIRAM);
-    if (!s_left_buffer || !s_right_buffer) {
-        // Fall back to internal memory
-        ESP_LOGW(TAG, "PSRAM allocation failed, using internal memory for float buffers");
-        if (s_left_buffer) { heap_caps_free(s_left_buffer); s_left_buffer = NULL; }
-        if (s_right_buffer) { heap_caps_free(s_right_buffer); s_right_buffer = NULL; }
-        s_left_buffer = (float *)calloc(1, float_buf_size);
-        s_right_buffer = (float *)calloc(1, float_buf_size);
-        if (!s_left_buffer || !s_right_buffer) {
-            ESP_LOGE(TAG, "Failed to allocate float buffers");
-            return -1;
-        }
-    }
+// When esp32_audio_init() is called from core 0 (app_main), we still want the
+// I2S driver (and thus its interrupts) to be allocated on the dedicated audio
+// core. ESP-IDF allocates many peripheral interrupts on the calling core.
+typedef struct {
+    TaskHandle_t waiter;
+    int result;
+} i2s_init_ctx_t;
 
+static int esp32_audio_init_impl(void);
+
+static void i2s_init_task(void *param)
+{
+    i2s_init_ctx_t *ctx = (i2s_init_ctx_t *)param;
+    ctx->result = esp32_audio_init_impl();
+    xTaskNotifyGive(ctx->waiter);
+    vTaskDelete(NULL);
+}
+
+static int esp32_audio_init_impl(void)
+{
     // Configure I2S channel
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(
         (i2s_port_t)FMRACK_I2S_NUM, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = FMRACK_I2S_DMA_BUF_COUNT;
     chan_cfg.dma_frame_num = FMRACK_I2S_DMA_BUF_LEN;
-    chan_cfg.auto_clear = true;  // Clear DMA buffer on underflow
+    chan_cfg.auto_clear = false;  // Don't insert silent zeros on underrun — repeats last DMA buf instead
+    // I2S ISR at priority 7 (highest allowable without being NMI).
+    // USB SOF fires at LEVEL2. Priority 7 > 2 so the DMA completion ISR
+    // is never delayed by a USB SOF burst, preventing FIFO underruns.
+    chan_cfg.intr_priority = 7;
 
     esp_err_t ret = i2s_new_channel(&chan_cfg, &s_tx_handle, NULL);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to create I2S channel: %s", esp_err_to_name(ret));
         return -1;
     }
+
+    // Register ISR callbacks to detect TX queue overflow (often audible as crackles).
+    const i2s_event_callbacks_t cbs = {
+        .on_recv = NULL,
+        .on_recv_q_ovf = NULL,
+        .on_sent = i2s_on_sent_cb,
+        .on_send_q_ovf = i2s_on_send_q_ovf_cb,
+    };
+    (void)i2s_channel_register_event_callback(s_tx_handle, &cbs, NULL);
 
     // Configure I2S standard mode (Philips format) with MCLK
     i2s_std_config_t std_cfg = {
@@ -124,59 +215,261 @@ int esp32_audio_init(void)
         return -1;
     }
 
-    ESP_LOGI(TAG, "I2S audio output initialized (MCLK=%d x fs)",
-             256);
+    ESP_LOGI(TAG, "I2S audio output initialized (MCLK=%d x fs)", 256);
     return 0;
 }
 
-/**
- * Audio processing task - runs at highest priority on core 1.
- * Continuously renders audio from the FMRack engine and
- * writes it to the I2S DMA buffer.
- *
- * Pinned to core 1 on ESP32-S3 so that MIDI, Wi-Fi, and USB
- * processing on core 0 never preempt audio rendering.
- */
-static void audio_task(void *param)
+int esp32_audio_init(void)
 {
-    ESP_LOGI(TAG, "Audio task started on core %d (dedicated)", xPortGetCoreID());
+    ESP_LOGI(TAG, "Initializing I2S audio output...");
+    ESP_LOGI(TAG, "  Sample rate: %d Hz", FMRACK_SAMPLE_RATE);
+    ESP_LOGI(TAG, "  Buffer size: %d samples", FMRACK_BUFFER_SIZE);
+    ESP_LOGI(TAG, "  BCK pin: %d, WS pin: %d, DOUT pin: %d, MCLK pin: %d",
+             FMRACK_I2S_BCK_PIN, FMRACK_I2S_WS_PIN, FMRACK_I2S_DOUT_PIN,
+             FMRACK_I2S_MCLK_PIN);
 
-    const int num_samples = FMRACK_BUFFER_SIZE;
-    size_t bytes_written = 0;
-    size_t buf_bytes = num_samples * 2 * sizeof(int16_t);
-
-    while (s_audio_running) {
-        // Clear float buffers
-        memset(s_left_buffer, 0, num_samples * sizeof(float));
-        memset(s_right_buffer, 0, num_samples * sizeof(float));
-
-        // Render audio from raw Dexed engine
-        dexed_raw_process_audio(s_left_buffer, s_right_buffer, num_samples);
-
-        // Convert float [-1.0, 1.0] to interleaved 16-bit PCM
-        for (int i = 0; i < num_samples; i++) {
-            float l = s_left_buffer[i];
-            float r = s_right_buffer[i];
-
-            // Soft clamp
-            if (l > 1.0f) l = 1.0f;
-            else if (l < -1.0f) l = -1.0f;
-            if (r > 1.0f) r = 1.0f;
-            else if (r < -1.0f) r = -1.0f;
-
-            s_dma_buffer[i * 2]     = (int16_t)(l * 32767.0f);
-            s_dma_buffer[i * 2 + 1] = (int16_t)(r * 32767.0f);
-        }
-
-        // Write to I2S (blocks until DMA buffer is available)
-        esp_err_t ret = i2s_channel_write(s_tx_handle, s_dma_buffer, buf_bytes,
-                                           &bytes_written, portMAX_DELAY);
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "I2S write error: %s", esp_err_to_name(ret));
-        }
+    // Allocate mono int16 render buffer in internal memory.
+    // IMPORTANT: MALLOC_CAP_INTERNAL so it is never placed in PSRAM.
+    s_mono_buffer = (int16_t *)heap_caps_calloc(
+        1,
+        FMRACK_BUFFER_SIZE * sizeof(int16_t),
+        MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!s_mono_buffer) {
+        ESP_LOGE(TAG, "Failed to allocate mono buffer");
+        return -1;
     }
 
-    ESP_LOGI(TAG, "Audio task exiting");
+    // Initialize I2S from the dedicated audio core so that the driver allocates
+    // its interrupts/ISRs on that core (reduces interference from USB/protocol
+    // activity on core 0 that can cause intermittent crackles).
+    if (xPortGetCoreID() == AUDIO_TASK_CORE) {
+        return esp32_audio_init_impl();
+    }
+
+    i2s_init_ctx_t ctx = {.waiter = xTaskGetCurrentTaskHandle(), .result = -1};
+    BaseType_t ok = xTaskCreatePinnedToCore(
+        i2s_init_task,
+        "i2s_init",
+        4096,
+        &ctx,
+        AUDIO_TASK_PRIORITY,
+        NULL,
+        AUDIO_TASK_CORE);
+    if (ok != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create i2s_init task");
+        return -1;
+    }
+    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(2000)) == 0) {
+        ESP_LOGE(TAG, "Timeout waiting for i2s_init");
+        return -1;
+    }
+    return ctx.result;
+}
+
+/**
+ * audio_render_task  —  Core 1, highest priority
+ *
+ * Continuously renders audio from the Dexed FM engine into the pre-render
+ * ring buffer.  Blocks only when the ring is full (waiting for the write
+ * task to drain one slot).  Never touches I2S or DMA directly.
+ *
+ * IRAM_ATTR: hot path kept in IRAM so a USB-driven I-cache eviction on Core 0
+ * (shared instruction cache) cannot stall the prologue or loop head.
+ */
+static IRAM_ATTR void audio_render_task(void *param)
+{
+    ESP_LOGI(TAG, "Audio render task on core %d", xPortGetCoreID());
+
+    const int      num_samples = FMRACK_BUFFER_SIZE;
+    const uint64_t period_us   = (uint64_t)num_samples * 1000000ULL / FMRACK_SAMPLE_RATE;
+
+    while (s_audio_running) {
+        // Wait for a free slot in the pre-render ring.
+        // Normally instant; only blocks when all PRERENDER_RING_BLOCKS slots
+        // are filled (write task is briefly behind).
+        if (xSemaphoreTake(s_pre_ring_free_sem, pdMS_TO_TICKS(50)) != pdTRUE) {
+            continue; // timeout: re-check s_audio_running
+        }
+        if (!s_audio_running) break;
+
+        uint64_t t0 = esp_timer_get_time();
+
+        // Render mono audio.
+        dexed_raw_process_audio_i16(s_mono_buffer, num_samples);
+
+        // Expand mono → interleaved stereo into the pre-ring slot.
+        // Apply -6 dB headroom to avoid DAC/amp clipping.
+        int16_t *dst = s_pre_ring[s_pre_ring_write];
+        for (int i = 0; i < num_samples; i++) {
+            int32_t v = (int32_t)s_mono_buffer[i] >> 1;
+            if (v >  32767) v =  32767;
+            if (v < -32768) v = -32768;
+            dst[i * 2]     = (int16_t)v;
+            dst[i * 2 + 1] = (int16_t)v;
+        }
+
+        s_pre_ring_write = (s_pre_ring_write + 1) % PRERENDER_RING_BLOCKS;
+
+        uint64_t render_us = esp_timer_get_time() - t0;
+        portENTER_CRITICAL(&s_rt_stats_mux);
+        s_rt_stats.blocks++;
+        s_rt_stats.render_us_total += render_us;
+        if (render_us > s_rt_stats.render_us_max)
+            s_rt_stats.render_us_max = (uint32_t)render_us;
+        if (render_us > period_us)
+            s_rt_stats.render_overruns++;
+        portEXIT_CRITICAL(&s_rt_stats_mux);
+
+        // Signal the write task that one filled slot is available.
+        xSemaphoreGive(s_pre_ring_data_sem);
+    }
+
+    ESP_LOGI(TAG, "Audio render task exiting");
+    vTaskDelete(NULL);
+}
+
+/**
+ * audio_write_task  —  Core 1, second-highest priority
+ *
+ * Drains one pre-rendered block at a time from the ring buffer into the I2S
+ * DMA.  The i2s_channel_write() call blocks for ~5.8 ms waiting for a DMA
+ * descriptor to become free; during that time the higher-priority render task
+ * can run and pre-fill the ring.
+ *
+ * Key: the ring slot is released back to the render task AFTER the block is
+ * copied to a local write buffer, so the render task is never prevented from
+ * filling the next slot while i2s_channel_write waits on the DMA ISR.
+ */
+static void audio_write_task(void *param)
+{
+    ESP_LOGI(TAG, "Audio write task on core %d", xPortGetCoreID());
+
+    const size_t buf_bytes = FMRACK_BUFFER_SIZE * 2 * sizeof(int16_t);
+
+    // Local write buffer (1 KB on stack — well within the 4 KB stack).
+    // Copied from the ring slot before releasing the slot, so the render
+    // task can reuse the slot while i2s_channel_write blocks.
+    int16_t write_buf[FMRACK_BUFFER_SIZE * 2];
+
+    while (s_audio_running) {
+        // Wait for a filled slot.
+        if (xSemaphoreTake(s_pre_ring_data_sem, pdMS_TO_TICKS(50)) != pdTRUE) {
+            continue;
+        }
+        if (!s_audio_running) {
+            xSemaphoreGive(s_pre_ring_free_sem);
+            break;
+        }
+
+        // Copy the slot to our local buffer.
+        memcpy(write_buf, s_pre_ring[s_pre_ring_read], buf_bytes);
+        s_pre_ring_read = (s_pre_ring_read + 1) % PRERENDER_RING_BLOCKS;
+
+        // Release the ring slot immediately so the render task can render
+        // the next block while we wait on the DMA descriptor below.
+        xSemaphoreGive(s_pre_ring_free_sem);
+
+        // Write pre-rendered block to I2S DMA.
+        // Blocks until a DMA descriptor slot becomes free (~5.8 ms).
+        uint64_t t0 = esp_timer_get_time();
+        size_t total_written = 0;
+        while (total_written < buf_bytes) {
+            size_t bytes_written = 0;
+            const uint8_t *p = (const uint8_t *)write_buf + total_written;
+            esp_err_t ret = i2s_channel_write(
+                s_tx_handle, p, buf_bytes - total_written,
+                &bytes_written, pdMS_TO_TICKS(20));
+            if (ret != ESP_OK) {
+                portENTER_CRITICAL(&s_rt_stats_mux);
+                s_rt_stats.write_errors++;
+                portEXIT_CRITICAL(&s_rt_stats_mux);
+                break;
+            }
+            if (bytes_written == 0) {
+                portENTER_CRITICAL(&s_rt_stats_mux);
+                s_rt_stats.write_zero_bytes++;
+                portEXIT_CRITICAL(&s_rt_stats_mux);
+                break;
+            }
+            if (bytes_written < (buf_bytes - total_written)) {
+                portENTER_CRITICAL(&s_rt_stats_mux);
+                s_rt_stats.write_partial_calls++;
+                s_rt_stats.write_partial_bytes += (uint32_t)((buf_bytes - total_written) - bytes_written);
+                portEXIT_CRITICAL(&s_rt_stats_mux);
+            }
+            total_written += bytes_written;
+        }
+        uint64_t write_us = esp_timer_get_time() - t0;
+        portENTER_CRITICAL(&s_rt_stats_mux);
+        s_rt_stats.write_calls++;
+        s_rt_stats.write_us_total += write_us;
+        if (write_us > s_rt_stats.write_us_max)
+            s_rt_stats.write_us_max = (uint32_t)write_us;
+        portEXIT_CRITICAL(&s_rt_stats_mux);
+    }
+
+    ESP_LOGI(TAG, "Audio write task exiting");
+    vTaskDelete(NULL);
+}
+
+static void audio_stats_task(void *param)
+{
+    (void)param;
+    const int num_samples = FMRACK_BUFFER_SIZE;
+    const uint64_t period = (uint64_t)num_samples * 1000000ULL / FMRACK_SAMPLE_RATE;
+
+    audio_rt_stats_t prev = {};
+    while (s_audio_running) {
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        // PM CPU lock is held unconditionally for the entire audio session
+        // (acquired at esp32_audio_start, released at esp32_audio_stop).
+        // No duty-cycle toggling needed here.
+
+        audio_rt_stats_t cur;
+        portENTER_CRITICAL(&s_rt_stats_mux);
+        cur = s_rt_stats;
+        portEXIT_CRITICAL(&s_rt_stats_mux);
+
+        const uint64_t d_blocks = cur.blocks - prev.blocks;
+        const uint64_t d_render_us = cur.render_us_total - prev.render_us_total;
+        const uint64_t d_write_us = cur.write_us_total - prev.write_us_total;
+        const uint32_t d_overruns = cur.render_overruns - prev.render_overruns;
+        const uint32_t d_werr = cur.write_errors - prev.write_errors;
+        const uint32_t d_wzero = cur.write_zero_bytes - prev.write_zero_bytes;
+        const uint32_t d_wpart = cur.write_partial_calls - prev.write_partial_calls;
+        const uint64_t d_isr_sent = cur.isr_on_sent - prev.isr_on_sent;
+        const uint32_t d_isr_qovf = cur.isr_on_send_q_ovf - prev.isr_on_send_q_ovf;
+
+        uint64_t avg_render = d_blocks ? (d_render_us / d_blocks) : 0;
+        uint64_t avg_write  = d_blocks ? (d_write_us  / d_blocks) : 0;
+        float render_cpu = (period != 0) ? ((float)avg_render * 100.0f / (float)period) : 0.0f;
+
+        int voices = dexed_raw_get_active_voices();
+        // ring_fill = free_sem tokens consumed = data_sem count (approximate, lock-free read)
+        int ring_fill = (int)uxSemaphoreGetCount(s_pre_ring_data_sem);
+        ESP_LOGI(TAG,
+                 "RT: voices=%d render=%.1f%% avg=%lluus max=%uus overruns=%u ring=%d/%d"
+                 " | i2s avg=%lluus max=%uus err=%u zero=%u partial=%u"
+                 " | isr sent=%llu qovf=%u",
+                 voices,
+                 render_cpu,
+                 (unsigned long long)avg_render,
+                 (unsigned)cur.render_us_max,
+                 (unsigned)d_overruns,
+                 ring_fill,
+                 PRERENDER_RING_BLOCKS,
+                 (unsigned long long)avg_write,
+                 (unsigned)cur.write_us_max,
+                 (unsigned)d_werr,
+                 (unsigned)d_wzero,
+                 (unsigned)d_wpart,
+                 (unsigned long long)d_isr_sent,
+                 (unsigned)d_isr_qovf);
+
+        prev = cur;
+    }
+
     vTaskDelete(NULL);
 }
 
@@ -194,24 +487,87 @@ int esp32_audio_start(void)
 
     s_audio_running = true;
 
-    BaseType_t ret = xTaskCreatePinnedToCore(
-        audio_task,
-        "audio_task",
-        AUDIO_TASK_STACK_SIZE,
-        NULL,
-        AUDIO_TASK_PRIORITY,
-        &s_audio_task_handle,
-        AUDIO_TASK_CORE  // Core 1 - dedicated audio core
-    );
-
-    if (ret != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create audio task");
+    // Initialise pre-render ring semaphores.
+    // free_sem starts full (all PRERENDER_RING_BLOCKS slots available to render).
+    // data_sem starts empty (no rendered data yet).
+    s_pre_ring_write = 0;
+    s_pre_ring_read  = 0;
+    s_pre_ring_free_sem = xSemaphoreCreateCounting(PRERENDER_RING_BLOCKS, PRERENDER_RING_BLOCKS);
+    s_pre_ring_data_sem = xSemaphoreCreateCounting(PRERENDER_RING_BLOCKS, 0);
+    if (!s_pre_ring_free_sem || !s_pre_ring_data_sem) {
+        ESP_LOGE(TAG, "Failed to create pre-render ring semaphores");
         s_audio_running = false;
         return -1;
     }
 
-    ESP_LOGI(TAG, "Audio task started (core %d, priority %d, stack %d bytes)",
-             AUDIO_TASK_CORE, AUDIO_TASK_PRIORITY, AUDIO_TASK_STACK_SIZE);
+    // Create PM locks and acquire them immediately so the CPU runs at maximum
+    // frequency for the entire duration of audio playback.  This prevents
+    // USB enumeration or idle-sleep from downclocking the CPU at any point
+    // while audio is active, which was a previously observed crackle source.
+    // (no-op if PM is disabled in sdkconfig)
+    if (!s_pm_lock_cpu && !s_pm_lock_no_ls) {
+        esp_err_t e1 = esp_pm_lock_create(ESP_PM_CPU_FREQ_MAX, 0, "audio_cpu", &s_pm_lock_cpu);
+        esp_err_t e2 = esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "audio_nols", &s_pm_lock_no_ls);
+        s_pm_supported = (e1 == ESP_OK && e2 == ESP_OK);
+        if (s_pm_supported) {
+            (void)esp_pm_lock_acquire(s_pm_lock_cpu);
+            (void)esp_pm_lock_acquire(s_pm_lock_no_ls);
+            s_pm_locked = true;
+            ESP_LOGI(TAG, "PM CPU freq lock acquired (unconditional)");
+        } else {
+            // PM might be disabled; don't spam logs.
+            s_pm_lock_cpu = NULL;
+            s_pm_lock_no_ls = NULL;
+        }
+    }
+
+    BaseType_t ret = xTaskCreatePinnedToCore(
+        audio_render_task,
+        "audio_render",
+        AUDIO_TASK_STACK_SIZE,
+        NULL,
+        AUDIO_TASK_PRIORITY,
+        &s_audio_task_handle,
+        AUDIO_TASK_CORE);
+
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create audio render task");
+        s_audio_running = false;
+        return -1;
+    }
+
+    // Write task: same core, one priority step below render task.
+    // When write task blocks on i2s_channel_write (~5.8 ms DMA wait),
+    // the higher-priority render task runs and pre-fills the ring.
+    ret = xTaskCreatePinnedToCore(
+        audio_write_task,
+        "audio_write",
+        AUDIO_WRITE_TASK_STACK_SIZE,
+        NULL,
+        AUDIO_WRITE_TASK_PRIORITY,
+        &s_audio_write_handle,
+        AUDIO_TASK_CORE);
+
+    if (ret != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create audio write task");
+        s_audio_running = false;
+        return -1;
+    }
+
+    // Start low-priority stats task on core 0 (protocol core) so it can't
+    // interfere with real-time audio scheduling on core 1.
+    (void)xTaskCreatePinnedToCore(
+        audio_stats_task,
+        "audio_stats",
+        4096,
+        NULL,
+        1,
+        &s_audio_stats_task_handle,
+        0);
+
+    ESP_LOGI(TAG, "Audio tasks started (core %d, render prio %d, write prio %d, prerender_blocks %d)",
+             AUDIO_TASK_CORE, AUDIO_TASK_PRIORITY, AUDIO_WRITE_TASK_PRIORITY,
+             FMRACK_AUDIO_PRERENDER_BLOCKS);
     return 0;
 }
 
@@ -219,10 +575,47 @@ void esp32_audio_stop(void)
 {
     s_audio_running = false;
 
-    // Wait for task to exit
+    // Unblock both tasks so they can observe s_audio_running = false and exit.
+    if (s_pre_ring_free_sem) xSemaphoreGive(s_pre_ring_free_sem);
+    if (s_pre_ring_data_sem) xSemaphoreGive(s_pre_ring_data_sem);
+
+    // Release PM locks if held
+    if (s_pm_supported && s_pm_locked) {
+        if (s_pm_lock_no_ls) (void)esp_pm_lock_release(s_pm_lock_no_ls);
+        if (s_pm_lock_cpu) (void)esp_pm_lock_release(s_pm_lock_cpu);
+        s_pm_locked = false;
+    }
+    if (s_pm_lock_cpu) {
+        esp_pm_lock_delete(s_pm_lock_cpu);
+        s_pm_lock_cpu = NULL;
+    }
+    if (s_pm_lock_no_ls) {
+        esp_pm_lock_delete(s_pm_lock_no_ls);
+        s_pm_lock_no_ls = NULL;
+    }
+
+    // Wait for tasks to exit
     if (s_audio_task_handle) {
         vTaskDelay(pdMS_TO_TICKS(100));
         s_audio_task_handle = NULL;
+    }
+    if (s_audio_write_handle) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        s_audio_write_handle = NULL;
+    }
+    if (s_audio_stats_task_handle) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+        s_audio_stats_task_handle = NULL;
+    }
+
+    // Clean up ring semaphores
+    if (s_pre_ring_free_sem) {
+        vSemaphoreDelete(s_pre_ring_free_sem);
+        s_pre_ring_free_sem = NULL;
+    }
+    if (s_pre_ring_data_sem) {
+        vSemaphoreDelete(s_pre_ring_data_sem);
+        s_pre_ring_data_sem = NULL;
     }
 
     if (s_tx_handle) {
@@ -231,17 +624,9 @@ void esp32_audio_stop(void)
         s_tx_handle = NULL;
     }
 
-    if (s_dma_buffer) {
-        heap_caps_free(s_dma_buffer);
-        s_dma_buffer = NULL;
-    }
-    if (s_left_buffer) {
-        heap_caps_free(s_left_buffer);
-        s_left_buffer = NULL;
-    }
-    if (s_right_buffer) {
-        heap_caps_free(s_right_buffer);
-        s_right_buffer = NULL;
+    if (s_mono_buffer) {
+        heap_caps_free(s_mono_buffer);
+        s_mono_buffer = NULL;
     }
 
     ESP_LOGI(TAG, "Audio stopped and I2S deinitialized");

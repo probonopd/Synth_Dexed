@@ -281,6 +281,7 @@ Use `idf.py menuconfig` to adjust settings. Key options:
 | Audio           | Sample rate            | 48000 Hz   |
 | Audio           | Buffer size            | 256 samples|
 | Audio           | Number of modules      | 8          |
+| FMRack          | Engine type            | MSFA       |
 | I2S Pins        | BCK / WS / DOUT / MCLK| 5 / 6 / 7 / 0 |
 | MIDI            | UART RX / TX pins      | 18 / 17    |
 | MIDI            | USB-MIDI enable        | Yes        |

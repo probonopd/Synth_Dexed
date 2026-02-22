@@ -21,6 +21,11 @@ bool dexed_raw_is_initialized(void);
 int dexed_raw_get_active_voices(void);
 
 void dexed_raw_process_audio(float *left_out, float *right_out, int num_samples);
+
+// Direct int16 mono output – skips the float round-trip.
+// Writes `num_samples` mono 16-bit PCM samples into `out`.
+void dexed_raw_process_audio_i16(int16_t *out, int num_samples);
+
 void dexed_raw_handle_midi(uint8_t status, uint8_t data1, uint8_t data2);
 void dexed_raw_handle_sysex(const uint8_t *data, int len, uint8_t channel);
 
@@ -37,6 +42,14 @@ int dexed_raw_send_sysex_file(const char *path, uint8_t channel);
 // voice_index0: 0..31.
 // Returns 0 on success.
 int dexed_raw_load_voice_from_bank_syx(const char *path, int voice_index0);
+
+// Load and cache all 32 voices from a bank dump (.syx, 4104 bytes).
+// Returns 0 on success.
+int dexed_raw_load_bank_syx(const char *path);
+
+// Select a cached bank program (voice) by 0-based index (0..31).
+// Returns 0 on success.
+int dexed_raw_select_bank_program(int voice_index0);
 
 #ifdef __cplusplus
 }

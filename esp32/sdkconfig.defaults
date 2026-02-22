@@ -5,6 +5,9 @@
 
 # Flash (8 MB, QIO 80 MHz)
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+
+# Keep I2S ISR in IRAM to reduce crackles caused by flash/cache stalls
+CONFIG_I2S_ISR_IRAM_SAFE=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 
@@ -50,6 +53,18 @@ CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
 
 # Log level
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+
+# Audio render block size (256 samples = ~5.8 ms at 44.1 kHz, balances latency & efficiency)
+CONFIG_FMRACK_BUFFER_SIZE=256
+
+# Default polyphony for Dexed engine
+CONFIG_FMRACK_POLYPHONY=4
+
+# Sample rate
+CONFIG_FMRACK_SAMPLE_RATE=44100
+
+# Choose FM engine: 0=MSFA (modern), 1=MKI (legacy), 2=OPL
+CONFIG_FMRACK_ENGINE=0
 
 # Watchdog - increase timeout for audio processing
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=10

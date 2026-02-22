@@ -13,17 +13,31 @@
 // =====================
 // Audio Configuration
 // =====================
-#ifdef CONFIG_FMRACK_SAMPLE_RATE
-#define FMRACK_SAMPLE_RATE      CONFIG_FMRACK_SAMPLE_RATE
+// Sample rate.  With the LUT and audio-path optimizations (reduced sine/exp2
+// tables, int16-only rendering) the engine comfortably handles 44.1 kHz.
+#define FMRACK_SAMPLE_RATE      44100
+// Polyphony (number of simultaneous notes)
+#ifdef CONFIG_FMRACK_POLYPHONY
+#define FMRACK_POLYPHONY        CONFIG_FMRACK_POLYPHONY
 #else
-#define FMRACK_SAMPLE_RATE      48000
+#define FMRACK_POLYPHONY        4
 #endif
-
 #ifdef CONFIG_FMRACK_BUFFER_SIZE
 #define FMRACK_BUFFER_SIZE      CONFIG_FMRACK_BUFFER_SIZE
 #else
 #define FMRACK_BUFFER_SIZE      256
 #endif
+
+// Select which Dexed engine to use. 0 = MSFA (modern), 1 = MKI (legacy),
+// 2 = OPL.  MSFA has the best performance and is now the default.  You can
+// override this from menuconfig by setting CONFIG_FMRACK_ENGINE or by editing
+// sdkconfig directly.
+#ifdef CONFIG_FMRACK_ENGINE
+#define FMRACK_ENGINE           CONFIG_FMRACK_ENGINE
+#else
+#define FMRACK_ENGINE           0
+#endif
+
 
 #ifdef CONFIG_FMRACK_NUM_MODULES
 #define FMRACK_NUM_MODULES      CONFIG_FMRACK_NUM_MODULES
@@ -153,15 +167,25 @@
 // =====================
 // Audio processing constants
 // =====================
-#define FMRACK_I2S_DMA_BUF_COUNT   4
-#define FMRACK_I2S_DMA_BUF_LEN     FMRACK_BUFFER_SIZE
+// I2S DMA ring: 16 descriptors x 256 frames = ~93 ms headroom.
+// With the decoupled render+write pipeline the pre-render ring already
+// absorbs render jitter; the DMA ring just needs to stay ahead of the
+// I2S shift register, so 16 descriptors is ample without adding latency.
+#define FMRACK_I2S_DMA_BUF_COUNT        16
+#define FMRACK_I2S_DMA_BUF_LEN         FMRACK_BUFFER_SIZE
+
+// Pre-render ring between render task and write task.
+// 4 blocks = 4 x 5.8 ms = ~23 ms headroom before a write stall causes a gap.
+// Increasing this trades MIDI latency for crackle immunity; 4 is a good balance.
+#define FMRACK_AUDIO_PRERENDER_BLOCKS   4
 
 // MIDI baud rate (standard)
 #define MIDI_BAUD_RATE              31250
 #define MIDI_UART_BUF_SIZE          512
 
 // Task priorities (higher = more important)
-#define AUDIO_TASK_PRIORITY         (configMAX_PRIORITIES - 1)
+#define AUDIO_TASK_PRIORITY         (configMAX_PRIORITIES - 1)  // render task
+#define AUDIO_WRITE_TASK_PRIORITY   (configMAX_PRIORITIES - 2)  // write task (same core, lower)
 #define MIDI_TASK_PRIORITY          (configMAX_PRIORITIES - 2)
 #define USB_MIDI_TASK_PRIORITY      (configMAX_PRIORITIES - 2)
 #define UDP_TASK_PRIORITY           (configMAX_PRIORITIES - 3)
@@ -170,6 +194,7 @@
 
 // Task stack sizes
 #define AUDIO_TASK_STACK_SIZE       (8 * 1024)
+#define AUDIO_WRITE_TASK_STACK_SIZE (4 * 1024)
 #define MIDI_TASK_STACK_SIZE        (4 * 1024)
 #define USB_MIDI_TASK_STACK_SIZE    (4 * 1024)
 #define UDP_TASK_STACK_SIZE         (4 * 1024)

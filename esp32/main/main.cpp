@@ -49,27 +49,34 @@ extern "C" int esp32_nvs_init(void);
 static void play_startup_sound(void)
 {
     const uint8_t channel = 0;   // MIDI channel 1
-    const uint8_t vel     = 80;
+    const uint8_t vel     = 72;
 
-    // C4 (MIDI 60)
+    // Longer deterministic boot melody (no external MIDI required).
+    // Simple 8th-note line in C major with a short held chord at the end.
+    static const uint8_t melody[] = {
+        60, 62, 64, 67, 69, 67, 64, 62,
+        60, 62, 64, 67, 72, 71, 69, 67,
+        64, 62, 60, 62, 64, 67, 69, 72,
+        71, 69, 67, 64, 62, 60,
+    };
+
+    for (size_t i = 0; i < sizeof(melody); ++i) {
+        const uint8_t note = melody[i];
+        dexed_raw_handle_midi(0x90 | channel, note, vel);
+        vTaskDelay(pdMS_TO_TICKS(140));
+        dexed_raw_handle_midi(0x80 | channel, note, 0);
+        vTaskDelay(pdMS_TO_TICKS(20));
+    }
+
+    // End with a short C major chord
     dexed_raw_handle_midi(0x90 | channel, 60, vel);
-    vTaskDelay(pdMS_TO_TICKS(180));
-
-    // E4 (MIDI 64)
     dexed_raw_handle_midi(0x90 | channel, 64, vel);
-    vTaskDelay(pdMS_TO_TICKS(180));
-
-    // G4 (MIDI 67)
     dexed_raw_handle_midi(0x90 | channel, 67, vel);
-    vTaskDelay(pdMS_TO_TICKS(400));
-
-    // Release all three notes
+    vTaskDelay(pdMS_TO_TICKS(700));
     dexed_raw_handle_midi(0x80 | channel, 60, 0);
     dexed_raw_handle_midi(0x80 | channel, 64, 0);
     dexed_raw_handle_midi(0x80 | channel, 67, 0);
-
-    // Let the release tail ring out
-    vTaskDelay(pdMS_TO_TICKS(600));
+    vTaskDelay(pdMS_TO_TICKS(500));
 }
 
 /* ===================================================
@@ -196,7 +203,9 @@ extern "C" void app_main(void)
     const char *rom1a_path = "/spiffs/rom1a.syx";
     if (esp32_storage_file_exists(rom1a_path)) {
         ESP_LOGI(TAG, "Loading ROM1A voice 11 (E.PIANO 1) from: %s", rom1a_path);
-        if (dexed_raw_load_voice_from_bank_syx(rom1a_path, 10) != 0) {
+        if (dexed_raw_load_bank_syx(rom1a_path) == 0 && dexed_raw_select_bank_program(10) == 0) {
+            // ok
+        } else {
             ESP_LOGW(TAG, "ROM1A load failed, falling back to %s", FMRACK_DEFAULT_PERF);
             if (esp32_storage_file_exists(FMRACK_DEFAULT_PERF)) {
                 (void)dexed_raw_load_voice_from_performance_ini(FMRACK_DEFAULT_PERF);
@@ -209,9 +218,27 @@ extern "C" void app_main(void)
     }
 
     // =====================
-    // Phase 4: Audio output (I2S)
+    // Phase 4: MIDI input (do this *before* starting audio)
+    //           so any USB host cache thrashing or initialization
+    //           latency occurs while we're still silent.
     // =====================
-    ESP_LOGI(TAG, "[4/6] Initializing audio output...");
+    ESP_LOGI(TAG, "[4/6] Initializing MIDI input (UART + USB host)...");
+    if (esp32_midi_init() != 0) {
+        ESP_LOGW(TAG, "MIDI UART init failed (non-fatal)");
+    } else {
+        esp32_midi_start();
+    }
+
+    // small pause to let USB host settle (devices enumerate, caches warm)
+    // enumeration can generate a burst of DMA/bus traffic; waiting 1 second
+    // here ensures all hot-plug activity completes before audio rendering
+    // begins, eliminating one-time crackles.  This delay is only at boot.
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    // =====================
+    // Phase 5: Audio output (I2S)
+    // =====================
+    ESP_LOGI(TAG, "[5/6] Initializing audio output...");
     if (esp32_audio_init() != 0) {
         ESP_LOGE(TAG, "Audio initialization failed!");
         esp32_led_set_state(LED_STATE_ERROR);
@@ -222,16 +249,6 @@ extern "C" void app_main(void)
         ESP_LOGE(TAG, "Audio task start failed!");
         esp32_led_set_state(LED_STATE_ERROR);
         return;
-    }
-
-    // =====================
-    // Phase 5: MIDI input
-    // =====================
-    ESP_LOGI(TAG, "[5/6] Initializing MIDI input...");
-    if (esp32_midi_init() != 0) {
-        ESP_LOGW(TAG, "MIDI UART init failed (non-fatal)");
-    } else {
-        esp32_midi_start();
     }
 
     // =====================

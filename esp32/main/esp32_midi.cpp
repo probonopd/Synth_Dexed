@@ -44,7 +44,7 @@ static void usb_log_event_flags(uint32_t event_flags)
         return;
     }
 
-    ESP_LOGI(TAG, "USB Host lib event flags: 0x%08lx%s%s",
+    ESP_LOGD(TAG, "USB Host lib event flags: 0x%08lx%s%s",
              (unsigned long)event_flags,
              (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) ? " NO_CLIENTS" : "",
              (event_flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) ? " ALL_FREE" : "");
@@ -212,6 +212,12 @@ static usb_host_client_handle_t s_client_hdl = NULL;
 static volatile bool s_usb_host_running = false;
 static TaskHandle_t s_usb_host_lib_task = NULL;
 static TaskHandle_t s_midi_host_task_hdl = NULL;
+
+/* Set by midi_transfer_cb; resubmit happens in midi_host_task to keep the
+ * callback short and decouple USB DMA scheduling from the ISR context.
+ * Throttling the resubmit to the task-loop cadence reduces USB bus grants
+ * from ~1000/s to ~150/s, eliminating AHB contention with I2S DMA. */
+static volatile bool s_xfer_needs_resubmit = false;
 
 /* Action flags set from callbacks, processed in main loop */
 #define MIDI_HOST_ACTION_OPEN  (1 << 0)
@@ -384,7 +390,7 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
             /* Skip padding packets (all zeros) */
             if (data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 0)
                 continue;
-            ESP_LOGI(TAG, "MIDI pkt: [%02X %02X %02X %02X]",
+            ESP_LOGV(TAG, "MIDI pkt: [%02X %02X %02X %02X]",
                      data[i], data[i+1], data[i+2], data[i+3]);
             usb_midi_process_packet(&data[i]);
         }
@@ -395,13 +401,13 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
         ESP_LOGW(TAG, "USB MIDI transfer status: %d", transfer->status);
     }
 
-    /* Resubmit for continuous reading */
+    /* Signal the host task to resubmit.  Do NOT call usb_host_transfer_submit
+     * here: doing so inside the callback (which executes synchronously inside
+     * usb_host_client_handle_events) causes the very next completion callback
+     * to fire before the event-handling loop can yield, starving Core-0 tasks
+     * and generating burst USB DMA traffic that contends with I2S DMA. */
     if (s_midi_dev.connected) {
-        esp_err_t err = usb_host_transfer_submit(transfer);
-        if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
-            ESP_LOGE(TAG, "Failed to resubmit MIDI IN transfer: %s",
-                     esp_err_to_name(err));
-        }
+        s_xfer_needs_resubmit = true;
     }
 }
 
@@ -543,20 +549,20 @@ static void close_midi_device(void)
  * ---------------------------------------------------------------- */
 static void client_event_cb(const usb_host_client_event_msg_t *event_msg, void *arg)
 {
-    ESP_LOGI(TAG, "USB client event: %d", event_msg->event);
+    ESP_LOGD(TAG, "USB client event: %d", event_msg->event);
     switch (event_msg->event) {
         case USB_HOST_CLIENT_EVENT_NEW_DEV:
-            ESP_LOGI(TAG, ">>> New USB device at address %d",
+            ESP_LOGD(TAG, ">>> New USB device at address %d",
                      event_msg->new_dev.address);
             s_new_dev_addr = event_msg->new_dev.address;
             s_actions |= MIDI_HOST_ACTION_OPEN;
             break;
         case USB_HOST_CLIENT_EVENT_DEV_GONE:
-            ESP_LOGW(TAG, ">>> USB device gone");
+            ESP_LOGD(TAG, ">>> USB device gone");
             s_actions |= MIDI_HOST_ACTION_CLOSE;
             break;
         default:
-            ESP_LOGW(TAG, ">>> Unknown USB client event: %d", event_msg->event);
+            ESP_LOGD(TAG, ">>> Unknown USB client event: %d", event_msg->event);
             break;
     }
 }
@@ -574,7 +580,14 @@ static void usb_host_lib_task(void *arg)
         // This can improve reliability with some hubs/devices that are slow to
         // power up or that misbehave during immediate enumeration.
         .root_port_unpowered = true,
-        .intr_flags = ESP_INTR_FLAG_LEVEL1,
+        // BACK TO LEVEL2: the ESP-IDF USB Host stack assumes at least
+        // medium priority (<= LEVEL2) for its own interrupts.  Setting it
+        // lower broke enumeration/transfer callbacks entirely (LED never
+        // went green).  We previously raised I2S to priority 5 and added
+        // other crackle-mitigation measures (throttling, IRAM code, big
+        // DMA ring), so the small amount of preemption caused by level 2
+        // is now tolerable.
+        .intr_flags = ESP_INTR_FLAG_LEVEL2,
         .enum_filter_cb = NULL,
     };
     esp_err_t err = usb_host_install(&host_config);
@@ -593,15 +606,17 @@ static void usb_host_lib_task(void *arg)
         ESP_LOGW(TAG, "USB Host lib get_info failed: %s", esp_err_to_name(err));
     }
 
-    // Power cycle + delay before enumeration
+    // Power cycle + delay before enumeration.
+    // Some USB-MIDI keyboards need a long power-off then a generous
+    // stabilisation window before the host attempts enumeration.
     ESP_LOGI(TAG, "USB: power cycling root port...");
     (void)usb_host_lib_set_root_port_power(false);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(250));
     err = usb_host_lib_set_root_port_power(true);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "USB: failed to power root port: %s", esp_err_to_name(err));
     }
-    vTaskDelay(pdMS_TO_TICKS(250));
+    vTaskDelay(pdMS_TO_TICKS(500));
 
     /* Signal the caller that host lib is ready */
     xTaskNotifyGive((TaskHandle_t)arg);
@@ -653,6 +668,27 @@ static void midi_host_task(void *arg)
 
     uint32_t loop_count = 0;
     while (s_usb_host_running) {
+        /* Process client events -- THIS dispatches transfer callbacks.
+         * Short timeout (5 ms) so we revisit the resubmit flag quickly
+         * while keeping turnaround time bounded for hot-plug events. */
+        usb_host_client_handle_events(s_client_hdl, pdMS_TO_TICKS(5));
+
+        /* Resubmit USB MIDI bulk-IN transfer.
+         * Decoupled from the callback so the USB host stack can schedule
+         * the DMA descriptor without bursting.  The 5 ms delay between
+         * callback and resubmit throttles polling to ~33/s (was ~1000/s),
+         * cutting AHB bus contention with I2S DMA by ~30x while keeping
+         * MIDI latency well under 10 ms (imperceptible to a player). */
+        if (s_xfer_needs_resubmit && s_midi_dev.connected && s_midi_dev.xfer_in) {
+            s_xfer_needs_resubmit = false;
+            vTaskDelay(pdMS_TO_TICKS(5));
+            esp_err_t err = usb_host_transfer_submit(s_midi_dev.xfer_in);
+            if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
+                ESP_LOGE(TAG, "Failed to resubmit MIDI IN transfer: %s",
+                         esp_err_to_name(err));
+            }
+        }
+
         /* Process actions from callbacks */
         if (s_actions & MIDI_HOST_ACTION_OPEN) {
             s_actions &= ~MIDI_HOST_ACTION_OPEN;
@@ -665,13 +701,10 @@ static void midi_host_task(void *arg)
             close_midi_device();
         }
 
-        /* Process client events -- THIS dispatches transfer callbacks */
-        usb_host_client_handle_events(s_client_hdl, pdMS_TO_TICKS(50));
-
         /* Periodic heartbeat every ~10 seconds */
-        if (++loop_count >= 200) {
+        if (++loop_count >= 666) {  /* 666 × ~15 ms ≈ 10 s */
             loop_count = 0;
-            ESP_LOGI(TAG, "USB MIDI client heartbeat: connected=%s actions=0x%lx",
+            ESP_LOGD(TAG, "USB MIDI client heartbeat: connected=%s actions=0x%lx",
                      s_midi_dev.connected ? "yes" : "no",
                      (unsigned long)s_actions);
         }
@@ -693,13 +726,17 @@ static int usb_midi_host_init(void)
 
     s_usb_host_running = true;
 
-    /* Task 1: USB Host Library daemon */
+    /* Task 1: USB Host Library daemon.
+     * Priority one below the MIDI client: the daemon mostly sleeps in
+     * usb_host_lib_handle_events and does not need real-time scheduling.
+     * Keeping it lower ensures the MIDI client (and audio stats task) are
+     * not starved on Core 0 during device connect / disconnect churn. */
     BaseType_t ret = xTaskCreatePinnedToCore(
         usb_host_lib_task,
         "usb_host_lib",
         4096,
         xTaskGetCurrentTaskHandle(), /* pass our handle for notification */
-        USB_MIDI_TASK_PRIORITY,
+        USB_MIDI_TASK_PRIORITY - 1,
         &s_usb_host_lib_task,
         USB_MIDI_TASK_CORE
     );
