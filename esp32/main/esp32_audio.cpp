@@ -27,6 +27,7 @@
 #include "esp32_config.h"
 #include "dexed_raw.h"
 #include "esp32_usb_audio.h"
+#include "FMRack/AudioEffectSymphonic.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -57,6 +58,15 @@ static TaskHandle_t s_audio_stats_task_handle = NULL;
 // Mono int16 render buffer (internal SRAM).  The render task writes here,
 // then expands to stereo into the pre-render ring.
 static int16_t *s_mono_buffer = NULL;
+
+// SPX90 Symphonic effect (mono-in / stereo-out tri-chorus)
+static FMRack::AudioEffectSymphonic *s_symphonic = nullptr;
+
+// Float working buffers for symphonic effect processing.
+// DRAM_ATTR: force internal SRAM to avoid PSRAM bus contention with USB/Flash.
+static DRAM_ATTR float s_mono_float[FMRACK_BUFFER_SIZE];
+static DRAM_ATTR float s_left_float[FMRACK_BUFFER_SIZE];
+static DRAM_ATTR float s_right_float[FMRACK_BUFFER_SIZE];
 
 // -------------------------------------------------------------------------
 // Pre-render ring buffer
@@ -260,6 +270,30 @@ int esp32_audio_init(void)
         return -1;
     }
 
+    // Initialize SPX90 Symphonic effect.
+    // Allocated in PSRAM (delay lines ~17KB); the hot-path float working
+    // buffers (s_mono_float, s_left_float, s_right_float) are already in
+    // internal SRAM via DRAM_ATTR.
+    if (!s_symphonic) {
+        void *sym_mem = heap_caps_malloc(sizeof(FMRack::AudioEffectSymphonic), MALLOC_CAP_SPIRAM);
+        if (!sym_mem) {
+            ESP_LOGW(TAG, "PSRAM alloc failed for Symphonic, trying internal");
+            sym_mem = malloc(sizeof(FMRack::AudioEffectSymphonic));
+        }
+        if (sym_mem) {
+            s_symphonic = new (sym_mem) FMRack::AudioEffectSymphonic(
+                static_cast<float>(FMRACK_SAMPLE_RATE));
+            // Enable with SPX90 defaults: 100% wet, 50% depth, 0.7 Hz
+            s_symphonic->setMix(1.0f);
+            s_symphonic->setDepth(0.5f);
+            s_symphonic->setSpeed(0.7f);
+            s_symphonic->setEnabled(true);
+            ESP_LOGI(TAG, "SPX90 Symphonic effect initialized (enabled)");
+        } else {
+            ESP_LOGW(TAG, "Failed to allocate Symphonic effect (disabled)");
+        }
+    }
+
     // Initialize I2S from the dedicated audio core so that the driver allocates
     // its interrupts/ISRs on that core (reduces interference from USB/protocol
     // activity on core 0 that can cause intermittent crackles).
@@ -319,18 +353,55 @@ static IRAM_ATTR void audio_render_task(void *param)
         // Render mono audio.
         dexed_raw_process_audio_i16(s_mono_buffer, num_samples);
 
-        // Expand mono → interleaved stereo into the pre-ring slot.
-        // Track clipping and peak amplitude for diagnostics.
+        // Apply SPX90 Symphonic effect (mono-in → stereo-out).
+        // Convert mono int16 → float, process, convert stereo float → int16.
         int16_t *dst = s_pre_ring[s_pre_ring_write];
         uint32_t clip = 0;
         int16_t  peak = 0;
-        for (int i = 0; i < num_samples; i++) {
-            int16_t s = s_mono_buffer[i];
-            int16_t abs_s = (s < 0) ? (int16_t)-s : s;
-            if (abs_s > peak) peak = abs_s;
-            if (s == INT16_MAX || s == INT16_MIN) clip++;
-            dst[i * 2]     = s;
-            dst[i * 2 + 1] = s;
+
+        if (s_symphonic && s_symphonic->isEnabled()) {
+            // Convert mono int16 → float (-1.0 to 1.0)
+            const float scale_in = 1.0f / 32768.0f;
+            for (int i = 0; i < num_samples; i++) {
+                s_mono_float[i] = static_cast<float>(s_mono_buffer[i]) * scale_in;
+            }
+
+            // Process: mono → stereo with tri-chorus effect
+            s_symphonic->process(s_mono_float, s_left_float, s_right_float, num_samples);
+
+            // Convert stereo float → interleaved int16 into the pre-ring slot
+            for (int i = 0; i < num_samples; i++) {
+                // Apply 2x gain boost to symphonic output
+                float fL = s_left_float[i] * 32768.0f * 2.0f;
+                float fR = s_right_float[i] * 32768.0f * 2.0f;
+
+                // Clamp to int16 range
+                if (fL >  32767.0f) fL =  32767.0f;
+                if (fL < -32768.0f) fL = -32768.0f;
+                if (fR >  32767.0f) fR =  32767.0f;
+                if (fR < -32768.0f) fR = -32768.0f;
+
+                int16_t sL = static_cast<int16_t>(fL);
+                int16_t sR = static_cast<int16_t>(fR);
+
+                // Peak/clip diagnostics on left channel (representative)
+                int16_t abs_s = (sL < 0) ? (int16_t)-sL : sL;
+                if (abs_s > peak) peak = abs_s;
+                if (sL == INT16_MAX || sL == INT16_MIN) clip++;
+
+                dst[i * 2]     = sL;
+                dst[i * 2 + 1] = sR;
+            }
+        } else {
+            // Bypass: expand mono → interleaved stereo (existing path).
+            for (int i = 0; i < num_samples; i++) {
+                int16_t s = s_mono_buffer[i];
+                int16_t abs_s = (s < 0) ? (int16_t)-s : s;
+                if (abs_s > peak) peak = abs_s;
+                if (s == INT16_MAX || s == INT16_MIN) clip++;
+                dst[i * 2]     = s;
+                dst[i * 2 + 1] = s;
+            }
         }
 
         s_pre_ring_write = (s_pre_ring_write + 1) % PRERENDER_RING_BLOCKS;
@@ -685,10 +756,26 @@ void esp32_audio_stop(void)
         s_mono_buffer = NULL;
     }
 
+    if (s_symphonic) {
+        s_symphonic->~AudioEffectSymphonic();
+        heap_caps_free(s_symphonic);
+        s_symphonic = nullptr;
+    }
+
     ESP_LOGI(TAG, "Audio stopped and I2S deinitialized");
 }
 
 bool esp32_audio_is_running(void)
 {
     return s_audio_running;
+}
+
+void esp32_audio_toggle_symphonic(void)
+{
+    if (s_symphonic) {
+        bool current = s_symphonic->isEnabled();
+        s_symphonic->setEnabled(!current);
+        // Note: No logging here — this is called from ISR context where ESP_LOGI is unsafe.
+        // The rendering task will reflect the state change on the next block.
+    }
 }

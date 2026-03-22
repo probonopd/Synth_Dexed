@@ -45,6 +45,12 @@ void esp32_audio_stop(void);
  */
 bool esp32_audio_is_running(void);
 
+/**
+ * Toggle the SPX90 Symphonic effect on/off.
+ * Thread-safe - can be called from any task.
+ */
+void esp32_audio_toggle_symphonic(void);
+
 #ifdef __cplusplus
 }
 #endif

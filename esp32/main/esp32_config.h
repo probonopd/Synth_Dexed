@@ -76,7 +76,7 @@
 #ifdef CONFIG_FMRACK_I2S_MCLK_PIN
 #define FMRACK_I2S_MCLK_PIN    CONFIG_FMRACK_I2S_MCLK_PIN
 #else
-#define FMRACK_I2S_MCLK_PIN    0
+#define FMRACK_I2S_MCLK_PIN    1
 #endif
 
 #ifdef CONFIG_FMRACK_I2S_NUM
@@ -170,6 +170,9 @@
 #else
 #define FMRACK_STATUS_LED_PIN  48
 #endif
+
+// BOOT button on GPIO 0 (pulled high internally, active-low)
+#define FMRACK_BOOT_BUTTON_PIN  0
 
 // =====================
 // Audio processing constants

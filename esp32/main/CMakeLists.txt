@@ -10,6 +10,7 @@ idf_component_register(
         "esp32_storage.cpp"
         "esp32_config.cpp"
         "esp32_led.cpp"
+        "esp32_button.cpp"
         "dexed_raw.cpp"
         "atomic_compat.c"
     INCLUDE_DIRS
@@ -50,6 +51,8 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "${DEXED_SRC_DIR}/pitchenv.cpp"
     "${DEXED_SRC_DIR}/porta.cpp"
     "${DEXED_SRC_DIR}/sin.cpp"
+    # FMRack effects
+    "${DEXED_SRC_DIR}/FMRack/AudioEffectSymphonic.cpp"
 )
 
 # Compile definitions for ESP32 target (applied to ALL sources in this component)

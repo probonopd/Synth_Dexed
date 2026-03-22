@@ -14,10 +14,11 @@
  *     - LED task: Animates the WS2812 status LED
  *
  * Hardware connections:
- *   - I2S DAC/Amp: MCLK=GPIO0, BCK=GPIO5, WS=GPIO6, DOUT=GPIO7
+ *   - I2S DAC/Amp: MCLK=GPIO1, BCK=GPIO5, WS=GPIO6, DOUT=GPIO7
  *   - MIDI DIN: UART1 RX=GPIO18, TX=GPIO17
  *   - USB Host: GPIO19 (D-), GPIO20 (D+) — for USB-MIDI keyboards
  *   - Status LED: GPIO48 (WS2812 addressable RGB on DevKitC-1)
+ *   - BOOT Button: GPIO0 (active-low, toggle symphonic effect)
  */
 
 #include "esp32_config.h"
@@ -28,6 +29,7 @@
 #include "esp32_storage.h"
 #include "esp32_led.h"
 #include "esp32_usb_audio.h"
+#include "esp32_button.h"
 #include "dexed_raw.h"
 
 #include "freertos/FreeRTOS.h"
@@ -259,6 +261,11 @@ extern "C" void app_main(void)
         ESP_LOGE(TAG, "Audio task start failed!");
         esp32_led_set_state(LED_STATE_ERROR);
         return;
+    }
+
+    // Initialize BOOT button handler (GPIO 0, toggle symphonic effect)
+    if (esp32_button_init() != 0) {
+        ESP_LOGW(TAG, "Button initialization failed (non-fatal)");
     }
 
     // =====================

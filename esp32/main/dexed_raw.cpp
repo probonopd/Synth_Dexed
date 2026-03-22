@@ -311,7 +311,7 @@ void dexed_raw_process_audio(float *left_out, float *right_out, int num_samples)
 // Direct int16 mono output – skips float conversion entirely.
 // The raw Dexed output is attenuated by ~1/2.5 to match the headroom of the
 // previous float path (scale 1/9000 * 32767 ≈ 3.64 → we keep it at ~1:1
-// for the I2S DAC and let the user set gain via the Dexed gain parameter).
+// for the I2S DAC and let the user set gain via the Dexed oOT parameter).
 // ---------------------------------------------------------------------------
 /* IRAM_ATTR: the audio-task entry into the render pipeline must not
  * suffer a cache miss at the start of each 5.8 ms block. */
