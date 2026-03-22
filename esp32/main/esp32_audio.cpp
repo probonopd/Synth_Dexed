@@ -27,7 +27,7 @@
 #include "esp32_config.h"
 #include "dexed_raw.h"
 #include "esp32_usb_audio.h"
-#include "FMRack/AudioEffectSymphonic.h"
+#include "AudioEffectSymphonic.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -371,9 +371,9 @@ static IRAM_ATTR void audio_render_task(void *param)
 
             // Convert stereo float → interleaved int16 into the pre-ring slot
             for (int i = 0; i < num_samples; i++) {
-                // Apply 2x gain boost to symphonic output
-                float fL = s_left_float[i] * 32768.0f * 2.0f;
-                float fR = s_right_float[i] * 32768.0f * 2.0f;
+                // Apply 4x gain boost to symphonic output (2x * 2x)
+                float fL = s_left_float[i] * 32768.0f * 4.0f;
+                float fR = s_right_float[i] * 32768.0f * 4.0f;
 
                 // Clamp to int16 range
                 if (fL >  32767.0f) fL =  32767.0f;
@@ -393,14 +393,28 @@ static IRAM_ATTR void audio_render_task(void *param)
                 dst[i * 2 + 1] = sR;
             }
         } else {
-            // Bypass: expand mono → interleaved stereo (existing path).
+            // Bypass: expand mono → interleaved stereo with 4x gain (consistent with symphonic on).
             for (int i = 0; i < num_samples; i++) {
-                int16_t s = s_mono_buffer[i];
-                int16_t abs_s = (s < 0) ? (int16_t)-s : s;
+                // Apply same 4x gain as symphonic path to maintain consistent volume
+                float fL = static_cast<float>(s_mono_buffer[i]) * 4.0f;
+                float fR = static_cast<float>(s_mono_buffer[i]) * 4.0f;
+
+                // Clamp to int16 range
+                if (fL >  32767.0f) fL =  32767.0f;
+                if (fL < -32768.0f) fL = -32768.0f;
+                if (fR >  32767.0f) fR =  32767.0f;
+                if (fR < -32768.0f) fR = -32768.0f;
+
+                int16_t sL = static_cast<int16_t>(fL);
+                int16_t sR = static_cast<int16_t>(fR);
+
+                // Peak/clip diagnostics on left channel (representative)
+                int16_t abs_s = (sL < 0) ? (int16_t)-sL : sL;
                 if (abs_s > peak) peak = abs_s;
-                if (s == INT16_MAX || s == INT16_MIN) clip++;
-                dst[i * 2]     = s;
-                dst[i * 2 + 1] = s;
+                if (sL == INT16_MAX || sL == INT16_MIN) clip++;
+
+                dst[i * 2]     = sL;
+                dst[i * 2 + 1] = sR;
             }
         }
 
