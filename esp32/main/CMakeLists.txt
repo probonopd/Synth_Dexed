@@ -4,6 +4,8 @@ idf_component_register(
         "esp32_audio.cpp"
         "esp32_midi.cpp"
         "esp32_wifi.cpp"
+        "esp32_applemidi.cpp"
+        "esp32_captive_portal.cpp"
         "esp32_storage.cpp"
         "esp32_config.cpp"
         "esp32_led.cpp"
@@ -24,6 +26,8 @@ idf_component_register(
         esp_psram
         usb
         esp_driver_rmt
+        mdns
+        esp_http_server
 )
 
 # Add the Dexed engine source files

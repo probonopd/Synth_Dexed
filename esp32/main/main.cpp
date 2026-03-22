@@ -24,6 +24,7 @@
 #include "esp32_audio.h"
 #include "esp32_midi.h"
 #include "esp32_wifi.h"
+#include "esp32_applemidi.h"
 #include "esp32_storage.h"
 #include "esp32_led.h"
 #include "dexed_raw.h"
@@ -254,16 +255,14 @@ extern "C" void app_main(void)
     }
 
     // =====================
-    // Phase 6: Wi-Fi and UDP MIDI (disabled by default)
+    // Phase 6: WLAN, Apple MIDI, and captive portal
+    //   - Loads stored credentials and connects (STA mode); or
+    //   - Falls back to captive AP "Synth-Dexed-Setup" for first-time setup.
+    //   On a successful STA connection Apple MIDI + mDNS are started
+    //   automatically so the synth appears in Audio MIDI Setup on the Mac.
     // =====================
-#if FMRACK_MIDI_UDP_ENABLE
-    ESP_LOGI(TAG, "[6/6] Initializing Wi-Fi...");
-    if (esp32_wifi_init() == 0) {
-        esp32_wifi_udp_start();
-    }
-#else
-    ESP_LOGI(TAG, "[6/6] Wi-Fi disabled (enable via menuconfig)");
-#endif
+    ESP_LOGI(TAG, "[6/6] Initializing WLAN (Apple MIDI + captive portal)...");
+    esp32_wlan_init();
 
     // =====================
     // Startup sound: C major chord (C4-E4-G4)
@@ -281,6 +280,14 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "  Dexed is ready!");
     ESP_LOGI(TAG, "  Enabled parts: 1");
     ESP_LOGI(TAG, "  Plug a USB-MIDI keyboard into the USB port");
+    if (esp32_wlan_is_connected()) {
+        ESP_LOGI(TAG, "  WLAN: connected — Apple MIDI active");
+        ESP_LOGI(TAG, "  Open Audio MIDI Setup on Mac → Network → '%s'",
+                 FMRACK_APPLEMIDI_NAME);
+    } else if (esp32_wlan_is_ap_mode()) {
+        ESP_LOGI(TAG, "  WLAN: captive AP active — connect to '%s'",
+                 FMRACK_CAPTIVE_AP_SSID);
+    }
     ESP_LOGI(TAG, "========================================");
 
     // Print heap info after full initialization
@@ -311,10 +318,12 @@ extern "C" void app_main(void)
     // =====================
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
-        ESP_LOGI(TAG, "Status: voices=%d parts=%d usb=%s heap=%lu",
+        ESP_LOGI(TAG, "Status: voices=%d usb=%s wlan=%s apple-midi=%s heap=%lu",
                  dexed_raw_get_active_voices(),
-                 1,
                  esp32_midi_usb_connected() ? "yes" : "no",
+                 esp32_wlan_is_connected() ? "sta" :
+                     (esp32_wlan_is_ap_mode() ? "ap" : "off"),
+                 esp32_applemidi_is_connected() ? "yes" : "no",
                  (unsigned long)esp_get_free_heap_size());
     }
 }

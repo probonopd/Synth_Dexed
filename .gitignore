@@ -333,3 +333,4 @@ log.txt
 .gitignore
 buildlog*.txt
 arduino-esp32s3-usbhost/managed_components/
+esp32/managed_components/

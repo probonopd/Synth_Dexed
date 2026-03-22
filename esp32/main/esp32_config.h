@@ -214,6 +214,40 @@
 #define STATUS_TASK_STACK_SIZE      (2 * 1024)
 
 // =====================
+// Apple MIDI (RTP-MIDI) configuration
+// =====================
+
+// Base UDP port.  The control port is FMRACK_APPLEMIDI_PORT, the data port
+// is FMRACK_APPLEMIDI_PORT + 1 (default 5004 / 5005 — IANA registered).
+#ifdef CONFIG_FMRACK_APPLEMIDI_PORT
+#define FMRACK_APPLEMIDI_PORT  CONFIG_FMRACK_APPLEMIDI_PORT
+#else
+#define FMRACK_APPLEMIDI_PORT  5004
+#endif
+
+// Session / service name advertised via mDNS and shown in Audio MIDI Setup.
+#ifdef CONFIG_FMRACK_APPLEMIDI_NAME
+#define FMRACK_APPLEMIDI_NAME  CONFIG_FMRACK_APPLEMIDI_NAME
+#else
+#define FMRACK_APPLEMIDI_NAME  "FMSynthESP"
+#endif
+
+// =====================
+// Captive portal AP SSID (open network, no password)
+// =====================
+#ifdef CONFIG_FMRACK_CAPTIVE_AP_SSID
+#define FMRACK_CAPTIVE_AP_SSID CONFIG_FMRACK_CAPTIVE_AP_SSID
+#else
+#define FMRACK_CAPTIVE_AP_SSID "Synth-Dexed-Setup"
+#endif
+
+// =====================
+// Apple MIDI task parameters
+// =====================
+#define APPLEMIDI_TASK_STACK_SIZE   (6 * 1024)
+#define APPLEMIDI_TASK_PRIORITY     (configMAX_PRIORITIES - 3)
+
+// =====================
 // Dual-core task affinity (ESP32-S3 has 2 cores)
 // Core 0: Protocol tasks (MIDI, Wi-Fi, USB)
 // Core 1: Real-time audio rendering (dedicated)

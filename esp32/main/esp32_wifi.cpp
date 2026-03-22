@@ -1,14 +1,22 @@
 /*
- * FMRack ESP32-S3 Port - Wi-Fi and UDP MIDI Implementation
+ * FMRack ESP32-S3 Port – WLAN management
  *
- * Provides Wi-Fi connectivity and a UDP server for receiving
- * MIDI messages over the network (compatible with the desktop
- * FMRack UDP protocol on port 50007).
+ * Boot flow:
+ *
+ *   1. Load SSID / password from NVS (saved by the captive portal).
+ *   2a. If credentials exist → connect to the user's network (STA mode).
+ *       On success → start Apple MIDI + mDNS.
+ *       On failure → fall through to 2b.
+ *   2b. No credentials or connection failed →
+ *       Start our own AP "Synth-Dexed-Setup" and run the captive portal
+ *       (DNS redirect + HTTP credentials form).  When the user submits
+ *       the form the device reboots and retries from step 1.
  */
 
 #include "esp32_wifi.h"
 #include "esp32_config.h"
-#include "dexed_raw.h"
+#include "esp32_captive_portal.h"
+#include "esp32_applemidi.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -17,290 +25,213 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
-#include "lwip/sockets.h"
 
 #include <string.h>
 
-static const char *TAG = "dexed_wifi";
+static const char *TAG = "wlan";
 
-#if FMRACK_MIDI_UDP_ENABLE
+/* -----------------------------------------------------------------------
+ * Event-group bits
+ * ---------------------------------------------------------------------- */
+static EventGroupHandle_t s_event_group = NULL;
+#define CONNECTED_BIT   BIT0
+#define FAIL_BIT        BIT1
 
-// Event group for Wi-Fi status
-static EventGroupHandle_t s_wifi_event_group = NULL;
-#define WIFI_CONNECTED_BIT  BIT0
-#define WIFI_FAIL_BIT       BIT1
+#define STA_MAX_RETRY   5
 
-static TaskHandle_t s_udp_task = NULL;
-static volatile bool s_udp_running = false;
-static volatile bool s_wifi_connected = false;
+static volatile bool s_sta_connected = false;
+static volatile bool s_ap_active     = false;
+static int  s_retry = 0;
 
-static int s_retry_count = 0;
-#define MAX_RETRY 10
+/* Netif handles so we can tear them down cleanly */
+static esp_netif_t *s_sta_netif = NULL;
+static esp_netif_t *s_ap_netif  = NULL;
 
-// Wi-Fi event handler
-static void wifi_event_handler(void *arg, esp_event_base_t event_base,
-                                int32_t event_id, void *event_data)
+/* -----------------------------------------------------------------------
+ * Event handler
+ * ---------------------------------------------------------------------- */
+static void wifi_event_handler(void *arg, esp_event_base_t base,
+                                int32_t id, void *data)
 {
-    if (event_base == WIFI_EVENT) {
-        switch (event_id) {
-            case WIFI_EVENT_STA_START:
-                ESP_LOGI(TAG, "Wi-Fi STA started, connecting...");
+    if (base == WIFI_EVENT) {
+        switch (id) {
+        case WIFI_EVENT_STA_START:
+            esp_wifi_connect();
+            break;
+        case WIFI_EVENT_STA_DISCONNECTED:
+            s_sta_connected = false;
+            if (s_retry < STA_MAX_RETRY) {
+                s_retry++;
+                ESP_LOGW(TAG, "WLAN disconnected, retry %d/%d", s_retry, STA_MAX_RETRY);
                 esp_wifi_connect();
-                break;
-            case WIFI_EVENT_STA_DISCONNECTED:
-                s_wifi_connected = false;
-                if (s_retry_count < MAX_RETRY) {
-                    esp_wifi_connect();
-                    s_retry_count++;
-                    ESP_LOGI(TAG, "Retrying Wi-Fi connection (%d/%d)", s_retry_count, MAX_RETRY);
-                } else {
-                    xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-                    ESP_LOGW(TAG, "Wi-Fi connection failed after %d retries", MAX_RETRY);
-                }
-                break;
-            case WIFI_EVENT_AP_STACONNECTED: {
-                wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
-                ESP_LOGI(TAG, "Station connected (AID=%d)", event->aid);
-                break;
-            }
-            case WIFI_EVENT_AP_STADISCONNECTED: {
-                wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
-                ESP_LOGI(TAG, "Station disconnected (AID=%d)", event->aid);
-                break;
-            }
-            default:
-                break;
-        }
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_count = 0;
-        s_wifi_connected = true;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-    }
-}
-
-/**
- * UDP MIDI server task.
- * Listens for incoming MIDI messages on the configured port.
- * Protocol is compatible with the desktop FMRack UDP server.
- */
-static void udp_midi_task(void *param)
-{
-    ESP_LOGI(TAG, "UDP MIDI server starting on port %d", FMRACK_MIDI_UDP_PORT);
-
-    struct sockaddr_in server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(FMRACK_MIDI_UDP_PORT);
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    if (sock < 0) {
-        ESP_LOGE(TAG, "Failed to create UDP socket: errno %d", errno);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    // Set receive timeout so we can check s_udp_running
-    struct timeval tv;
-    tv.tv_sec = 1;
-    tv.tv_usec = 0;
-    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    if (bind(sock, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
-        ESP_LOGE(TAG, "Failed to bind UDP socket: errno %d", errno);
-        close(sock);
-        vTaskDelete(NULL);
-        return;
-    }
-
-    ESP_LOGI(TAG, "UDP MIDI server listening on port %d", FMRACK_MIDI_UDP_PORT);
-
-    uint8_t buf[512];
-    struct sockaddr_in client_addr;
-    socklen_t addr_len = sizeof(client_addr);
-
-    while (s_udp_running) {
-        int len = recvfrom(sock, buf, sizeof(buf), 0,
-                           (struct sockaddr *)&client_addr, &addr_len);
-        if (len < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                continue;  // Timeout, check running flag
-            }
-            ESP_LOGW(TAG, "UDP receive error: errno %d", errno);
-            continue;
-        }
-
-        if (len == 0) continue;
-
-        // Parse MIDI messages from the UDP packet
-        // Same protocol as desktop FMRack UDP server
-        int i = 0;
-        while (i < len) {
-            uint8_t status = buf[i];
-
-            if (status == 0xF0) {
-                // SysEx message
-                int sysex_end = i + 1;
-                while (sysex_end < len && buf[sysex_end] != 0xF7) sysex_end++;
-                if (sysex_end < len && buf[sysex_end] == 0xF7) sysex_end++;
-                int sysex_len = sysex_end - i;
-                if (sysex_len >= 2) {
-                    uint8_t sysex_channel = 0;
-                    if (sysex_len > 2 && buf[i + 1] == 0x43) {
-                        sysex_channel = (buf[i + 2] & 0x0F) + 1;
-                    }
-                    dexed_raw_handle_sysex(&buf[i], sysex_len, sysex_channel);
-                }
-                i = sysex_end;
-            } else if ((status & 0xF0) >= 0x80 && (status & 0xF0) <= 0xE0 && (i + 2) < len) {
-                // Channel message (3 bytes)
-                dexed_raw_handle_midi(buf[i], buf[i + 1], buf[i + 2]);
-                i += 3;
-            } else if (status >= 0xF8) {
-                // Real-time (1 byte)
-                i += 1;
             } else {
-                i += 1;
+                xEventGroupSetBits(s_event_group, FAIL_BIT);
             }
+            break;
+        case WIFI_EVENT_AP_STACONNECTED: {
+            wifi_event_ap_staconnected_t *e = (wifi_event_ap_staconnected_t *)data;
+            ESP_LOGI(TAG, "Client joined AP (AID=%d)", e->aid);
+            break;
         }
+        case WIFI_EVENT_AP_STADISCONNECTED: {
+            wifi_event_ap_stadisconnected_t *e = (wifi_event_ap_stadisconnected_t *)data;
+            ESP_LOGI(TAG, "Client left AP (AID=%d)", e->aid);
+            break;
+        }
+        default:
+            break;
+        }
+    } else if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *e = (ip_event_got_ip_t *)data;
+        ESP_LOGI(TAG, "WLAN connected — IP: " IPSTR, IP2STR(&e->ip_info.ip));
+        s_retry = 0;
+        s_sta_connected = true;
+        xEventGroupSetBits(s_event_group, CONNECTED_BIT);
     }
-
-    close(sock);
-    ESP_LOGI(TAG, "UDP MIDI server stopped");
-    vTaskDelete(NULL);
 }
 
-int esp32_wifi_init(void)
-{
-    ESP_LOGI(TAG, "Initializing Wi-Fi...");
+/* Registered once; used for both STA and AP modes */
+static esp_event_handler_instance_t s_inst_wifi = NULL;
+static esp_event_handler_instance_t s_inst_ip   = NULL;
 
-    s_wifi_event_group = xEventGroupCreate();
+/* -----------------------------------------------------------------------
+ * Start in Station mode and wait for a connection (or timeout)
+ * ---------------------------------------------------------------------- */
+static bool start_sta(const char *ssid, const char *pass)
+{
+    s_sta_netif = esp_netif_create_default_wifi_sta();
+
+    wifi_config_t cfg = {};
+    strlcpy((char *)cfg.sta.ssid,     ssid, sizeof(cfg.sta.ssid));
+    strlcpy((char *)cfg.sta.password, pass, sizeof(cfg.sta.password));
+    cfg.sta.threshold.authmode =
+        (pass[0] != '\0') ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "Connecting to WLAN '%s'...", ssid);
+
+    EventBits_t bits = xEventGroupWaitBits(
+        s_event_group,
+        CONNECTED_BIT | FAIL_BIT,
+        pdFALSE, pdFALSE,
+        pdMS_TO_TICKS(15000));
+
+    if (bits & CONNECTED_BIT) {
+        return true;
+    }
+
+    ESP_LOGW(TAG, "WLAN connection to '%s' failed", ssid);
+    return false;
+}
+
+/* -----------------------------------------------------------------------
+ * Start in Access Point mode (captive portal)
+ * ---------------------------------------------------------------------- */
+static void start_ap(void)
+{
+    s_ap_netif = esp_netif_create_default_wifi_ap();
+
+    wifi_config_t cfg = {};
+    strlcpy((char *)cfg.ap.ssid, FMRACK_CAPTIVE_AP_SSID,
+            sizeof(cfg.ap.ssid));
+    cfg.ap.ssid_len       = (uint8_t)strlen(FMRACK_CAPTIVE_AP_SSID);
+    cfg.ap.max_connection = 4;
+    cfg.ap.authmode       = WIFI_AUTH_OPEN;
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &cfg));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    s_ap_active = true;
+    ESP_LOGI(TAG, "AP started — SSID: '%s' (no password)", FMRACK_CAPTIVE_AP_SSID);
+}
+
+/* -----------------------------------------------------------------------
+ * Public API
+ * ---------------------------------------------------------------------- */
+int esp32_wlan_init(void)
+{
+    s_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-#if FMRACK_WIFI_AP_MODE
-    // Access Point mode
-    esp_netif_create_default_wifi_ap();
-#else
-    // Station mode
-    esp_netif_create_default_wifi_sta();
-#endif
+    wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
 
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
+    /* Register event handlers once — they work for both STA and AP modes */
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
+        WIFI_EVENT, ESP_EVENT_ANY_ID,
+        wifi_event_handler, NULL, &s_inst_wifi));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
-        IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, NULL));
+        IP_EVENT, IP_EVENT_STA_GOT_IP,
+        wifi_event_handler, NULL, &s_inst_ip));
 
-#if FMRACK_WIFI_AP_MODE
-    // Configure AP
-    wifi_config_t wifi_config = {};
-    strncpy((char *)wifi_config.ap.ssid, FMRACK_WIFI_SSID, sizeof(wifi_config.ap.ssid));
-    wifi_config.ap.ssid_len = strlen(FMRACK_WIFI_SSID);
-    wifi_config.ap.max_connection = 4;
+    /* Try to load credentials saved by captive portal */
+    char ssid[33] = { 0 };
+    char pass[65] = { 0 };
 
-    if (strlen(FMRACK_WIFI_PASSWORD) > 0) {
-        strncpy((char *)wifi_config.ap.password, FMRACK_WIFI_PASSWORD,
-                sizeof(wifi_config.ap.password));
-        wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    bool have_creds = esp32_wlan_load_credentials(ssid, pass);
+
+    if (have_creds) {
+        ESP_LOGI(TAG, "Found saved credentials for '%s', trying STA...", ssid);
+
+        if (start_sta(ssid, pass)) {
+            /* Connected — spin up Apple MIDI */
+            if (esp32_applemidi_init() == 0) {
+                esp32_applemidi_start();
+                ESP_LOGI(TAG, "Apple MIDI ready — synth visible in Audio MIDI Setup");
+            }
+            return 0;
+        }
+
+        /* Connection failed — fall through to AP mode.
+         * Re-create the WiFi driver for AP mode. */
+        ESP_LOGW(TAG, "STA connection failed, starting captive portal");
+        esp_wifi_stop();
+        esp_wifi_deinit();
+        if (s_sta_netif) {
+            esp_netif_destroy(s_sta_netif);
+            s_sta_netif = NULL;
+        }
+
+        /* Re-initialise Wi-Fi for AP mode */
+        ESP_ERROR_CHECK(esp_wifi_init(&init_cfg));
+        ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     } else {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+        ESP_LOGI(TAG, "No WLAN credentials stored — starting captive portal");
     }
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "Wi-Fi AP started: SSID=%s", FMRACK_WIFI_SSID);
-    s_wifi_connected = true;
-#else
-    // Configure STA
-    wifi_config_t wifi_config = {};
-    strncpy((char *)wifi_config.sta.ssid, FMRACK_WIFI_SSID, sizeof(wifi_config.sta.ssid));
-    strncpy((char *)wifi_config.sta.password, FMRACK_WIFI_PASSWORD,
-            sizeof(wifi_config.sta.password));
-
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "Wi-Fi STA connecting to SSID=%s", FMRACK_WIFI_SSID);
-
-    // Wait for connection (with timeout)
-    EventBits_t bits = xEventGroupWaitBits(
-        s_wifi_event_group,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-        pdFALSE, pdFALSE,
-        pdMS_TO_TICKS(15000));
-
-    if (bits & WIFI_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Wi-Fi connected successfully");
-    } else {
-        ESP_LOGW(TAG, "Wi-Fi connection timed out (will retry in background)");
-    }
-#endif
+    start_ap();
+    esp32_captive_portal_start();
 
     return 0;
 }
 
-int esp32_wifi_udp_start(void)
+bool esp32_wlan_is_connected(void) { return s_sta_connected; }
+bool esp32_wlan_is_ap_mode(void)   { return s_ap_active;     }
+
+void esp32_wlan_stop(void)
 {
-    if (s_udp_running) {
-        return 0;
+    if (s_ap_active) {
+        esp32_captive_portal_stop();
     }
-
-    s_udp_running = true;
-
-    BaseType_t ret = xTaskCreatePinnedToCore(
-        udp_midi_task,
-        "udp_midi",
-        UDP_TASK_STACK_SIZE,
-        NULL,
-        UDP_TASK_PRIORITY,
-        &s_udp_task,
-        tskNO_AFFINITY
-    );
-
-    if (ret != pdPASS) {
-        ESP_LOGE(TAG, "Failed to create UDP MIDI task");
-        s_udp_running = false;
-        return -1;
-    }
-
-    return 0;
-}
-
-void esp32_wifi_stop(void)
-{
-    s_udp_running = false;
-
-    if (s_udp_task) {
-        vTaskDelay(pdMS_TO_TICKS(1500));  // Wait for socket timeout
-        s_udp_task = NULL;
-    }
-
+    esp32_applemidi_stop();
     esp_wifi_stop();
     esp_wifi_deinit();
-
-    ESP_LOGI(TAG, "Wi-Fi stopped");
+    if (s_sta_netif) { esp_netif_destroy(s_sta_netif); s_sta_netif = NULL; }
+    if (s_ap_netif)  { esp_netif_destroy(s_ap_netif);  s_ap_netif  = NULL; }
+    s_sta_connected = false;
+    s_ap_active     = false;
+    ESP_LOGI(TAG, "WLAN stopped");
 }
 
-bool esp32_wifi_is_connected(void)
-{
-    return s_wifi_connected;
-}
-
-#else /* !FMRACK_MIDI_UDP_ENABLE */
-
-// Stubs when UDP MIDI is disabled
-int esp32_wifi_init(void) { return 0; }
-int esp32_wifi_udp_start(void) { return 0; }
-void esp32_wifi_stop(void) {}
-bool esp32_wifi_is_connected(void) { return false; }
-
-#endif /* FMRACK_MIDI_UDP_ENABLE */
+/* ---- Legacy shims (used from main.cpp) ---- */
+int  esp32_wifi_init(void)         { return esp32_wlan_init(); }
+int  esp32_wifi_udp_start(void)    { return 0; }   /* superseded by Apple MIDI */
+void esp32_wifi_stop(void)         { esp32_wlan_stop(); }
+bool esp32_wifi_is_connected(void) { return esp32_wlan_is_connected(); }

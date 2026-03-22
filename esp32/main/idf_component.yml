@@ -1,2 +1,2 @@
-## No managed component dependencies
-## USB Host MIDI uses the built-in ESP-IDF usb component
+dependencies:
+  espressif/mdns: '*'

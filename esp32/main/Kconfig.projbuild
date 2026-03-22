@@ -101,27 +101,49 @@ menu "FMRack Configuration"
             depends on FMRACK_MIDI_UDP_ENABLE
     endmenu
 
-    menu "Wi-Fi Configuration"
-        depends on FMRACK_MIDI_UDP_ENABLE
+    menu "WLAN and Apple MIDI"
+        comment "WLAN credentials are configured at runtime via the captive portal."
+        comment "These compile-time options tune the Apple MIDI service name and ports."
+
+        config FMRACK_APPLEMIDI_NAME
+            string "Apple MIDI session name"
+            default "FMSynthESP"
+            help
+                The name shown in Audio MIDI Setup → Network on macOS.
+                Must be unique on the local network; the mDNS stack
+                will append a number automatically if a collision is
+                detected (Zeroconf probing, RFC 6762 §9).
+
+        config FMRACK_APPLEMIDI_PORT
+            int "Apple MIDI base UDP port"
+            default 5004
+            range 1024 65534
+            help
+                Control port (N) and data port (N+1). The default 5004/5005
+                are the IANA-registered ports for rtp-midi. Change only if
+                you need to run multiple Apple MIDI devices on the same host.
+
+        config FMRACK_CAPTIVE_AP_SSID
+            string "Captive portal Access Point SSID"
+            default "Synth-Dexed-Setup"
+            help
+                Open (no password) WLAN network name created when no
+                credentials are stored or STA connection fails. Connect
+                your phone or laptop to this network to enter credentials.
 
         config FMRACK_WIFI_SSID
-            string "Wi-Fi SSID"
-            default "FMRack"
-            help
-                Wi-Fi network name to connect to for UDP MIDI.
-
-        config FMRACK_WIFI_PASSWORD
-            string "Wi-Fi Password"
+            string "Fallback Wi-Fi SSID (optional)"
             default ""
             help
-                Wi-Fi password. Leave empty for open networks.
+                Optional compile-time SSID for environments where the
+                captive portal cannot be used. Leave blank to rely entirely
+                on the runtime captive portal. NVS credentials take priority.
 
-        config FMRACK_WIFI_AP_MODE
-            bool "Use Access Point mode"
-            default n
+        config FMRACK_WIFI_PASSWORD
+            string "Fallback Wi-Fi password (optional)"
+            default ""
             help
-                If enabled, the ESP32-C5 creates its own Wi-Fi network
-                instead of connecting to an existing one.
+                Password for FMRACK_WIFI_SSID. Leave blank for open networks.
     endmenu
 
     menu "Storage"
