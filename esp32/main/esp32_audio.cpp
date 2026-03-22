@@ -26,6 +26,7 @@
 #include "esp32_audio.h"
 #include "esp32_config.h"
 #include "dexed_raw.h"
+#include "esp32_usb_audio.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -399,13 +400,23 @@ static void audio_write_task(void *param)
         // the next block while we wait on the DMA descriptor below.
         xSemaphoreGive(s_pre_ring_free_sem);
 
-        // Write pre-rendered block to I2S DMA.
-        // Blocks until a DMA descriptor slot becomes free (~5.8 ms).
+        // Route audio: USB audio device takes over when connected; I2S gets
+        // silence so the DMA keeps running (maintains timing) but is inaudible.
+        // When no USB device is present the full path goes to I2S as before.
+        static DRAM_ATTR int16_t s_i2s_silence[FMRACK_BUFFER_SIZE * 2]; /* zero-init */
+        bool usb_active = esp32_usb_audio_is_ready();
+        if (usb_active) {
+            esp32_usb_audio_write_stereo(write_buf, FMRACK_BUFFER_SIZE);
+        }
+
+        // Write to I2S DMA — real audio when no USB device, silence otherwise.
+        // Must always run to keep the DMA clock ticking (~5.8 ms per block).
         uint64_t t0 = esp_timer_get_time();
         size_t total_written = 0;
+        const int16_t *i2s_src = usb_active ? s_i2s_silence : write_buf;
         while (total_written < buf_bytes) {
             size_t bytes_written = 0;
-            const uint8_t *p = (const uint8_t *)write_buf + total_written;
+            const uint8_t *p = (const uint8_t *)i2s_src + total_written;
             esp_err_t ret = i2s_channel_write(
                 s_tx_handle, p, buf_bytes - total_written,
                 &bytes_written, pdMS_TO_TICKS(20));

@@ -23,6 +23,14 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_BOOT_INIT=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
+# Map .text and .rodata sections to PSRAM-backed instruction cache.
+# With this enabled, the CPU fetches all code (WiFi, lwIP, Dexed, etc.)
+# from PSRAM rather than Flash.  Flash (SPI0) is almost never accessed at
+# runtime, so the SPI0/SPI1 bus arbiter is free for Core 1 audio data
+# accesses — eliminating the bus-contention crackle that WiFi/Apple MIDI
+# would otherwise cause.
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
 
 # Disable the brownout detector.
 # The USB hub + keyboard plus I2S DMA firing together cause a transient
@@ -58,6 +66,13 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
 # Wi-Fi for UDP MIDI
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+# Put the WiFi and lwIP hot paths in IRAM so packet handling never causes
+# a flash fetch that stalls the SPI0 bus and introduces audio jitter.
+CONFIG_ESP_WIFI_IRAM_OPT=y
+CONFIG_ESP_WIFI_EXTRA_IRAM_OPT=y
+CONFIG_ESP_WIFI_RX_IRAM_OPT=y
+CONFIG_LWIP_IRAM_OPTIMIZATION=y
+CONFIG_LWIP_EXTRA_IRAM_OPTIMIZATION=y
 
 # Log level
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
@@ -93,6 +108,14 @@ CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 # USB Host — enable external hub support so keyboards attached
 # through a hub are enumerated and recognised.
 CONFIG_USB_HOST_HUBS_SUPPORTED=y
+
+# USB Host FIFO bias: maximise periodic (isochronous/interrupt) OUT bandwidth.
+# Default BALANCED gives only 128-byte periodic TX FIFO, which is too small for
+# USB audio isochronous OUT at 44100 Hz stereo 16-bit (MPS=200 bytes).
+# PERIODIC_OUT reconfigures: ptx_fifo = fifo_size-50 lines (~824 bytes) so
+# MPS=200 fits.  Trade-off: IN max=136 bytes (MIDI bulk IN MPS=64 OK), non-
+# periodic OUT max=64 bytes (EP0 control transfers OK).
+CONFIG_USB_HOST_HW_BUFFER_BIAS_PERIODIC_OUT=y
 
 # USB Host timing tweaks (improves reliability with some hubs/keyboards)
 CONFIG_USB_HOST_DEBOUNCE_DELAY_MS=500

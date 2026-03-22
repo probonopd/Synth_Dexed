@@ -3,6 +3,7 @@ idf_component_register(
         "main.cpp"
         "esp32_audio.cpp"
         "esp32_midi.cpp"
+        "esp32_usb_audio.cpp"
         "esp32_wifi.cpp"
         "esp32_applemidi.cpp"
         "esp32_captive_portal.cpp"

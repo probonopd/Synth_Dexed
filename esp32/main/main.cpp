@@ -27,6 +27,7 @@
 #include "esp32_applemidi.h"
 #include "esp32_storage.h"
 #include "esp32_led.h"
+#include "esp32_usb_audio.h"
 #include "dexed_raw.h"
 
 #include "freertos/FreeRTOS.h"
@@ -237,6 +238,12 @@ extern "C" void app_main(void)
     // starts adding its own current draw.  This delay is only at boot.
     vTaskDelay(pdMS_TO_TICKS(2000));
 
+    // Register USB audio client after the settle delay so enumerated devices
+    // are already in the USB host's address list when the client scans.
+    if (esp32_usb_audio_init() != 0) {
+        ESP_LOGW(TAG, "USB audio init failed (non-fatal, continuing without USB audio)");
+    }
+
     // =====================
     // Phase 5: Audio output (I2S)
     // =====================
@@ -318,9 +325,11 @@ extern "C" void app_main(void)
     // =====================
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
-        ESP_LOGI(TAG, "Status: voices=%d usb=%s wlan=%s apple-midi=%s heap=%lu",
+        ESP_LOGI(TAG, "Status: voices=%d usb-midi=%s usb-audio=%s(ch=%d) wlan=%s apple-midi=%s heap=%lu",
                  dexed_raw_get_active_voices(),
                  esp32_midi_usb_connected() ? "yes" : "no",
+                 esp32_usb_audio_is_ready() ? "yes" : "no",
+                 esp32_usb_audio_get_channels(),
                  esp32_wlan_is_connected() ? "sta" :
                      (esp32_wlan_is_ap_mode() ? "ap" : "off"),
                  esp32_applemidi_is_connected() ? "yes" : "no",

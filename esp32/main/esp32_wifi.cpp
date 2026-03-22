@@ -120,6 +120,14 @@ static bool start_sta(const char *ssid, const char *pass)
         pdMS_TO_TICKS(15000));
 
     if (bits & CONNECTED_BIT) {
+        /* Disable WiFi power-save.  The default WIFI_PS_MIN_MODEM causes the
+         * radio to buffer packets and then wake with a DMA burst every DTIM
+         * beacon (100–300 ms).  When a USB keyboard is also attached that
+         * burst coincides with USB enumeration DMA traffic, saturating the
+         * AHB bus long enough to cause I2S underruns (audible stutter).
+         * WIFI_PS_NONE keeps DMA traffic low and steady — higher current draw
+         * but no more wakeup spikes. */
+        esp_wifi_set_ps(WIFI_PS_NONE);
         return true;
     }
 

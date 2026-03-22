@@ -174,23 +174,21 @@
 // =====================
 // Audio processing constants
 // =====================
-// I2S DMA ring: 4 descriptors x 256 frames = ~23 ms total DMA buffer.
-// At steady state a newly-written descriptor sits behind (N-1)=3 already-queued
-// descriptors, so audio output latency from write → DAC is ~3 x 5.83 ms ≈ 17 ms.
-// This is a large reduction from the previous 32-descriptor (186 ms) configuration.
-// The Dexed object is in internal SRAM, so render stalls from USB are eliminated
-// and 4 descriptors (23 ms cushion) is ample.
-#define FMRACK_I2S_DMA_BUF_COUNT        4
+// I2S DMA ring: 8 descriptors x 256 frames = ~46 ms DMA buffer headroom.
+// The Dexed object is in internal SRAM so USB crackles are already gone.
+// 8 descriptors gives ample margin against WiFi-induced stalls (DTIM beacon
+// wakeup, mDNS responses, Apple MIDI session CK packets) without adding
+// perceptible latency.
+#define FMRACK_I2S_DMA_BUF_COUNT        8
 #define FMRACK_I2S_DMA_BUF_LEN         FMRACK_BUFFER_SIZE
 
 // Pre-render ring between render task and write task.
-// 2 blocks = double-buffering: render fills one slot while write drains the other.
-// Latency contribution: ~1 block = 5.83 ms typical (one block is in-flight to DMA).
-// Reduced from 16 (93 ms) to 2 (12 ms) for lower key-to-sound latency.
-// The ring only needs more than 2 slots if the render task experiences sustained
-// stalls longer than one block period (5.83 ms), which doesn't happen with Dexed
-// in internal SRAM and audio pinned to Core 1.
-#define FMRACK_AUDIO_PRERENDER_BLOCKS   2
+// 8 blocks = ~46 ms headroom.  When WLAN is active together with a USB
+// keyboard, WiFi DMA (beacon wakeup bursts) and USB enumeration DMA both
+// hammer the AHB bus simultaneously, causing 10–30 ms stalls.  4 blocks
+// (~23 ms) wasn't enough to bridge the combined stall; 8 blocks absorb it
+// completely.  Cost is still modest: 8 × 256 × 4 bytes = 8 KB in DRAM.
+#define FMRACK_AUDIO_PRERENDER_BLOCKS   8
 
 // MIDI baud rate (standard)
 #define MIDI_BAUD_RATE              31250

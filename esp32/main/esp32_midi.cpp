@@ -412,6 +412,7 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
 /* ----------------------------------------------------------------
  * Open / close MIDI device
  * ---------------------------------------------------------------- */
+static void close_midi_device(void); /* forward declaration */
 static void open_midi_device(uint8_t dev_addr)
 {
     ESP_LOGI(TAG, "Opening USB device at address %d...", dev_addr);
@@ -467,9 +468,16 @@ static void open_midi_device(uint8_t dev_addr)
         ESP_LOGW(TAG, "Could not get config descriptor: %s", esp_err_to_name(err));
     }
 
-    /* Look for MIDI Streaming interface */
-    memset(&s_midi_dev, 0, sizeof(s_midi_dev));
-    if (!find_midi_interface(dev_hdl, &s_midi_dev)) {
+    /* Scan using a local temporary struct so we never clobber s_midi_dev if
+     * this device turns out to have no MIDI interface.  The previous approach
+     * (memset s_midi_dev here) caused a handle leak: if the startup scan
+     * already connected the keyboard and a concurrent NEW_DEV for the USB
+     * audio device triggered another open_midi_device() call, the memset
+     * would zero s_midi_dev.dev_hdl without calling usb_host_device_close().
+     * The USB host library kept the handle open, so every later attempt to
+     * re-open the keyboard returned ESP_ERR_INVALID_STATE. */
+    midi_device_t scan_dev = {};
+    if (!find_midi_interface(dev_hdl, &scan_dev)) {
         ESP_LOGW(TAG, "Step %d: Device %d has no MIDI Streaming interface (class=1 subclass=3), closing", step, dev_addr);
         usb_host_device_close(s_client_hdl, dev_hdl);
         return;
@@ -477,6 +485,15 @@ static void open_midi_device(uint8_t dev_addr)
     ESP_LOGI(TAG, "Step %d: Found MIDI interface", step);
     step++;
 
+    /* If there is an existing (leaked) device handle from a previous failed
+     * open, close it now before taking ownership of the new device. */
+    if (s_midi_dev.dev_hdl != NULL) {
+        ESP_LOGW(TAG, "Closing leaked previous MIDI device handle before opening new one");
+        close_midi_device();
+    }
+
+    /* Copy scan results and take ownership of dev_hdl. */
+    s_midi_dev = scan_dev;
     s_midi_dev.dev_hdl = dev_hdl;
 
     /* Claim the MIDI Streaming interface */
@@ -578,8 +595,19 @@ static void client_event_cb(const usb_host_client_event_msg_t *event_msg, void *
             s_actions |= MIDI_HOST_ACTION_OPEN;
             break;
         case USB_HOST_CLIENT_EVENT_DEV_GONE:
-            ESP_LOGI(TAG, ">>> USB device gone");
-            s_actions |= MIDI_HOST_ACTION_CLOSE;
+            /* Only close if the device that left is the one we opened.
+             * DEV_GONE fires for ALL device removals (any client), not just
+             * for devices this client has open.  Ignoring foreign DEV_GONE
+             * events prevents the MIDI connection from being torn down when
+             * an unrelated device (e.g. the USB audio output device) changes
+             * state. */
+            if (s_midi_dev.dev_hdl != NULL &&
+                    event_msg->dev_gone.dev_hdl == s_midi_dev.dev_hdl) {
+                ESP_LOGI(TAG, ">>> USB MIDI device gone");
+                s_actions |= MIDI_HOST_ACTION_CLOSE;
+            } else {
+                ESP_LOGD(TAG, ">>> USB device gone (not our MIDI device, ignoring)");
+            }
             break;
         default:
             ESP_LOGD(TAG, ">>> Unknown USB client event: %d", event_msg->event);
@@ -687,13 +715,19 @@ static void midi_host_task(void *arg)
          * 5 ms timeout keeps the loop responsive without busy-spinning. */
         usb_host_client_handle_events(s_client_hdl, pdMS_TO_TICKS(5));
 
-        /* Resubmit USB MIDI bulk-IN transfer immediately once the flag is set.
+        /* Resubmit USB MIDI bulk-IN transfer.
          * Runs in the task loop (not the ISR callback) to avoid reentrancy
-         * issues inside usb_host_client_handle_events.  Polling at the
-         * task-loop cadence (5 ms) is sufficient and avoids the 20 ms delay
-         * that the old prescaler (4 × 5 ms) added to USB MIDI input. */
+         * inside usb_host_client_handle_events.
+         *
+         * A 4 ms yield before resubmit throttles USB bulk-IN polling to
+         * ~100 cycles/s (was 2 ms → ~125/s).  When WLAN is also active the
+         * WiFi DMA and USB DMA together can saturate the AHB bus; reducing
+         * USB resubmit frequency lowers bus pressure enough that I2S DMA
+         * descriptor fetches are no longer starved.  MIDI input latency is
+         * ≤ 9 ms — imperceptible to a player. */
         if (s_xfer_needs_resubmit && s_midi_dev.connected && s_midi_dev.xfer_in) {
             s_xfer_needs_resubmit = false;
+            vTaskDelay(pdMS_TO_TICKS(4));
             esp_err_t sub_err = usb_host_transfer_submit(s_midi_dev.xfer_in);
             if (sub_err != ESP_OK && sub_err != ESP_ERR_NOT_FOUND) {
                 ESP_LOGE(TAG, "Failed to resubmit MIDI IN transfer: %s",
@@ -704,8 +738,19 @@ static void midi_host_task(void *arg)
         /* Process actions from callbacks */
         if (s_actions & MIDI_HOST_ACTION_OPEN) {
             s_actions &= ~MIDI_HOST_ACTION_OPEN;
-            ESP_LOGI(TAG, "MIDI client: processing OPEN action for addr %d", s_new_dev_addr);
-            open_midi_device(s_new_dev_addr);
+            /* Skip if already connected: when multiple NEW_DEV events arrive
+             * in one handle_events() call, s_new_dev_addr holds the last
+             * address and the earlier addresses (including the keyboard) are
+             * lost.  Calling open_midi_device for a non-MIDI device while
+             * already connected would previously clobber s_midi_dev.  With
+             * the local-scan-dev fix this is now safe, but there is still no
+             * point opening a new device when one is already working. */
+            if (!s_midi_dev.connected) {
+                ESP_LOGI(TAG, "MIDI client: processing OPEN action for addr %d", s_new_dev_addr);
+                open_midi_device(s_new_dev_addr);
+            } else {
+                ESP_LOGD(TAG, "MIDI client: ignoring OPEN for addr %d (already connected)", s_new_dev_addr);
+            }
         }
         if (s_actions & MIDI_HOST_ACTION_CLOSE) {
             s_actions &= ~MIDI_HOST_ACTION_CLOSE;
