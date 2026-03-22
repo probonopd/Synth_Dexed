@@ -393,7 +393,11 @@ class DEXED_API Dexed
 
     ProcessorVoice* voices;
 
+#if defined(IRAM_ATTR)
+    void getSamples(int16_t* buffer, uint16_t n_samples) IRAM_ATTR;
+#else
     void getSamples(int16_t* buffer, uint16_t n_samples);
+#endif
 
     void setMidiOutCallback(std::function<void(const uint8_t*, int)> cb);
 

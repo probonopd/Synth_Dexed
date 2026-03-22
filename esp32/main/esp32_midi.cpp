@@ -44,7 +44,7 @@ static void usb_log_event_flags(uint32_t event_flags)
         return;
     }
 
-    ESP_LOGD(TAG, "USB Host lib event flags: 0x%08lx%s%s",
+    ESP_LOGI(TAG, "USB Host lib event flags: 0x%08lx%s%s",
              (unsigned long)event_flags,
              (event_flags & USB_HOST_LIB_EVENT_FLAGS_NO_CLIENTS) ? " NO_CLIENTS" : "",
              (event_flags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) ? " ALL_FREE" : "");
@@ -170,7 +170,7 @@ static void midi_uart_task(void *param)
 
     while (s_midi_running) {
         int len = uart_read_bytes((uart_port_t)FMRACK_MIDI_UART_NUM,
-                                   buf, sizeof(buf), pdMS_TO_TICKS(10));
+                                   buf, sizeof(buf), pdMS_TO_TICKS(1));
         if (len > 0) {
             for (int i = 0; i < len; i++) {
                 midi_parser_process_byte(&parser, buf[i]);
@@ -214,9 +214,7 @@ static TaskHandle_t s_usb_host_lib_task = NULL;
 static TaskHandle_t s_midi_host_task_hdl = NULL;
 
 /* Set by midi_transfer_cb; resubmit happens in midi_host_task to keep the
- * callback short and decouple USB DMA scheduling from the ISR context.
- * Throttling the resubmit to the task-loop cadence reduces USB bus grants
- * from ~1000/s to ~150/s, eliminating AHB contention with I2S DMA. */
+ * callback short and decouple USB DMA scheduling from the ISR context. */
 static volatile bool s_xfer_needs_resubmit = false;
 
 /* Action flags set from callbacks, processed in main loop */
@@ -417,14 +415,16 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
 static void open_midi_device(uint8_t dev_addr)
 {
     ESP_LOGI(TAG, "Opening USB device at address %d...", dev_addr);
+    int step = 0; // debug step counter
 
     usb_device_handle_t dev_hdl = NULL;
     esp_err_t err = usb_host_device_open(s_client_hdl, dev_addr, &dev_hdl);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to open device %d: %s", dev_addr, esp_err_to_name(err));
+        ESP_LOGE(TAG, "Step %d: Failed to open device %d: %s", step, dev_addr, esp_err_to_name(err));
         return;
     }
-    ESP_LOGI(TAG, "Device %d opened successfully", dev_addr);
+    ESP_LOGI(TAG, "Step %d: Device %d opened successfully", step, dev_addr);
+    step++;
 
     /* Log device info */
     const usb_device_desc_t *dev_desc = NULL;
@@ -445,8 +445,9 @@ static void open_midi_device(uint8_t dev_addr)
     const usb_config_desc_t *config_desc = NULL;
     err = usb_host_get_active_config_descriptor(dev_hdl, &config_desc);
     if (err == ESP_OK && config_desc) {
-        ESP_LOGI(TAG, "Config descriptor: wTotalLength=%d bNumInterfaces=%d",
-                 config_desc->wTotalLength, config_desc->bNumInterfaces);
+        ESP_LOGI(TAG, "Step %d: Config descriptor: wTotalLength=%d bNumInterfaces=%d",
+                 step, config_desc->wTotalLength, config_desc->bNumInterfaces);
+        step++;
 
         /* Dump all interface descriptors for diagnostics */
         int offset = 0;
@@ -469,10 +470,12 @@ static void open_midi_device(uint8_t dev_addr)
     /* Look for MIDI Streaming interface */
     memset(&s_midi_dev, 0, sizeof(s_midi_dev));
     if (!find_midi_interface(dev_hdl, &s_midi_dev)) {
-        ESP_LOGW(TAG, "Device %d has no MIDI Streaming interface (class=1 subclass=3), closing", dev_addr);
+        ESP_LOGW(TAG, "Step %d: Device %d has no MIDI Streaming interface (class=1 subclass=3), closing", step, dev_addr);
         usb_host_device_close(s_client_hdl, dev_hdl);
         return;
     }
+    ESP_LOGI(TAG, "Step %d: Found MIDI interface", step);
+    step++;
 
     s_midi_dev.dev_hdl = dev_hdl;
 
@@ -480,12 +483,14 @@ static void open_midi_device(uint8_t dev_addr)
     err = usb_host_interface_claim(s_client_hdl, dev_hdl,
                                     s_midi_dev.midi_intf_num, 0);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to claim interface %d: %s",
-                 s_midi_dev.midi_intf_num, esp_err_to_name(err));
+        ESP_LOGE(TAG, "Step %d: Failed to claim interface %d: %s",
+                 step, s_midi_dev.midi_intf_num, esp_err_to_name(err));
         usb_host_device_close(s_client_hdl, dev_hdl);
         memset(&s_midi_dev, 0, sizeof(s_midi_dev));
         return;
     }
+    ESP_LOGI(TAG, "Step %d: Interface claimed", step);
+    step++;
 
     /* Allocate Bulk IN transfer */
     size_t buf_size = (size_t)usb_round_up_to_mps(
@@ -497,6 +502,19 @@ static void open_midi_device(uint8_t dev_addr)
         usb_host_device_close(s_client_hdl, dev_hdl);
         memset(&s_midi_dev, 0, sizeof(s_midi_dev));
         return;
+    }
+    /* Optionally allocate an internal RAM buffer and keep the original PSRAM
+       buffer as a harmless leak.  Having the buffer in internal RAM reduces
+       PSRAM contention during USB DMA; the leak is only one buffer per device
+       and is small (~64 bytes). */
+    void *int_buf = heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED);
+    if (int_buf) {
+        void **bufptr = (void **)&s_midi_dev.xfer_in->data_buffer;
+        *bufptr = int_buf;
+        size_t *szptr = (size_t *)&s_midi_dev.xfer_in->data_buffer_size;
+        *szptr = heap_caps_get_allocated_size(int_buf);
+    } else {
+        ESP_LOGW(TAG, "Internal RAM allocation failed, using PSRAM buffer");
     }
 
     s_midi_dev.xfer_in->device_handle = dev_hdl;
@@ -510,8 +528,8 @@ static void open_midi_device(uint8_t dev_addr)
     /* Submit first IN transfer -- starts continuous MIDI reading */
     err = usb_host_transfer_submit(s_midi_dev.xfer_in);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to submit initial IN transfer: %s",
-                 esp_err_to_name(err));
+        ESP_LOGE(TAG, "Step %d: Failed to submit initial IN transfer: %s",
+                 step, esp_err_to_name(err));
         s_midi_dev.connected = false;
         usb_host_transfer_free(s_midi_dev.xfer_in);
         usb_host_interface_release(s_client_hdl, dev_hdl, s_midi_dev.midi_intf_num);
@@ -519,6 +537,8 @@ static void open_midi_device(uint8_t dev_addr)
         memset(&s_midi_dev, 0, sizeof(s_midi_dev));
         return;
     }
+    ESP_LOGI(TAG, "Step %d: Initial transfer submitted", step);
+    step++;
 
     ESP_LOGI(TAG, "USB MIDI keyboard connected -- streaming from EP 0x%02X",
              s_midi_dev.ep_in);
@@ -552,13 +572,13 @@ static void client_event_cb(const usb_host_client_event_msg_t *event_msg, void *
     ESP_LOGD(TAG, "USB client event: %d", event_msg->event);
     switch (event_msg->event) {
         case USB_HOST_CLIENT_EVENT_NEW_DEV:
-            ESP_LOGD(TAG, ">>> New USB device at address %d",
+            ESP_LOGI(TAG, ">>> New USB device at address %d",
                      event_msg->new_dev.address);
             s_new_dev_addr = event_msg->new_dev.address;
             s_actions |= MIDI_HOST_ACTION_OPEN;
             break;
         case USB_HOST_CLIENT_EVENT_DEV_GONE:
-            ESP_LOGD(TAG, ">>> USB device gone");
+            ESP_LOGI(TAG, ">>> USB device gone");
             s_actions |= MIDI_HOST_ACTION_CLOSE;
             break;
         default:
@@ -576,17 +596,10 @@ static void usb_host_lib_task(void *arg)
 
     usb_host_config_t host_config = {
         .skip_phy_setup = false,
-        // Manually control root port power so we can add a stable power-on delay.
-        // This can improve reliability with some hubs/devices that are slow to
-        // power up or that misbehave during immediate enumeration.
-        .root_port_unpowered = true,
-        // BACK TO LEVEL2: the ESP-IDF USB Host stack assumes at least
-        // medium priority (<= LEVEL2) for its own interrupts.  Setting it
-        // lower broke enumeration/transfer callbacks entirely (LED never
-        // went green).  We previously raised I2S to priority 5 and added
-        // other crackle-mitigation measures (throttling, IRAM code, big
-        // DMA ring), so the small amount of preemption caused by level 2
-        // is now tolerable.
+        // Keep root port powered immediately.  Power-cycling while a keyboard
+        // is attached has been observed to cause enumeration failures
+        // (CHECK_SHORT_DEV_DESC).  Let the USB host driver handle power itself.
+        .root_port_unpowered = false,
         .intr_flags = ESP_INTR_FLAG_LEVEL2,
         .enum_filter_cb = NULL,
     };
@@ -597,28 +610,11 @@ static void usb_host_lib_task(void *arg)
         return;
     }
 
-    usb_host_lib_info_t info = {};
-    err = usb_host_lib_info(&info);
-    if (err == ESP_OK) {
-        ESP_LOGI(TAG, "USB Host lib info: num_devices=%d num_clients=%d",
-                 info.num_devices, info.num_clients);
-    } else {
-        ESP_LOGW(TAG, "USB Host lib get_info failed: %s", esp_err_to_name(err));
-    }
-
-    // Power cycle + delay before enumeration.
-    // Some USB-MIDI keyboards need a long power-off then a generous
-    // stabilisation window before the host attempts enumeration.
-    ESP_LOGI(TAG, "USB: power cycling root port...");
-    (void)usb_host_lib_set_root_port_power(false);
-    vTaskDelay(pdMS_TO_TICKS(250));
-    err = usb_host_lib_set_root_port_power(true);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "USB: failed to power root port: %s", esp_err_to_name(err));
-    }
-    vTaskDelay(pdMS_TO_TICKS(500));
-
-    /* Signal the caller that host lib is ready */
+    /* Signal the caller that host lib is ready BEFORE entering the event loop.
+     * The previous code had a 2-second vTaskDelay() here, which prevented
+     * usb_host_lib_handle_events() from running during that window.  This
+     * blocked hub and device enumeration, so NEW_DEV events were never fired.
+     * Signal immediately and let the event loop below drive enumeration. */
     xTaskNotifyGive((TaskHandle_t)arg);
 
     ESP_LOGI(TAG, "USB Host Library installed -- daemon running on core %d", xPortGetCoreID());
@@ -666,26 +662,42 @@ static void midi_host_task(void *arg)
     ESP_LOGI(TAG, "USB Host MIDI client registered on core %d -- waiting for keyboard...",
              xPortGetCoreID());
 
-    uint32_t loop_count = 0;
+    /* Check for devices that were already enumerated before we registered.
+     * This handles the case where the device was connected and enumerated
+     * before the MIDI client task started (NEW_DEV would have been missed). */
+    {
+        uint8_t addr_list[16];
+        int num_devs = 0;
+        if (usb_host_device_addr_list_fill(sizeof(addr_list), addr_list, &num_devs) == ESP_OK
+                && num_devs > 0) {
+            ESP_LOGI(TAG, "Found %d already-enumerated device(s), trying to open as MIDI...",
+                     num_devs);
+            for (int i = 0; i < num_devs && !s_midi_dev.connected; i++) {
+                ESP_LOGI(TAG, "  Trying device at address %d", addr_list[i]);
+                open_midi_device(addr_list[i]);
+            }
+        }
+    }
+
+    uint32_t loop_count = 0;   /* heartbeat counter */
+    uint32_t scan_count  = 0;  /* device-list scan counter (separate from heartbeat) */
+
     while (s_usb_host_running) {
         /* Process client events -- THIS dispatches transfer callbacks.
-         * Short timeout (5 ms) so we revisit the resubmit flag quickly
-         * while keeping turnaround time bounded for hot-plug events. */
+         * 5 ms timeout keeps the loop responsive without busy-spinning. */
         usb_host_client_handle_events(s_client_hdl, pdMS_TO_TICKS(5));
 
-        /* Resubmit USB MIDI bulk-IN transfer.
-         * Decoupled from the callback so the USB host stack can schedule
-         * the DMA descriptor without bursting.  The 5 ms delay between
-         * callback and resubmit throttles polling to ~33/s (was ~1000/s),
-         * cutting AHB bus contention with I2S DMA by ~30x while keeping
-         * MIDI latency well under 10 ms (imperceptible to a player). */
+        /* Resubmit USB MIDI bulk-IN transfer immediately once the flag is set.
+         * Runs in the task loop (not the ISR callback) to avoid reentrancy
+         * issues inside usb_host_client_handle_events.  Polling at the
+         * task-loop cadence (5 ms) is sufficient and avoids the 20 ms delay
+         * that the old prescaler (4 × 5 ms) added to USB MIDI input. */
         if (s_xfer_needs_resubmit && s_midi_dev.connected && s_midi_dev.xfer_in) {
             s_xfer_needs_resubmit = false;
-            vTaskDelay(pdMS_TO_TICKS(5));
-            esp_err_t err = usb_host_transfer_submit(s_midi_dev.xfer_in);
-            if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
+            esp_err_t sub_err = usb_host_transfer_submit(s_midi_dev.xfer_in);
+            if (sub_err != ESP_OK && sub_err != ESP_ERR_NOT_FOUND) {
                 ESP_LOGE(TAG, "Failed to resubmit MIDI IN transfer: %s",
-                         esp_err_to_name(err));
+                         esp_err_to_name(sub_err));
             }
         }
 
@@ -701,10 +713,39 @@ static void midi_host_task(void *arg)
             close_midi_device();
         }
 
-        /* Periodic heartbeat every ~10 seconds */
-        if (++loop_count >= 666) {  /* 666 × ~15 ms ≈ 10 s */
+        /* When not connected, periodically query the host stack for any
+         * newly-enumerated devices.  This is the correct approach for hub-
+         * attached keyboards: usb_host_device_addr_list_fill() returns the
+         * addresses that the host stack has *actually enumerated*, unlike the
+         * old 1-127 blind scan which called open() on non-existent addresses.
+         * Check every ~1 s (200 loops × 5 ms). */
+        if (!s_midi_dev.connected) {
+            if (++scan_count >= 200) {
+                scan_count = 0;
+                uint8_t addr_list[16];
+                int num_devs = 0;
+                esp_err_t fill_err = usb_host_device_addr_list_fill(
+                        sizeof(addr_list), addr_list, &num_devs);
+                if (fill_err == ESP_OK && num_devs > 0) {
+                    ESP_LOGI(TAG, "USB scan: %d device(s) enumerated, trying to open as MIDI...",
+                             num_devs);
+                    for (int i = 0; i < num_devs && !s_midi_dev.connected; i++) {
+                        ESP_LOGI(TAG, "  Trying address %d", addr_list[i]);
+                        open_midi_device(addr_list[i]);
+                    }
+                } else {
+                    ESP_LOGD(TAG, "USB scan: no devices enumerated yet (err=%s)",
+                             esp_err_to_name(fill_err));
+                }
+            }
+        } else {
+            scan_count = 0;  /* reset when connected so we react quickly on reconnect */
+        }
+
+        /* Periodic heartbeat every ~10 seconds (2000 × 5 ms) */
+        if (++loop_count >= 2000) {
             loop_count = 0;
-            ESP_LOGD(TAG, "USB MIDI client heartbeat: connected=%s actions=0x%lx",
+            ESP_LOGI(TAG, "USB MIDI client heartbeat: connected=%s actions=0x%lx",
                      s_midi_dev.connected ? "yes" : "no",
                      (unsigned long)s_actions);
         }
@@ -748,9 +789,9 @@ static int usb_midi_host_init(void)
 
     /* Wait for host lib installation */
     if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(2000)) == 0) {
-        ESP_LOGE(TAG, "Timeout waiting for USB Host Library installation");
-        s_usb_host_running = false;
-        return -1;
+        ESP_LOGW(TAG, "Timeout waiting for USB Host Library installation (will continue)");
+        // do not disable s_usb_host_running; the usb_host_lib_task will still install
+        // and client task can be started regardless.
     }
 
     /* Task 2: MIDI Host client */

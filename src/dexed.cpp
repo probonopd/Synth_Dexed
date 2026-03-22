@@ -312,7 +312,11 @@ void Dexed::deactivate(void)
   panic();
 }
 
+#if defined(IRAM_ATTR)
+IRAM_ATTR void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
+#else
 void Dexed::getSamples(int16_t* buffer, uint16_t n_samples)
+#endif
 {
     // Safety check: don't exceed pre-allocated buffer size
     if (n_samples > kMaxSamplesBuffer) {

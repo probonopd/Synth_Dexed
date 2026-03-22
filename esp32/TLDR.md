@@ -1,0 +1,1 @@
+ bash -c '. ~/esp/esp-idf/export.sh && cd /home/user/Synth_Dexed/esp32 && idf.py build && idf.py flash && idf.py monitor'

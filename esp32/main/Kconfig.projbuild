@@ -4,10 +4,13 @@ menu "FMRack Configuration"
         config FMRACK_SAMPLE_RATE
             int "Sample rate (Hz)"
             default 48000
-            range 22050 48000
+            range 22050 96000
             help
                 Audio sample rate in Hz. Lower values reduce CPU usage.
-                Supported: 22050, 44100, 48000.
+                Supported: 22050, 44100, 48000, 96000.  Note that 96 kHz
+                requires roughly twice the CPU of 48 kHz and may reduce
+                polyphony.  Use menuconfig to pick the best compromise for
+                your application.
 
         config FMRACK_BUFFER_SIZE
             int "Audio buffer size (samples)"

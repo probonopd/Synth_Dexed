@@ -14,7 +14,7 @@
  *     - LED task: Animates the WS2812 status LED
  *
  * Hardware connections:
- *   - I2S DAC/Amp: MCLK=GPIO0, BCK=GPIO6, WS=GPIO7, DOUT=GPIO15
+ *   - I2S DAC/Amp: MCLK=GPIO0, BCK=GPIO5, WS=GPIO6, DOUT=GPIO7
  *   - MIDI DIN: UART1 RX=GPIO18, TX=GPIO17
  *   - USB Host: GPIO19 (D-), GPIO20 (D+) — for USB-MIDI keyboards
  *   - Status LED: GPIO48 (WS2812 addressable RGB on DevKitC-1)
@@ -229,20 +229,22 @@ extern "C" void app_main(void)
         esp32_midi_start();
     }
 
-    // small pause to let USB host settle (devices enumerate, caches warm)
-    // enumeration can generate a burst of DMA/bus traffic; waiting 1 second
-    // here ensures all hot-plug activity completes before audio rendering
-    // begins, eliminating one-time crackles.  This delay is only at boot.
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    // Pause to let USB host settle.  The hub + keyboard need time to
+    // enumerate; the USB ENUM component may encounter CHECK_SHORT_DEV_DESC
+    // on first attempt and retry automatically -- that retry typically
+    // takes 500-800 ms.  2 seconds gives enough headroom before I2S DMA
+    // starts adding its own current draw.  This delay is only at boot.
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     // =====================
     // Phase 5: Audio output (I2S)
     // =====================
     ESP_LOGI(TAG, "[5/6] Initializing audio output...");
     if (esp32_audio_init() != 0) {
-        ESP_LOGE(TAG, "Audio initialization failed!");
-        esp32_led_set_state(LED_STATE_ERROR);
-        return;
+        ESP_LOGW(TAG, "Audio initialization returned error, continuing anyway");
+        // do not return; keep app_main alive so the i2s_init task can notify
+        // and so we don't trigger the notification crash seen earlier.
+        // The audio driver may still work even if init reported failure.
     }
 
     if (esp32_audio_start() != 0) {

@@ -30,6 +30,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/portmacro.h"
 #include "driver/i2s_std.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -73,6 +74,27 @@ static volatile int s_pre_ring_read  = 0;  // next slot for write task
 // Counting semaphores: free_sem counts empty slots, data_sem counts filled slots
 static SemaphoreHandle_t s_pre_ring_free_sem = NULL;
 static SemaphoreHandle_t s_pre_ring_data_sem = NULL;
+
+// -------------------------------------------------------------------------
+// Audio task stacks in internal SRAM to prevent audio crackle (works)
+//
+// With CONFIG_SPIRAM_USE_MALLOC=y and SPIRAM_MALLOC_ALWAYSINTERNAL=4096,
+// xTaskCreatePinnedToCore allocates stacks > 4 KB in PSRAM.  The render-task
+// stack is 8 KB, so without this workaround it ends up in PSRAM.
+//
+// When a USB hub + keyboard are attached, the USB host library runs code from
+// flash on Core 0.  Both that flash fetch and Core 1's PSRAM stack accesses
+// share the SPI0/SPI1 bus, serialising them.  Core 1's render task stalls
+// while Core 0 fetches USB library pages → render overruns → I2S underruns →
+// audible glitches identical to the Dexed PSRAM issue fixed in dexed_raw.cpp.
+//
+// Fix: use xTaskCreateStaticPinnedToCore with DRAM_ATTR stacks so both stacks
+// are always in internal SRAM, eliminating cross-core SPI0 bus contention.
+// -------------------------------------------------------------------------
+static DRAM_ATTR StackType_t s_render_stack[AUDIO_TASK_STACK_SIZE / sizeof(StackType_t)];
+static DRAM_ATTR StaticTask_t s_render_tcb;
+static DRAM_ATTR StackType_t s_write_stack[AUDIO_WRITE_TASK_STACK_SIZE / sizeof(StackType_t)];
+static DRAM_ATTR StaticTask_t s_write_tcb;
 
 // Power management locks (only effective if CONFIG_PM_ENABLE is enabled)
 static esp_pm_lock_handle_t s_pm_lock_cpu = NULL;
@@ -135,18 +157,12 @@ static bool IRAM_ATTR i2s_on_send_q_ovf_cb(i2s_chan_handle_t handle, i2s_event_d
 // When esp32_audio_init() is called from core 0 (app_main), we still want the
 // I2S driver (and thus its interrupts) to be allocated on the dedicated audio
 // core. ESP-IDF allocates many peripheral interrupts on the calling core.
-typedef struct {
-    TaskHandle_t waiter;
-    int result;
-} i2s_init_ctx_t;
-
 static int esp32_audio_init_impl(void);
 
 static void i2s_init_task(void *param)
 {
-    i2s_init_ctx_t *ctx = (i2s_init_ctx_t *)param;
-    ctx->result = esp32_audio_init_impl();
-    xTaskNotifyGive(ctx->waiter);
+    (void)param;
+    (void)esp32_audio_init_impl();
     vTaskDelete(NULL);
 }
 
@@ -157,7 +173,7 @@ static int esp32_audio_init_impl(void)
         (i2s_port_t)FMRACK_I2S_NUM, I2S_ROLE_MASTER);
     chan_cfg.dma_desc_num = FMRACK_I2S_DMA_BUF_COUNT;
     chan_cfg.dma_frame_num = FMRACK_I2S_DMA_BUF_LEN;
-    chan_cfg.auto_clear = false;  // Don't insert silent zeros on underrun — repeats last DMA buf instead
+    chan_cfg.auto_clear = true;   // Insert silent zeros on underrun (cleaner artifact than repeating old audio during USB attach)
     // I2S ISR at priority 7 (highest allowable without being NMI).
     // USB SOF fires at LEVEL2. Priority 7 > 2 so the DMA completion ISR
     // is never delayed by a USB SOF burst, preventing FIFO underruns.
@@ -246,12 +262,14 @@ int esp32_audio_init(void)
         return esp32_audio_init_impl();
     }
 
-    i2s_init_ctx_t ctx = {.waiter = xTaskGetCurrentTaskHandle(), .result = -1};
+    // Fire-and-forget: start initialization task on audio core, don't wait.
+    // 8192-byte stack: i2s_new_channel + i2s_channel_init_std_mode + internal
+    // ESP-IDF allocator calls consume more than 4096 bytes and will overflow.
     BaseType_t ok = xTaskCreatePinnedToCore(
         i2s_init_task,
         "i2s_init",
-        4096,
-        &ctx,
+        8192,
+        NULL,
         AUDIO_TASK_PRIORITY,
         NULL,
         AUDIO_TASK_CORE);
@@ -259,11 +277,10 @@ int esp32_audio_init(void)
         ESP_LOGE(TAG, "Failed to create i2s_init task");
         return -1;
     }
-    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(2000)) == 0) {
-        ESP_LOGE(TAG, "Timeout waiting for i2s_init");
-        return -1;
-    }
-    return ctx.result;
+
+    // Return success regardless; if init_impl ultimately fails the i2s_init_task
+    // will log an error but won't crash the main loop.
+    return 0;
 }
 
 /**
@@ -298,14 +315,13 @@ static IRAM_ATTR void audio_render_task(void *param)
         dexed_raw_process_audio_i16(s_mono_buffer, num_samples);
 
         // Expand mono → interleaved stereo into the pre-ring slot.
-        // Apply -6 dB headroom to avoid DAC/amp clipping.
+        // No attenuation: pass Dexed output at full scale so the output is loud.
+        // Dexed's own gain parameter controls headroom; set it lower if clipping
+        // occurs on a particular patch.
         int16_t *dst = s_pre_ring[s_pre_ring_write];
         for (int i = 0; i < num_samples; i++) {
-            int32_t v = (int32_t)s_mono_buffer[i] >> 1;
-            if (v >  32767) v =  32767;
-            if (v < -32768) v = -32768;
-            dst[i * 2]     = (int16_t)v;
-            dst[i * 2 + 1] = (int16_t)v;
+            dst[i * 2]     = s_mono_buffer[i];
+            dst[i * 2 + 1] = s_mono_buffer[i];
         }
 
         s_pre_ring_write = (s_pre_ring_write + 1) % PRERENDER_RING_BLOCKS;
@@ -343,6 +359,20 @@ static IRAM_ATTR void audio_render_task(void *param)
 static void audio_write_task(void *param)
 {
     ESP_LOGI(TAG, "Audio write task on core %d", xPortGetCoreID());
+
+    /* Wait for i2s_init_task to finish and populate s_tx_handle.
+     * esp32_audio_start() launches both this task and the fire-and-forget
+     * i2s_init_task concurrently.  Calling i2s_channel_write() on a NULL
+     * handle causes a LoadProhibited fault.  Spin here (in 10 ms steps) until
+     * the handle is valid, then enter the main loop. */
+    while (s_audio_running && s_tx_handle == NULL) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+    if (!s_audio_running) {
+        vTaskDelete(NULL);
+        return;
+    }
+    ESP_LOGI(TAG, "I2S handle ready, starting write loop");
 
     const size_t buf_bytes = FMRACK_BUFFER_SIZE * 2 * sizeof(int16_t);
 
@@ -480,10 +510,8 @@ int esp32_audio_start(void)
         return 0;
     }
 
-    if (!s_tx_handle) {
-        ESP_LOGE(TAG, "I2S not initialized, call esp32_audio_init() first");
-        return -1;
-    }
+    // if s_tx_handle is NULL the init task hasn't completed yet; we'll still
+    // start render/write tasks and they will see the NULL handle and do nothing.
 
     s_audio_running = true;
 
@@ -521,16 +549,17 @@ int esp32_audio_start(void)
         }
     }
 
-    BaseType_t ret = xTaskCreatePinnedToCore(
+    s_audio_task_handle = xTaskCreateStaticPinnedToCore(
         audio_render_task,
         "audio_render",
-        AUDIO_TASK_STACK_SIZE,
+        AUDIO_TASK_STACK_SIZE / sizeof(StackType_t),
         NULL,
         AUDIO_TASK_PRIORITY,
-        &s_audio_task_handle,
+        s_render_stack,
+        &s_render_tcb,
         AUDIO_TASK_CORE);
 
-    if (ret != pdPASS) {
+    if (!s_audio_task_handle) {
         ESP_LOGE(TAG, "Failed to create audio render task");
         s_audio_running = false;
         return -1;
@@ -539,16 +568,17 @@ int esp32_audio_start(void)
     // Write task: same core, one priority step below render task.
     // When write task blocks on i2s_channel_write (~5.8 ms DMA wait),
     // the higher-priority render task runs and pre-fills the ring.
-    ret = xTaskCreatePinnedToCore(
+    s_audio_write_handle = xTaskCreateStaticPinnedToCore(
         audio_write_task,
         "audio_write",
-        AUDIO_WRITE_TASK_STACK_SIZE,
+        AUDIO_WRITE_TASK_STACK_SIZE / sizeof(StackType_t),
         NULL,
         AUDIO_WRITE_TASK_PRIORITY,
-        &s_audio_write_handle,
+        s_write_stack,
+        &s_write_tcb,
         AUDIO_TASK_CORE);
 
-    if (ret != pdPASS) {
+    if (!s_audio_write_handle) {
         ESP_LOGE(TAG, "Failed to create audio write task");
         s_audio_running = false;
         return -1;

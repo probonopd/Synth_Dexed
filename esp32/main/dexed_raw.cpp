@@ -187,6 +187,16 @@ int dexed_raw_init(int sample_rate)
     s_dexed->setEngineType((uint8_t)FMRACK_ENGINE);
     s_dexed->activate();
 
+    // ---- Controller defaults ----
+    // Pitch bend: ±2 semitones (standard DX7 default).
+    s_dexed->setPitchbendRange(2);
+    s_dexed->setPitchbendStep(0);   // smooth (not quantised)
+    // Mod wheel: route to pitch (vibrato) with moderate depth.
+    // Without these calls the wheel range/target defaults to 0 and the
+    // modwheel has no audible effect.
+    s_dexed->setModWheelRange(50);  // 0-99; 50 gives a useful vibrato sweep
+    s_dexed->setModWheelTarget(1);  // bit0=pitch, bit1=amp, bit2=EG
+
     static const char *engine_names[] = {"MSFA","MKI","OPL"};
     const char *ename = "?";
     if (FMRACK_ENGINE < (int)(sizeof(engine_names)/sizeof(engine_names[0])))

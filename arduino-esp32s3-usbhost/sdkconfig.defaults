@@ -1,0 +1,27 @@
+# Defaults pulled from sdkconfig_pio.defaults
+# Keep serial console on UART0 (USB OTG pins GPIO19/20 are used for USB Host)
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# Disable USB Serial/JTAG to avoid conflicts with USB OTG Host mode on GPIO19/20
+# CONFIG_USJ_ENABLE_USB_SERIAL_JTAG is not set
+
+# USB Host + Hub support (keyboard through hub)
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+# If your hub is behind another hub, enable multi-level hubs (if present in your IDF version)
+# CONFIG_USB_HOST_HUB_MULTI_LEVEL=y
+
+# Reliability tweaks for some hubs/keyboards
+CONFIG_USB_HOST_DEBOUNCE_DELAY_MS=500
+CONFIG_USB_HOST_RESET_RECOVERY_MS=100
+CONFIG_USB_HOST_SET_ADDR_RECOVERY_MS=50
+CONFIG_USB_HOST_EXT_PORT_RESET_RECOVERY_DELAY_MS=100
+CONFIG_USB_HOST_EXT_PORT_CUSTOM_POWER_ON_DELAY_ENABLE=y
+CONFIG_USB_HOST_EXT_PORT_CUSTOM_POWER_ON_DELAY_MS=500
+
+# Give the system a bit more watchdog slack (audio + USB)
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10
+CONFIG_ESP_INT_WDT_TIMEOUT_MS=800
+
+# Arduino-as-a-component requirement
+CONFIG_FREERTOS_HZ=1000

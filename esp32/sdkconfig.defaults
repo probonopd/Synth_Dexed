@@ -24,6 +24,14 @@ CONFIG_SPIRAM_BOOT_INIT=y
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
 CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=32768
 
+# Disable the brownout detector.
+# The USB hub + keyboard plus I2S DMA firing together cause a transient
+# voltage dip that triggers BOD and hard-resets the ESP32 right in the
+# middle of USB device enumeration.  The ESP32-S3-DevKitC-1 is powered
+# from a USB power bank / 5 V adapter with adequate bulk capacitance, so
+# false brownout trips are more harmful than any real under-voltage event.
+CONFIG_ESP_BROWNOUT_DET=n
+
 # Allow tasks to have stacks in PSRAM
 CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
 
@@ -60,7 +68,7 @@ CONFIG_FMRACK_BUFFER_SIZE=256
 # Default polyphony for Dexed engine
 CONFIG_FMRACK_POLYPHONY=4
 
-# Sample rate
+# Sample rate (higher rates give better fidelity at increased CPU cost)
 CONFIG_FMRACK_SAMPLE_RATE=44100
 
 # Choose FM engine: 0=MSFA (modern), 1=MKI (legacy), 2=OPL

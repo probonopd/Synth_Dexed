@@ -14,13 +14,20 @@
 // Audio Configuration
 // =====================
 // Sample rate.  With the LUT and audio-path optimizations (reduced sine/exp2
-// tables, int16-only rendering) the engine comfortably handles 44.1 kHz.
-#define FMRACK_SAMPLE_RATE      44100
+// tables, int16-only rendering) the engine comfortably handles 48 kHz (and
+// 96 kHz on lightly-loaded systems).  Higher rates improve audio fidelity but
+// increase CPU cost.  This value is now configurable via menuconfig (see
+// FMRACK_SAMPLE_RATE) so you can tweak it for "hifi" builds.
+#ifdef CONFIG_FMRACK_SAMPLE_RATE
+#define FMRACK_SAMPLE_RATE      CONFIG_FMRACK_SAMPLE_RATE
+#else
+#define FMRACK_SAMPLE_RATE      48000
+#endif
 // Polyphony (number of simultaneous notes)
 #ifdef CONFIG_FMRACK_POLYPHONY
 #define FMRACK_POLYPHONY        CONFIG_FMRACK_POLYPHONY
 #else
-#define FMRACK_POLYPHONY        4
+#define FMRACK_POLYPHONY        12
 #endif
 #ifdef CONFIG_FMRACK_BUFFER_SIZE
 #define FMRACK_BUFFER_SIZE      CONFIG_FMRACK_BUFFER_SIZE
@@ -167,17 +174,23 @@
 // =====================
 // Audio processing constants
 // =====================
-// I2S DMA ring: 16 descriptors x 256 frames = ~93 ms headroom.
-// With the decoupled render+write pipeline the pre-render ring already
-// absorbs render jitter; the DMA ring just needs to stay ahead of the
-// I2S shift register, so 16 descriptors is ample without adding latency.
-#define FMRACK_I2S_DMA_BUF_COUNT        16
+// I2S DMA ring: 4 descriptors x 256 frames = ~23 ms total DMA buffer.
+// At steady state a newly-written descriptor sits behind (N-1)=3 already-queued
+// descriptors, so audio output latency from write → DAC is ~3 x 5.83 ms ≈ 17 ms.
+// This is a large reduction from the previous 32-descriptor (186 ms) configuration.
+// The Dexed object is in internal SRAM, so render stalls from USB are eliminated
+// and 4 descriptors (23 ms cushion) is ample.
+#define FMRACK_I2S_DMA_BUF_COUNT        4
 #define FMRACK_I2S_DMA_BUF_LEN         FMRACK_BUFFER_SIZE
 
 // Pre-render ring between render task and write task.
-// 4 blocks = 4 x 5.8 ms = ~23 ms headroom before a write stall causes a gap.
-// Increasing this trades MIDI latency for crackle immunity; 4 is a good balance.
-#define FMRACK_AUDIO_PRERENDER_BLOCKS   4
+// 2 blocks = double-buffering: render fills one slot while write drains the other.
+// Latency contribution: ~1 block = 5.83 ms typical (one block is in-flight to DMA).
+// Reduced from 16 (93 ms) to 2 (12 ms) for lower key-to-sound latency.
+// The ring only needs more than 2 slots if the render task experiences sustained
+// stalls longer than one block period (5.83 ms), which doesn't happen with Dexed
+// in internal SRAM and audio pinned to Core 1.
+#define FMRACK_AUDIO_PRERENDER_BLOCKS   2
 
 // MIDI baud rate (standard)
 #define MIDI_BAUD_RATE              31250

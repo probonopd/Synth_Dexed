@@ -329,3 +329,7 @@ cmake
 cpm-package-lock.cmake
 AudioPlugin/juce_binarydata_BinaryData/JuceLibraryCode/input_file_list
 bin/*
+log.txt
+.gitignore
+buildlog*.txt
+arduino-esp32s3-usbhost/managed_components/
