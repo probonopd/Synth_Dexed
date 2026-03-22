@@ -77,14 +77,16 @@ CONFIG_LWIP_EXTRA_IRAM_OPTIMIZATION=y
 # Log level
 CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
-# Audio render block size (256 samples = ~5.8 ms at 44.1 kHz, balances latency & efficiency)
+# Audio render block size (256 samples = ~5.3 ms at 48 kHz, balances latency & efficiency)
 CONFIG_FMRACK_BUFFER_SIZE=256
 
 # Default polyphony for Dexed engine
 CONFIG_FMRACK_POLYPHONY=4
 
-# Sample rate (higher rates give better fidelity at increased CPU cost)
-CONFIG_FMRACK_SAMPLE_RATE=44100
+# Sample rate.  48 kHz divides much more cleanly from PLL_F160M than 44.1 kHz
+# (fractional divider residual 0.02 vs 0.17).  The smaller jitter yields a
+# cleaner MCLK → fewer bit-timing artifacts in the external I2S DAC.
+CONFIG_FMRACK_SAMPLE_RATE=48000
 
 # Choose FM engine: 0=MSFA (modern), 1=MKI (legacy), 2=OPL
 CONFIG_FMRACK_ENGINE=0
@@ -108,6 +110,11 @@ CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
 # USB Host — enable external hub support so keyboards attached
 # through a hub are enumerated and recognised.
 CONFIG_USB_HOST_HUBS_SUPPORTED=y
+
+# Increase control transfer buffer so that USB devices with large config
+# descriptors (e.g. Apple USB-C to 3.5 mm audio adapter, ~700 bytes) can be
+# fully enumerated.  Default 256 is too small → CHECK_SHORT_CONFIG_DESC fail.
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=4096
 
 # USB Host FIFO bias: maximise periodic (isochronous/interrupt) OUT bandwidth.
 # Default BALANCED gives only 128-byte periodic TX FIFO, which is too small for

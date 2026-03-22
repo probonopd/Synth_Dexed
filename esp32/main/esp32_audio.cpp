@@ -124,6 +124,10 @@ typedef struct {
     uint32_t loop_dt_us_max;
     uint32_t loop_dt_over_2p;
 
+    // Audio data diagnostics
+    uint32_t clip_count;         // samples at INT16_MAX or INT16_MIN
+    int16_t  peak_sample;        // max |sample| seen (resets each stats period)
+
     // I2S ISR-side counters
     uint64_t isr_on_sent;
     uint32_t isr_on_send_q_ovf;
@@ -316,13 +320,17 @@ static IRAM_ATTR void audio_render_task(void *param)
         dexed_raw_process_audio_i16(s_mono_buffer, num_samples);
 
         // Expand mono → interleaved stereo into the pre-ring slot.
-        // No attenuation: pass Dexed output at full scale so the output is loud.
-        // Dexed's own gain parameter controls headroom; set it lower if clipping
-        // occurs on a particular patch.
+        // Track clipping and peak amplitude for diagnostics.
         int16_t *dst = s_pre_ring[s_pre_ring_write];
+        uint32_t clip = 0;
+        int16_t  peak = 0;
         for (int i = 0; i < num_samples; i++) {
-            dst[i * 2]     = s_mono_buffer[i];
-            dst[i * 2 + 1] = s_mono_buffer[i];
+            int16_t s = s_mono_buffer[i];
+            int16_t abs_s = (s < 0) ? (int16_t)-s : s;
+            if (abs_s > peak) peak = abs_s;
+            if (s == INT16_MAX || s == INT16_MIN) clip++;
+            dst[i * 2]     = s;
+            dst[i * 2 + 1] = s;
         }
 
         s_pre_ring_write = (s_pre_ring_write + 1) % PRERENDER_RING_BLOCKS;
@@ -335,6 +343,9 @@ static IRAM_ATTR void audio_render_task(void *param)
             s_rt_stats.render_us_max = (uint32_t)render_us;
         if (render_us > period_us)
             s_rt_stats.render_overruns++;
+        s_rt_stats.clip_count += clip;
+        if (peak > s_rt_stats.peak_sample)
+            s_rt_stats.peak_sample = peak;
         portEXIT_CRITICAL(&s_rt_stats_mux);
 
         // Signal the write task that one filled slot is available.
@@ -470,6 +481,7 @@ static void audio_stats_task(void *param)
         audio_rt_stats_t cur;
         portENTER_CRITICAL(&s_rt_stats_mux);
         cur = s_rt_stats;
+        s_rt_stats.peak_sample = 0;  // reset peak for next period
         portEXIT_CRITICAL(&s_rt_stats_mux);
 
         const uint64_t d_blocks = cur.blocks - prev.blocks;
@@ -481,6 +493,7 @@ static void audio_stats_task(void *param)
         const uint32_t d_wpart = cur.write_partial_calls - prev.write_partial_calls;
         const uint64_t d_isr_sent = cur.isr_on_sent - prev.isr_on_sent;
         const uint32_t d_isr_qovf = cur.isr_on_send_q_ovf - prev.isr_on_send_q_ovf;
+        const uint32_t d_clips = cur.clip_count - prev.clip_count;
 
         uint64_t avg_render = d_blocks ? (d_render_us / d_blocks) : 0;
         uint64_t avg_write  = d_blocks ? (d_write_us  / d_blocks) : 0;
@@ -492,7 +505,7 @@ static void audio_stats_task(void *param)
         ESP_LOGI(TAG,
                  "RT: voices=%d render=%.1f%% avg=%lluus max=%uus overruns=%u ring=%d/%d"
                  " | i2s avg=%lluus max=%uus err=%u zero=%u partial=%u"
-                 " | isr sent=%llu qovf=%u",
+                 " | isr sent=%llu qovf=%u | peak=%d clips=%u",
                  voices,
                  render_cpu,
                  (unsigned long long)avg_render,
@@ -506,7 +519,9 @@ static void audio_stats_task(void *param)
                  (unsigned)d_wzero,
                  (unsigned)d_wpart,
                  (unsigned long long)d_isr_sent,
-                 (unsigned)d_isr_qovf);
+                 (unsigned)d_isr_qovf,
+                 (int)cur.peak_sample,
+                 (unsigned)d_clips);
 
         prev = cur;
     }

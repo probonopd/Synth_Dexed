@@ -78,8 +78,8 @@ static const char *TAG = "usb_audio";
 
 /* Maximum bytes per isochronous packet.
  * USB full-speed audio MPS is at most 1023 bytes.
- * 7 channels × 48000 Hz × 1 ms × 2 bytes = 672 bytes — well within limit. */
-#define ISOC_PKT_MAX_BYTES      672
+ * 7 channels × 48000 Hz × 1 ms × 3 bytes = 1008 bytes — within limit. */
+#define ISOC_PKT_MAX_BYTES      1023
 
 /* Total data buffer per transfer. */
 #define ISOC_XFER_BUF_BYTES     (ISOC_PKTS_PER_XFER * ISOC_PKT_MAX_BYTES)
@@ -185,6 +185,7 @@ typedef struct {
     uint8_t  ep_out;             /* Isochronous OUT endpoint address */
     uint16_t ep_out_mps;         /* Max packet size */
     uint8_t  channels;           /* Output channel count (1-7) */
+    uint8_t  bytes_per_sample;   /* 2 = 16-bit, 3 = 24-bit */
     uint32_t dev_sample_rate;    /* Device native sample rate (Hz) */
 
     /* Per-packet fractional sample tracking (avoids drift at 44100 Hz).
@@ -345,7 +346,8 @@ static int pack_frames(usb_audio_dev_t *dev, uint8_t *buf, int frames)
         }
     }
 
-    int ch = dev->channels;
+    int ch  = dev->channels;
+    int bps = dev->bytes_per_sample;  /* 2 = 16-bit, 3 = 24-bit */
     uint8_t *p = buf;
     for (int f = 0; f < frames; f++) {
         int16_t L = stereo_tmp[f * 2];
@@ -353,16 +355,31 @@ static int pack_frames(usb_audio_dev_t *dev, uint8_t *buf, int frames)
         if (ch == 1) {
             /* Mono: average L+R. */
             int16_t m = (int16_t)(((int32_t)L + R) >> 1);
-            p[0] = (uint8_t)(m & 0xFF);
-            p[1] = (uint8_t)(m >> 8);
-            p += 2;
+            if (bps == 3) {
+                /* 24-bit LE: pad LSB with 0, then 16-bit value in upper 2 bytes. */
+                p[0] = 0;
+                p[1] = (uint8_t)(m & 0xFF);
+                p[2] = (uint8_t)(m >> 8);
+                p += 3;
+            } else {
+                p[0] = (uint8_t)(m & 0xFF);
+                p[1] = (uint8_t)(m >> 8);
+                p += 2;
+            }
         } else {
             /* Channel 0 = L, 1 = R, 2+ = silence. */
             for (int c = 0; c < ch; c++) {
                 int16_t s = (c == 0) ? L : (c == 1) ? R : 0;
-                p[0] = (uint8_t)(s & 0xFF);
-                p[1] = (uint8_t)(s >> 8);
-                p += 2;
+                if (bps == 3) {
+                    p[0] = 0;
+                    p[1] = (uint8_t)(s & 0xFF);
+                    p[2] = (uint8_t)(s >> 8);
+                    p += 3;
+                } else {
+                    p[0] = (uint8_t)(s & 0xFF);
+                    p[1] = (uint8_t)(s >> 8);
+                    p += 2;
+                }
             }
         }
     }
@@ -377,7 +394,7 @@ static void fill_isoc_xfer(usb_audio_dev_t *dev, usb_transfer_t *xfer)
 {
     uint8_t *buf = xfer->data_buffer;
     int total = 0;
-    uint32_t max_frames_per_pkt = dev->ep_out_mps / (dev->channels * 2);
+    uint32_t max_frames_per_pkt = dev->ep_out_mps / (dev->channels * dev->bytes_per_sample);
     for (int pkt = 0; pkt < ISOC_PKTS_PER_XFER; pkt++) {
         /* Compute frames for this 1-ms packet. */
         uint32_t frames = dev->base_samp_per_ms;
@@ -478,6 +495,7 @@ typedef struct {
     uint8_t  ep_addr;
     uint16_t ep_mps;
     uint8_t  channels;
+    uint8_t  bytes_per_sample;  /* 2 = 16-bit, 3 = 24-bit */
     uint32_t sample_rate;
     bool     found;
 } audio_stream_info_t;
@@ -494,6 +512,9 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
     int ofs = 0;
     const usb_standard_desc_t *cur = (const usb_standard_desc_t *)desc;
 
+    ESP_LOGI(TAG, "Config descriptor: wTotalLength=%d bNumInterfaces=%d",
+             total, desc->bNumInterfaces);
+
     bool in_stream = false;
     uint8_t cur_audio_intf = 0;
     uint8_t cur_alt = 0;
@@ -504,6 +525,7 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
     uint16_t cur_alt_mps  = 0;
     bool cur_alt_fmt_ok   = false;
     uint8_t  cur_alt_ch   = 0;
+    uint8_t  cur_alt_bps  = 0;  /* bytes per sample (2 or 3) */
     uint32_t cur_alt_rate = 0;
 
     while (cur) {
@@ -519,20 +541,22 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
                 bool rate_ok = (cur_alt_rate == src) ||
                                (src == 44100 && cur_alt_rate == 48000) ||
                                (src == 48000 && cur_alt_rate == 44100);
-                ESP_LOGI(TAG, "  alt %d: ch=%d rate=%lu ep=0x%02X MPS=%d rate_ok=%d",
-                         cur_alt, cur_alt_ch, (unsigned long)cur_alt_rate,
+                ESP_LOGI(TAG, "  alt %d: ch=%d %dbit rate=%lu ep=0x%02X MPS=%d rate_ok=%d",
+                         cur_alt, cur_alt_ch, cur_alt_bps * 8,
+                         (unsigned long)cur_alt_rate,
                          cur_alt_ep, cur_alt_mps, (int)rate_ok);
                 if (rate_ok && cur_alt_ch >= 1 && cur_alt_ch <= 7 && !info->found) {
-                    info->stream_intf = cur_audio_intf;
-                    info->stream_alt  = cur_alt;
-                    info->ep_addr     = cur_alt_ep;
-                    info->ep_mps      = cur_alt_mps;
-                    info->channels    = cur_alt_ch;
-                    info->sample_rate = cur_alt_rate;
-                    info->found       = true;
-                    ESP_LOGI(TAG, "AudioStreaming intf=%d alt=%d ep=0x%02X ch=%d rate=%lu",
+                    info->stream_intf     = cur_audio_intf;
+                    info->stream_alt      = cur_alt;
+                    info->ep_addr         = cur_alt_ep;
+                    info->ep_mps          = cur_alt_mps;
+                    info->channels        = cur_alt_ch;
+                    info->bytes_per_sample = cur_alt_bps;
+                    info->sample_rate     = cur_alt_rate;
+                    info->found           = true;
+                    ESP_LOGI(TAG, "AudioStreaming intf=%d alt=%d ep=0x%02X ch=%d %dbit rate=%lu",
                              cur_audio_intf, cur_alt, cur_alt_ep,
-                             cur_alt_ch, (unsigned long)cur_alt_rate);
+                             cur_alt_ch, cur_alt_bps * 8, (unsigned long)cur_alt_rate);
                 }
             }
 
@@ -542,6 +566,9 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
                 uint8_t ialt   = d[3];
                 uint8_t iclass = d[5];
                 uint8_t isub   = d[6];
+
+                ESP_LOGI(TAG, "  intf %d alt %d class=0x%02X sub=0x%02X proto=0x%02X",
+                         inum, ialt, iclass, isub, d[7]);
 
                 in_stream = false;
 
@@ -560,6 +587,7 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
                             cur_alt_mps     = 0;
                             cur_alt_fmt_ok  = false;
                             cur_alt_ch      = 0;
+                            cur_alt_bps     = 0;
                             cur_alt_rate    = 0;
                         }
                     }
@@ -571,6 +599,8 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
             uint8_t  ep_type  = d[3] & 0x03; /* bmAttributes[1:0] */
             uint16_t ep_mps   = (uint16_t)(d[4] | (d[5] << 8)) & 0x07FF;
             bool     is_out   = !(ep_addr & 0x80);
+            ESP_LOGI(TAG, "  EP 0x%02X type=%d MPS=%d %s",
+                     ep_addr, ep_type, ep_mps, is_out ? "OUT" : "IN");
             if (ep_type == 0x01 /* isochronous */ && is_out) {
                 cur_alt_has_ep = true;
                 cur_alt_ep     = ep_addr;
@@ -591,8 +621,17 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
                 uint8_t sub_frame = d[5];
                 uint8_t bit_res   = d[6];
                 uint8_t freq_type = (dlen > 7) ? d[7] : 0;
-                if (sub_frame == 2 && bit_res == 16 && nr_ch >= 1 && nr_ch <= 7) {
-                    cur_alt_ch = nr_ch;
+                /* Accept 16-bit (2 bytes/sample) and 24-bit (3 bytes/sample). */
+                bool fmt_ok = ((sub_frame == 2 && bit_res == 16) ||
+                               (sub_frame == 3 && bit_res == 24)) &&
+                              nr_ch >= 1 && nr_ch <= 7;
+                if (!fmt_ok) {
+                    ESP_LOGI(TAG, "  Skipping FORMAT_TYPE_I: ch=%d sub_frame=%d bit_res=%d",
+                             nr_ch, sub_frame, bit_res);
+                }
+                if (fmt_ok) {
+                    cur_alt_ch  = nr_ch;
+                    cur_alt_bps = sub_frame;
                     /* Extract first sample frequency. */
                     if (freq_type == 0 && dlen >= 14) {
                         /* Continuous range — use lower bound. */
@@ -624,17 +663,18 @@ static bool find_audio_stream(usb_device_handle_t dev_hdl,
         bool rate_ok = (cur_alt_rate == src) ||
                        (src == 44100 && cur_alt_rate == 48000) ||
                        (src == 48000 && cur_alt_rate == 44100);
-        ESP_LOGI(TAG, "  alt %d (tail): ch=%d rate=%lu ep=0x%02X MPS=%d rate_ok=%d",
-                 cur_alt, cur_alt_ch, (unsigned long)cur_alt_rate,
+        ESP_LOGI(TAG, "  alt %d (tail): ch=%d %dbit rate=%lu ep=0x%02X MPS=%d rate_ok=%d",
+                 cur_alt, cur_alt_ch, cur_alt_bps * 8, (unsigned long)cur_alt_rate,
                  cur_alt_ep, cur_alt_mps, (int)rate_ok);
         if (rate_ok && cur_alt_ch >= 1 && cur_alt_ch <= 7 && !info->found) {
-            info->stream_intf = cur_audio_intf;
-            info->stream_alt  = cur_alt;
-            info->ep_addr     = cur_alt_ep;
-            info->ep_mps      = cur_alt_mps;
-            info->channels    = cur_alt_ch;
-            info->sample_rate = cur_alt_rate;
-            info->found       = true;
+            info->stream_intf     = cur_audio_intf;
+            info->stream_alt      = cur_alt;
+            info->ep_addr         = cur_alt_ep;
+            info->ep_mps          = cur_alt_mps;
+            info->channels        = cur_alt_ch;
+            info->bytes_per_sample = cur_alt_bps;
+            info->sample_rate     = cur_alt_rate;
+            info->found           = true;
         }
     }
 
@@ -701,6 +741,7 @@ static void open_audio_device(uint8_t addr)
     s_dev.ep_out       = info.ep_addr;
     s_dev.ep_out_mps   = info.ep_mps;
     s_dev.channels     = info.channels;
+    s_dev.bytes_per_sample = info.bytes_per_sample;
     s_dev.dev_sample_rate = info.sample_rate;
 
     /* Fractional sample counter for 44.1 kHz etc. */
@@ -710,16 +751,17 @@ static void open_audio_device(uint8_t addr)
 
     src_init(&s_dev);
 
-    ESP_LOGI(TAG, "USB audio: ch=%d rate=%lu Hz ep=0x%02X MPS=%d need_src=%d",
-             s_dev.channels, (unsigned long)s_dev.dev_sample_rate,
+    ESP_LOGI(TAG, "USB audio: ch=%d %dbit rate=%lu Hz ep=0x%02X MPS=%d need_src=%d",
+             s_dev.channels, s_dev.bytes_per_sample * 8,
+             (unsigned long)s_dev.dev_sample_rate,
              s_dev.ep_out, s_dev.ep_out_mps, (int)s_dev.need_src);
 
     /* Verify MPS is large enough for the packet we'll send. */
     uint32_t max_frames = s_dev.base_samp_per_ms + 1; /* +1 for fractional rounding */
-    uint32_t bytes_per_pkt = max_frames * s_dev.channels * 2;
-    ESP_LOGI(TAG, "USB audio: bytes/pkt=%lu (max_frames=%lu × ch=%d × 2), ep MPS=%d",
+    uint32_t bytes_per_pkt = max_frames * s_dev.channels * s_dev.bytes_per_sample;
+    ESP_LOGI(TAG, "USB audio: bytes/pkt=%lu (max_frames=%lu × ch=%d × %d), ep MPS=%d",
              (unsigned long)bytes_per_pkt, (unsigned long)max_frames,
-             s_dev.channels, s_dev.ep_out_mps);
+             s_dev.channels, s_dev.bytes_per_sample, s_dev.ep_out_mps);
     if (bytes_per_pkt > s_dev.ep_out_mps) {
         ESP_LOGW(TAG, "WARNING: packet size %lu > endpoint MPS %d — will truncate!",
                  (unsigned long)bytes_per_pkt, s_dev.ep_out_mps);
