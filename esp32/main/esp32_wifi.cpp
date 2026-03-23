@@ -17,6 +17,9 @@
 #include "esp32_config.h"
 #include "esp32_captive_portal.h"
 #include "esp32_applemidi.h"
+#include "esp32_webserver.h"
+#include "esp32_syslog.h"
+#include "tsf_engine.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -194,6 +197,22 @@ int esp32_wlan_init(void)
                 esp32_applemidi_start();
                 ESP_LOGI(TAG, "Apple MIDI ready — synth visible in Audio MIDI Setup");
             }
+            /* Start SFO upload web server (mDNS _http._tcp) */
+            if (esp32_webserver_start() != 0) {
+                ESP_LOGW(TAG, "Web server start failed (SFO upload unavailable)");
+            }
+            /* Start UDP syslog forwarder — receive with: nc -lup 5140 */
+            esp32_syslog_start(FMRACK_SYSLOG_HOST, FMRACK_SYSLOG_PORT);
+            /* Log status immediately so it appears in syslog on connect.
+             * TSF init happened in Phase 3 (before WiFi), so its result is
+             * only visible here via this deferred status log. */
+            ESP_LOGI(TAG, "=== Post-WiFi status ===");
+            ESP_LOGI(TAG, "TSF drum engine: %s (%d active voices)",
+                     tsf_engine_is_loaded() ? "LOADED" : "NOT LOADED",
+                     tsf_engine_active_voices());
+            ESP_LOGI(TAG, "Web server:      http://synth-dexed.local/");
+            ESP_LOGI(TAG, "Syslog:          broadcasting to %s:%d",
+                     FMRACK_SYSLOG_HOST, FMRACK_SYSLOG_PORT);
             return 0;
         }
 
@@ -228,6 +247,7 @@ void esp32_wlan_stop(void)
     if (s_ap_active) {
         esp32_captive_portal_stop();
     }
+    esp32_webserver_stop();
     esp32_applemidi_stop();
     esp_wifi_stop();
     esp_wifi_deinit();

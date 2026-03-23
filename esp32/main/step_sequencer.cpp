@@ -9,6 +9,7 @@
 #include "step_sequencer.h"
 #include "launchpad.h"
 #include "dexed_raw.h"
+#include "tsf_engine.h"
 #include "esp32_config.h"
 
 #include "freertos/FreeRTOS.h"
@@ -100,6 +101,42 @@ static uint64_t step_period_us(uint16_t bpm)
 }
 
 /* ================================================
+ * MIDI routing: drums → TSF when loaded, else Dexed
+ * ================================================ */
+
+/* Channel marker: active_notes[].channel == 9 means the note was sent to TSF. */
+#define SEQ_CH_TSF  9
+#define SEQ_CH_DEX  0
+
+static inline void seq_drum_note_on(uint8_t note, uint8_t vel)
+{
+    if (tsf_engine_is_loaded()) {
+        tsf_engine_handle_midi(0x99, note, vel);  /* channel 9 */
+    } else {
+        dexed_raw_handle_midi(0x90, note, vel);
+    }
+}
+
+static inline void seq_drum_note_off(uint8_t note)
+{
+    if (tsf_engine_is_loaded()) {
+        tsf_engine_handle_midi(0x89, note, 0);
+    } else {
+        dexed_raw_handle_midi(0x80, note, 0);
+    }
+}
+
+/* Send Note Off to the correct engine based on stored channel marker. */
+static inline void seq_note_off_routed(uint8_t channel, uint8_t note)
+{
+    if (channel == SEQ_CH_TSF) {
+        tsf_engine_handle_midi(0x89, note, 0);
+    } else {
+        dexed_raw_handle_midi((uint8_t)(0x80 | channel), note, 0);
+    }
+}
+
+/* ================================================
  * Timer callback -- called from esp_timer task (Core 0)
  * ================================================ */
 
@@ -111,9 +148,7 @@ static void seq_timer_callback(void *arg)
 
     /* 1. Note Off for all currently sounding notes */
     for (int i = 0; i < s->active_note_count; i++) {
-        dexed_raw_handle_midi(
-            (uint8_t)(0x80 | s->active_notes[i].channel),
-            s->active_notes[i].note, 0);
+        seq_note_off_routed(s->active_notes[i].channel, s->active_notes[i].note);
     }
     s->active_note_count = 0;
 
@@ -127,9 +162,10 @@ static void seq_timer_callback(void *arg)
             uint8_t vel = s->drum_tracks[d].steps[step].velocity;
             if (vel > 0 && s->active_note_count < SEQ_ACTIVE_NOTES_MAX) {
                 uint8_t note = drum_midi_notes[d];
-                dexed_raw_handle_midi(0x90, note, vel);
+                seq_drum_note_on(note, vel);
                 s->active_notes[s->active_note_count].note = note;
-                s->active_notes[s->active_note_count].channel = 0;
+                s->active_notes[s->active_note_count].channel =
+                    tsf_engine_is_loaded() ? SEQ_CH_TSF : SEQ_CH_DEX;
                 s->active_note_count++;
             }
         }
@@ -225,9 +261,7 @@ void step_seq_stop(void)
     /* All notes off */
     portENTER_CRITICAL(&s_seq.mux);
     for (int i = 0; i < s_seq.active_note_count; i++) {
-        dexed_raw_handle_midi(
-            (uint8_t)(0x80 | s_seq.active_notes[i].channel),
-            s_seq.active_notes[i].note, 0);
+        seq_note_off_routed(s_seq.active_notes[i].channel, s_seq.active_notes[i].note);
     }
     s_seq.active_note_count = 0;
     s_seq.current_step = -1;
@@ -501,7 +535,7 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             if (drum >= 0 && drum < SEQ_NUM_DRUM_TRACKS) {
                 step_seq_select_drum((uint8_t)drum);
                 /* Audition: trigger the drum sound */
-                dexed_raw_handle_midi(0x90, drum_midi_notes[drum], s_seq.current_velocity);
+                seq_drum_note_on(drum_midi_notes[drum], s_seq.current_velocity);
             }
         }
         else if (lp_is_q4(row, col)) {
@@ -548,7 +582,7 @@ void step_seq_handle_grid_release(uint8_t row, uint8_t col)
         if (lp_is_q3(row, col)) {
             int drum = q3_to_drum_index(row, col);
             if (drum >= 0 && drum < SEQ_NUM_DRUM_TRACKS) {
-                dexed_raw_handle_midi(0x80, drum_midi_notes[drum], 0);
+                seq_drum_note_off(drum_midi_notes[drum]);
             }
         }
     }

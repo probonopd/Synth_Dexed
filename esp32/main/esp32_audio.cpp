@@ -26,6 +26,7 @@
 #include "esp32_audio.h"
 #include "esp32_config.h"
 #include "dexed_raw.h"
+#include "tsf_engine.h"
 #include "esp32_usb_audio.h"
 #include "AudioEffectSymphonic.h"
 
@@ -67,6 +68,9 @@ static FMRack::AudioEffectSymphonic *s_symphonic = nullptr;
 static DRAM_ATTR float s_mono_float[FMRACK_BUFFER_SIZE];
 static DRAM_ATTR float s_left_float[FMRACK_BUFFER_SIZE];
 static DRAM_ATTR float s_right_float[FMRACK_BUFFER_SIZE];
+
+// TSF drum engine stereo render buffer (mixed additively with Dexed output).
+static DRAM_ATTR int16_t s_tsf_stereo[FMRACK_BUFFER_SIZE * 2];
 
 // -------------------------------------------------------------------------
 // Pre-render ring buffer
@@ -418,6 +422,17 @@ static IRAM_ATTR void audio_render_task(void *param)
             }
         }
 
+        // Mix in TSF drum engine (additive, stereo).
+        if (tsf_engine_is_loaded()) {
+            tsf_engine_render_stereo_i16(s_tsf_stereo, num_samples);
+            for (int i = 0; i < num_samples * 2; i++) {
+                int32_t m = (int32_t)dst[i] + (int32_t)s_tsf_stereo[i];
+                if (m >  32767) m =  32767;
+                if (m < -32768) m = -32768;
+                dst[i] = (int16_t)m;
+            }
+        }
+
         s_pre_ring_write = (s_pre_ring_write + 1) % PRERENDER_RING_BLOCKS;
 
         uint64_t render_us = esp_timer_get_time() - t0;
@@ -585,13 +600,15 @@ static void audio_stats_task(void *param)
         float render_cpu = (period != 0) ? ((float)avg_render * 100.0f / (float)period) : 0.0f;
 
         int voices = dexed_raw_get_active_voices();
+        int tsf_voices = tsf_engine_active_voices();
         // ring_fill = free_sem tokens consumed = data_sem count (approximate, lock-free read)
         int ring_fill = (int)uxSemaphoreGetCount(s_pre_ring_data_sem);
         ESP_LOGI(TAG,
-                 "RT: voices=%d render=%.1f%% avg=%lluus max=%uus overruns=%u ring=%d/%d"
+                 "RT: voices=%d tsf=%d render=%.1f%% avg=%lluus max=%uus overruns=%u ring=%d/%d"
                  " | i2s avg=%lluus max=%uus err=%u zero=%u partial=%u"
                  " | isr sent=%llu qovf=%u | peak=%d clips=%u",
                  voices,
+                 tsf_voices,
                  render_cpu,
                  (unsigned long long)avg_render,
                  (unsigned)cur.render_us_max,

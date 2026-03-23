@@ -540,6 +540,18 @@ static void register_mdns(void)
         ESP_LOGI(TAG, "mDNS: '%s' _apple-midi._udp port %d announced",
                  FMRACK_APPLEMIDI_NAME, FMRACK_APPLEMIDI_PORT);
     }
+
+    /* Advertise the HTTP upload web server.
+     * Accessible as http://synth-dexed.local/ for SFO file uploads. */
+    err = mdns_service_add("FMSynthESP Web",
+                           "_http", "_tcp",
+                           FMRACK_WEBSERVER_PORT, NULL, 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "mdns_service_add _http._tcp: %s", esp_err_to_name(err));
+    } else {
+        ESP_LOGI(TAG, "mDNS: _http._tcp port %d announced (SFO upload page)",
+                 FMRACK_WEBSERVER_PORT);
+    }
 }
 
 /* -----------------------------------------------------------------------

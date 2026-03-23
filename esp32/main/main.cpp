@@ -31,7 +31,9 @@
 #include "esp32_usb_audio.h"
 #include "esp32_button.h"
 #include "dexed_raw.h"
+#include "tsf_engine.h"
 #include "step_sequencer.h"
+#include "launchpad.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -90,8 +92,64 @@ static void play_startup_sound(void)
  * =================================================== */
 static void led_monitor_task(void *param)
 {
+    /* TSF load progress: only update Launchpad while loading is in-progress.
+     * Once loading ends (success=8 or failure<0) we show the result ONCE and
+     * hand the Launchpad back to the sequencer's refresh logic.
+     *
+     * On failure, the sequence is:
+     *   1. Show step-indicator (which step turned red) for 3 s
+     *   2. Show binary error code permanently until next grid refresh
+     */
+    bool tsf_load_done = false;
+    bool tsf_error_shown = false;        /* true once binary code is on screen */
+    int  tsf_error_step_shown_ms = 0;   /* ms ticker for the 3-second pause */
+
     while (true) {
         led_state_t current = esp32_led_get_state();
+
+        /* Drive Launchpad loading progress bar while TSF is loading */
+        if (!tsf_load_done) {
+            int tsf_prog = tsf_engine_get_load_progress();
+
+            if (tsf_prog > 0 && tsf_prog < 8) {
+                /* Loading in progress — show green/amber progress bar */
+                if (launchpad_is_connected()) {
+                    launchpad_show_loading_progress(tsf_prog);
+                }
+            } else if (tsf_prog == 8) {
+                /* Fully loaded — all green on right column, then hand off */
+                if (launchpad_is_connected()) {
+                    launchpad_show_loading_progress(8);
+                }
+                tsf_load_done = true;
+            } else if (tsf_prog < 0) {
+                if (!tsf_error_shown) {
+                    if (tsf_error_step_shown_ms == 0) {
+                        /* First time: show which step failed (red LED) */
+                        if (launchpad_is_connected()) {
+                            launchpad_show_loading_progress(tsf_prog);
+                        }
+                        ESP_LOGW(TAG, "[tsf] Load failed at step %d, error_detail=0x%02X",
+                                 -tsf_prog, (unsigned)tsf_engine_get_error_detail());
+                    }
+                    tsf_error_step_shown_ms += 100;
+
+                    if (tsf_error_step_shown_ms >= 3000) {
+                        /* After 3 s: switch to binary error code display */
+                        tsf_error_shown = true;
+                        uint8_t detail = tsf_engine_get_error_detail();
+                        if (launchpad_is_connected() && detail != 0) {
+                            launchpad_show_tsf_error(detail);
+                        } else if (launchpad_is_connected()) {
+                            /* No detail flags (e.g. file not found before decode):
+                             * keep the step-indicator on screen */
+                            launchpad_show_loading_progress(tsf_prog);
+                        }
+                        tsf_load_done = true;
+                    }
+                }
+            }
+        }
 
         /* Don't override boot-time states */
         if (current == LED_STATE_BOOTING ||
@@ -115,8 +173,22 @@ static void led_monitor_task(void *param)
             esp32_led_set_state(LED_STATE_READY);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
+}
+
+/* ===================================================
+ * Background task: load TSF SoundFont
+ * Runs on Core 0 at low priority so it doesn't affect audio.
+ * Launchpad shows progress via led_monitor_task polling.
+ * =================================================== */
+static void tsf_load_task(void *param)
+{
+    ESP_LOGI(TAG, "[tsf] Background load task started");
+    if (tsf_engine_init((int)(intptr_t)param) != 0) {
+        ESP_LOGW(TAG, "[tsf] Load task: init failed (drums use Dexed FM)");
+    }
+    vTaskDelete(NULL);
 }
 
 static void print_system_info(void)
@@ -222,10 +294,63 @@ extern "C" void app_main(void)
         (void)dexed_raw_load_voice_from_performance_ini(FMRACK_DEFAULT_PERF);
     }
 
+    // TSF drum engine: launched as a background task after step_seq_init()
+    // so the Launchpad is available to show loading progress.
+
+    // Initialize step sequencer (engine only; Launchpad UI auto-starts on detect)
+    if (step_seq_init() != 0) {
+        ESP_LOGW(TAG, "Step sequencer init failed (non-fatal)");
+    }
+
+    // Launch TSF drum engine loader as a background task.
+    // MIDI (USB host) is started AFTER TSF completes to prevent concurrent
+    // PSRAM allocations from fragmenting the heap during the OGG decode.
+    // The LED monitor task shows Launchpad progress during the wait.
+    ESP_LOGI(TAG, "Launching TSF drum engine background loader...");
+    xTaskCreatePinnedToCore(
+        tsf_load_task,
+        "tsf_load",
+        16384,
+        (void *)(intptr_t)FMRACK_SAMPLE_RATE,
+        tskIDLE_PRIORITY + 1,
+        NULL,
+        0   /* Core 0, away from audio task on Core 1 */
+    );
+
+    // Start LED monitor task now so it can drive the Launchpad
+    // loading progress bar while TSF is decoding in the background.
+    xTaskCreatePinnedToCore(
+        led_monitor_task,
+        "led_mon",
+        2048,
+        NULL,
+        STATUS_TASK_PRIORITY,
+        NULL,
+        0
+    );
+
+    // Wait for TSF to finish before starting USB host (MIDI).
+    // USB host allocates PSRAM buffers for device enumeration; those
+    // allocations fragment the heap and break the float-buffer realloc
+    // chain inside tsf_decode_ogg even when total free PSRAM is sufficient.
+    // TSF decode takes ~2 seconds; app_main blocks here (LED monitor still
+    // runs in its own task and drives the Launchpad progress bar).
+    {
+        int prog;
+        // Phase 1: wait until the TSF task actually starts (prog transitions
+        // from 0 to positive; the task may not have run yet when we check).
+        for (int i = 0; i < 100 && tsf_engine_get_load_progress() == 0; i++) {
+            vTaskDelay(pdMS_TO_TICKS(50));
+        }
+        // Phase 2: wait until TSF finishes (prog=8 success, or prog<0 failure)
+        while ((prog = tsf_engine_get_load_progress()) > 0 && prog < 8) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
+        ESP_LOGI(TAG, "TSF load complete (prog=%d)", prog);
+    }
+
     // =====================
-    // Phase 4: MIDI input (do this *before* starting audio)
-    //           so any USB host cache thrashing or initialization
-    //           latency occurs while we're still silent.
+    // Phase 4: MIDI input (start now that TSF has exclusive PSRAM)
     // =====================
     ESP_LOGI(TAG, "[4/6] Initializing MIDI input (UART + USB host)...");
     if (esp32_midi_init() != 0) {
@@ -234,20 +359,13 @@ extern "C" void app_main(void)
         esp32_midi_start();
     }
 
-    // Initialize step sequencer (engine only; Launchpad UI auto-starts on detect)
-    if (step_seq_init() != 0) {
-        ESP_LOGW(TAG, "Step sequencer init failed (non-fatal)");
-    }
-
     // Pause to let USB host settle.  The hub + keyboard need time to
     // enumerate; the USB ENUM component may encounter CHECK_SHORT_DEV_DESC
-    // on first attempt and retry automatically -- that retry typically
-    // takes 500-800 ms.  2 seconds gives enough headroom before I2S DMA
-    // starts adding its own current draw.  This delay is only at boot.
+    // on first attempt and retry -- that retry typically takes 500-800 ms.
+    // 2 seconds gives enough headroom before I2S DMA starts.
     vTaskDelay(pdMS_TO_TICKS(2000));
 
-    // Register USB audio client after the settle delay so enumerated devices
-    // are already in the USB host's address list when the client scans.
+    // Register USB audio client after the settle delay.
     if (esp32_usb_audio_init() != 0) {
         ESP_LOGW(TAG, "USB audio init failed (non-fatal, continuing without USB audio)");
     }
@@ -321,25 +439,14 @@ extern "C" void app_main(void)
              (unsigned long)esp_get_minimum_free_heap_size());
 
     // =====================
-    // Start LED monitor task (updates LED based on USB/voice state)
-    // =====================
-    xTaskCreatePinnedToCore(
-        led_monitor_task,
-        "led_mon",
-        2048,
-        NULL,
-        STATUS_TASK_PRIORITY,
-        NULL,
-        0
-    );
-
-    // =====================
     // Periodic status logging
     // =====================
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
-        ESP_LOGI(TAG, "Status: voices=%d usb-midi=%s%s usb-audio=%s(ch=%d) wlan=%s apple-midi=%s seq=%s bpm=%d heap=%lu",
+        ESP_LOGI(TAG, "Status: voices=%d tsf=%s(%d) usb-midi=%s%s usb-audio=%s(ch=%d) wlan=%s apple-midi=%s seq=%s bpm=%d heap=%lu",
                  dexed_raw_get_active_voices(),
+                 tsf_engine_is_loaded() ? "loaded" : "off",
+                 tsf_engine_active_voices(),
                  esp32_midi_usb_connected() ? "yes" : "no",
                  esp32_midi_is_launchpad() ? "(LP)" : "",
                  esp32_usb_audio_is_ready() ? "yes" : "no",

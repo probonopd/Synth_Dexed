@@ -178,6 +178,108 @@ void launchpad_clear_all(void)
 }
 
 /* ================================================
+ * TSF loading progress bar on the right column
+ * Bottom cell (row 1, CC 19) = step 1, top (row 8, CC 89) = step 8.
+ * Green = done, Amber = current, Off = pending, Red = failed.
+ * ================================================ */
+
+void launchpad_show_loading_progress(int progress)
+{
+    if (!s_connected) return;
+    static const uint8_t right_ccs[] = {19, 29, 39, 49, 59, 69, 79, 89};
+    const int steps = 8;
+
+    launchpad_batch_begin();
+    for (int i = 0; i < steps; i++) {
+        uint8_t color;
+        if (progress < 0) {
+            /* Step-specific error: -N means step N failed.
+             * Show steps 1..(N-1) green, step N red, rest off. */
+            int failed_step = -progress;
+            if (i < failed_step - 1) {
+                color = LP_COLOR_GREEN;
+            } else if (i == failed_step - 1) {
+                color = LP_COLOR_RED;
+            } else {
+                color = LP_COLOR_OFF;
+            }
+        } else if (progress >= 8 || i < progress - 1) {
+            /* Completed steps (or all done = all green) */
+            color = LP_COLOR_GREEN;
+        } else if (i == progress - 1) {
+            /* Current step in progress */
+            color = LP_COLOR_AMBER;
+        } else {
+            color = LP_COLOR_OFF;
+        }
+        launchpad_batch_set(0, right_ccs[i], color);
+    }
+    launchpad_batch_end();
+}
+
+/* ================================================
+ * TSF error code display — binary encoding on right column
+ *
+ * bit 0 (LSB) = bottom LED (CC 19), bit 7 (MSB) = top LED (CC 89)
+ *
+ * Color per bit encodes the error class at a glance:
+ *   bit 0  CC 19  FILE_NOT_FOUND  → RED    (fatal I/O error)
+ *   bit 1  CC 29  FILE_SIZE       → RED    (fatal I/O error)
+ *   bit 2  CC 39  PSRAM_ALLOC     → RED    (out of PSRAM)
+ *   bit 3  CC 49  SHORT_READ      → RED    (partial read)
+ *   bit 4  CC 59  VORBIS_BUF      → ORANGE (workspace alloc failed)
+ *   bit 5  CC 69  VORBIS_OOM      → ORANGE (bump-allocator overflow)
+ *   bit 6  CC 79  VORBIS_DECODE   → YELLOW (corrupt OGG data)
+ *   bit 7  CC 89  TSF_MALLOC      → RED    (PSRAM exhausted during decode)
+ *   any    —      bit clear       → dim white (shows '0' in binary)
+ * ================================================ */
+
+/* Error color per bit — must match TSF_ERR_* bit order in tsf_engine.h */
+static const uint8_t kTsfErrColor[8] = {
+    LP_COLOR_RED,     /* bit 0: TSF_ERR_FILE_NOT_FOUND */
+    LP_COLOR_RED,     /* bit 1: TSF_ERR_FILE_SIZE      */
+    LP_COLOR_RED,     /* bit 2: TSF_ERR_PSRAM_ALLOC    */
+    LP_COLOR_RED,     /* bit 3: TSF_ERR_SHORT_READ     */
+    LP_COLOR_ORANGE,  /* bit 4: TSF_ERR_VORBIS_BUF     */
+    LP_COLOR_ORANGE,  /* bit 5: TSF_ERR_VORBIS_OOM     */
+    LP_COLOR_YELLOW,  /* bit 6: TSF_ERR_VORBIS_DECODE  */
+    LP_COLOR_RED,     /* bit 7: TSF_ERR_TSF_MALLOC     */
+};
+
+static const char * const kTsfErrName[8] = {
+    "FILE_NOT_FOUND",
+    "FILE_SIZE",
+    "PSRAM_ALLOC",
+    "SHORT_READ",
+    "VORBIS_BUF",
+    "VORBIS_OOM",
+    "VORBIS_DECODE",
+    "TSF_MALLOC",
+};
+
+void launchpad_show_tsf_error(uint8_t error_code)
+{
+    if (!s_connected) return;
+    static const uint8_t right_ccs[] = {19, 29, 39, 49, 59, 69, 79, 89};
+
+    ESP_LOGI(TAG, "TSF error 0x%02X on right column LEDs (bit0=CC19 .. bit7=CC89):", error_code);
+    for (int i = 0; i < 8; i++) {
+        bool bit_set = (error_code >> i) & 1;
+        ESP_LOGI(TAG, "  bit%d  CC%2d  %-18s: %s",
+                 i, right_ccs[i], kTsfErrName[i],
+                 bit_set ? "SET" : "clear");
+    }
+
+    launchpad_batch_begin();
+    for (int i = 0; i < 8; i++) {
+        bool bit_set = (error_code >> i) & 1;
+        uint8_t color = bit_set ? kTsfErrColor[i] : LP_COLOR_WHITE_DIM;
+        launchpad_batch_set(0, right_ccs[i], color);
+    }
+    launchpad_batch_end();
+}
+
+/* ================================================
  * Coordinate mapping helpers
  * ================================================ */
 

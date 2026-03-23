@@ -7,6 +7,7 @@ idf_component_register(
         "esp32_wifi.cpp"
         "esp32_applemidi.cpp"
         "esp32_captive_portal.cpp"
+        "esp32_webserver.cpp"
         "esp32_storage.cpp"
         "esp32_config.cpp"
         "esp32_led.cpp"
@@ -15,7 +16,9 @@ idf_component_register(
         "launchpad.cpp"
         "step_sequencer.cpp"
         "dexed_raw.cpp"
+        "tsf_engine.cpp"
         "atomic_compat.c"
+        "esp32_syslog.c"
     INCLUDE_DIRS
         "."
         "${CMAKE_CURRENT_SOURCE_DIR}/../../src"
@@ -54,6 +57,18 @@ target_sources(${COMPONENT_LIB} PRIVATE
     "${DEXED_SRC_DIR}/pitchenv.cpp"
     "${DEXED_SRC_DIR}/porta.cpp"
     "${DEXED_SRC_DIR}/sin.cpp"
+)
+
+# TSF (TinySoundFont) implementation — compiled separately so the TSF_IMPLEMENTATION
+# define is isolated to this one translation unit.
+target_sources(${COMPONENT_LIB} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tsf_impl.cpp"
+)
+
+# Suppress warnings in third-party code (tsf.h, stb_vorbis.c)
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/tsf_impl.cpp"
+    PROPERTIES COMPILE_FLAGS "-Wno-unused-parameter -Wno-sign-compare -Wno-maybe-uninitialized -Wno-unused-function -Wno-unused-variable -Wno-missing-field-initializers"
 )
 
 # Compile definitions for ESP32 target (applied to ALL sources in this component)

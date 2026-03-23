@@ -334,3 +334,9 @@ log.txt
 buildlog*.txt
 arduino-esp32s3-usbhost/managed_components/
 esp32/managed_components/
+esp32/spiffs_data/*.sfo
+esp32/tools/sfotool/sfotool
+esp32/tools/soundfonts/*.sfo
+esp32/tools/soundfonts/*.ogg
+esp32/tools/soundfonts/*.sf2
+esp32/main/samples.md

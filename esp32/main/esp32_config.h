@@ -264,3 +264,26 @@
 #define SEQ_TASK_CORE               0
 #define SEQ_TASK_PRIORITY           (configMAX_PRIORITIES - 3)
 #define SEQ_TASK_STACK_SIZE         (4 * 1024)
+
+// =====================
+// TSF (TinySoundFont) Drum Engine
+// =====================
+#define TSF_DEFAULT_SFO_PATH        FMRACK_SPIFFS_MOUNT "/drums.sfo"
+#define TSF_DEFAULT_MAX_VOICES      24
+#define TSF_DEFAULT_GAIN_DB         0.0f   /* global gain in dB (0 = unity) */
+
+// =====================
+// SFO Upload Web Server
+// =====================
+#define FMRACK_WEBSERVER_PORT       80
+
+// =====================
+// UDP Syslog Debug
+// =====================
+// Log output is duplicated to UDP datagrams so you can debug over WiFi.
+// Receive on the host:  nc -lup 5140
+// Set to "255.255.255.255" for subnet broadcast (works on most home networks)
+// or set to a specific host IP (e.g. your laptop's address).
+#define FMRACK_SYSLOG_HOST          "255.255.255.255"
+#define FMRACK_SYSLOG_PORT          5140
+

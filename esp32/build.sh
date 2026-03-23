@@ -29,7 +29,7 @@ SPIFFS_DIR="$SCRIPT_DIR/spiffs_data"
 SPIFFS_IMG="$SCRIPT_DIR/build/spiffs.bin"
 if [ -d "$SPIFFS_DIR" ]; then
     python3 "$IDF_PATH/components/spiffs/spiffsgen.py" \
-        0x0F0000 "$SPIFFS_DIR" "$SPIFFS_IMG" \
+        0x4F0000 "$SPIFFS_DIR" "$SPIFFS_IMG" \
         --page-size 256 --block-size 4096
     echo "SPIFFS image created: $SPIFFS_IMG"
 fi

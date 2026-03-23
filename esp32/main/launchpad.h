@@ -117,6 +117,47 @@ void launchpad_batch_end(void);
 void launchpad_refresh_grid(void);
 void launchpad_clear_all(void);
 
+/**
+ * Show a TSF loading progress bar on the right-column buttons (CCs 19..89).
+ *
+ *  progress > 0 && < 8 : in-progress — steps 1..N-1 green, step N amber
+ *  progress == 8        : all green (fully loaded)
+ *  progress < 0         : step-specific failure — -N means step N failed;
+ *                         steps 1..N-1 green, step N red, rest off
+ *
+ * Called once per progress step during boot; after loading ends (success=8
+ * or failure<0) the caller must not call this again so the sequencer can
+ * update the right column via launchpad_refresh_grid().
+ */
+void launchpad_show_loading_progress(int progress);
+
+/**
+ * Show a binary TSF error code on the right-column buttons (CCs 19..89).
+ *
+ * Displays the 8-bit error_code as a binary number on the 8 right-column
+ * LEDs.  Each LED maps to one TSF_ERR_* flag bit (from tsf_engine.h):
+ *
+ *   bit  CC   Flag name          Color when SET    Meaning
+ *   0    19   FILE_NOT_FOUND     RED               File missing from SPIFFS
+ *   1    29   FILE_SIZE          RED               Invalid file size
+ *   2    39   PSRAM_ALLOC        RED               No PSRAM for SFO read buffer
+ *   3    49   SHORT_READ         RED               Partial file read
+ *   4    59   VORBIS_BUF         ORANGE            vorbis workspace alloc failed
+ *   5    69   VORBIS_OOM         ORANGE            vorbis bump-allocator overflowed
+ *   6    79   VORBIS_DECODE      YELLOW            Corrupt or unsupported OGG data
+ *   7    89   TSF_MALLOC         RED               PSRAM exhausted during decode
+ *
+ * An LED is dim-white when its bit is 0 (that error did not occur),
+ * lit in its error color when the bit is 1.
+ *
+ * After 3 s the led_monitor_task automatically transitions from the
+ * step-failure indicator to this binary display.
+ * launchpad_refresh_grid() will overwrite it on next sequencer refresh.
+ *
+ * @param error_code  TSF_ERR_* bitmask from tsf_engine_get_error_detail()
+ */
+void launchpad_show_tsf_error(uint8_t error_code);
+
 /* ---- Input dispatch (called from esp32_midi.cpp) ---- */
 void launchpad_handle_note(uint8_t note, uint8_t velocity);
 void launchpad_handle_cc(uint8_t cc, uint8_t value);
