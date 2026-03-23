@@ -257,3 +257,10 @@
 #define MIDI_TASK_CORE              0
 #define USB_MIDI_TASK_CORE          0
 #define WIFI_TASK_CORE              0
+
+// =====================
+// Step Sequencer Configuration
+// =====================
+#define SEQ_TASK_CORE               0
+#define SEQ_TASK_PRIORITY           (configMAX_PRIORITIES - 3)
+#define SEQ_TASK_STACK_SIZE         (4 * 1024)

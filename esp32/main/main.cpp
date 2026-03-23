@@ -31,6 +31,7 @@
 #include "esp32_usb_audio.h"
 #include "esp32_button.h"
 #include "dexed_raw.h"
+#include "step_sequencer.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -233,6 +234,11 @@ extern "C" void app_main(void)
         esp32_midi_start();
     }
 
+    // Initialize step sequencer (engine only; Launchpad UI auto-starts on detect)
+    if (step_seq_init() != 0) {
+        ESP_LOGW(TAG, "Step sequencer init failed (non-fatal)");
+    }
+
     // Pause to let USB host settle.  The hub + keyboard need time to
     // enumerate; the USB ENUM component may encounter CHECK_SHORT_DEV_DESC
     // on first attempt and retry automatically -- that retry typically
@@ -332,14 +338,17 @@ extern "C" void app_main(void)
     // =====================
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(10000));
-        ESP_LOGI(TAG, "Status: voices=%d usb-midi=%s usb-audio=%s(ch=%d) wlan=%s apple-midi=%s heap=%lu",
+        ESP_LOGI(TAG, "Status: voices=%d usb-midi=%s%s usb-audio=%s(ch=%d) wlan=%s apple-midi=%s seq=%s bpm=%d heap=%lu",
                  dexed_raw_get_active_voices(),
                  esp32_midi_usb_connected() ? "yes" : "no",
+                 esp32_midi_is_launchpad() ? "(LP)" : "",
                  esp32_usb_audio_is_ready() ? "yes" : "no",
                  esp32_usb_audio_get_channels(),
                  esp32_wlan_is_connected() ? "sta" :
                      (esp32_wlan_is_ap_mode() ? "ap" : "off"),
                  esp32_applemidi_is_connected() ? "yes" : "no",
+                 step_seq_is_playing() ? "playing" : "stopped",
+                 step_seq_get_bpm(),
                  (unsigned long)esp_get_free_heap_size());
     }
 }

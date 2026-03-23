@@ -12,6 +12,8 @@ idf_component_register(
         "esp32_led.cpp"
         "esp32_button.cpp"
         "AudioEffectSymphonic.cpp"
+        "launchpad.cpp"
+        "step_sequencer.cpp"
         "dexed_raw.cpp"
         "atomic_compat.c"
     INCLUDE_DIRS

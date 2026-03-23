@@ -22,6 +22,8 @@
 #include "esp32_midi.h"
 #include "esp32_config.h"
 #include "dexed_raw.h"
+#include "launchpad.h"
+#include "step_sequencer.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -205,6 +207,9 @@ typedef struct {
     uint16_t ep_in_mps;            /* Max packet size */
     usb_transfer_t *xfer_in;       /* Persistent IN transfer */
     bool connected;
+    usb_transfer_t *xfer_out;       /* Bulk OUT transfer (NULL if ep_out == 0) */
+    volatile bool xfer_out_busy;    /* true while OUT transfer in-flight */
+    bool is_launchpad;              /* Novation VID detected */
 } midi_device_t;
 
 static midi_device_t s_midi_dev = {};
@@ -260,8 +265,22 @@ static void usb_midi_process_packet(const uint8_t *pkt)
         /* 3-byte channel messages */
         case 0x08: /* Note Off */
         case 0x09: /* Note On */
-        case 0x0A: /* Poly Aftertouch */
+            if (s_midi_dev.is_launchpad) {
+                launchpad_handle_note(b1, (cin == 0x08) ? 0 : b2);
+            } else {
+                dexed_raw_handle_midi(b0, b1, b2);
+            }
+            break;
+
         case 0x0B: /* Control Change */
+            if (s_midi_dev.is_launchpad) {
+                launchpad_handle_cc(b1, b2);
+            } else {
+                dexed_raw_handle_midi(b0, b1, b2);
+            }
+            break;
+
+        case 0x0A: /* Poly Aftertouch */
         case 0x0E: /* Pitch Bend */
             dexed_raw_handle_midi(b0, b1, b2);
             break;
@@ -410,6 +429,18 @@ static void midi_transfer_cb(usb_transfer_t *transfer)
 }
 
 /* ----------------------------------------------------------------
+ * Bulk OUT transfer callback
+ * ---------------------------------------------------------------- */
+static void midi_out_transfer_cb(usb_transfer_t *transfer)
+{
+    s_midi_dev.xfer_out_busy = false;
+    if (transfer->status != USB_TRANSFER_STATUS_COMPLETED &&
+        transfer->status != USB_TRANSFER_STATUS_NO_DEVICE) {
+        ESP_LOGW(TAG, "MIDI OUT transfer status: %d", transfer->status);
+    }
+}
+
+/* ----------------------------------------------------------------
  * Open / close MIDI device
  * ---------------------------------------------------------------- */
 static void close_midi_device(void); /* forward declaration */
@@ -440,6 +471,13 @@ static void open_midi_device(uint8_t dev_addr)
         ESP_LOGI(TAG, "  bNumConfigurations=%d", dev_desc->bNumConfigurations);
     } else {
         ESP_LOGW(TAG, "Could not get device descriptor!");
+    }
+
+    /* Check for Novation Launchpad */
+    bool is_novation = (dev_desc && dev_desc->idVendor == NOVATION_VID);
+    if (is_novation) {
+        ESP_LOGI(TAG, "Novation device detected (VID=0x%04X PID=0x%04X)",
+                 dev_desc->idVendor, dev_desc->idProduct);
     }
 
     /* Log config descriptor */
@@ -495,6 +533,7 @@ static void open_midi_device(uint8_t dev_addr)
     /* Copy scan results and take ownership of dev_hdl. */
     s_midi_dev = scan_dev;
     s_midi_dev.dev_hdl = dev_hdl;
+    s_midi_dev.is_launchpad = is_novation;
 
     /* Claim the MIDI Streaming interface */
     err = usb_host_interface_claim(s_client_hdl, dev_hdl,
@@ -559,6 +598,30 @@ static void open_midi_device(uint8_t dev_addr)
 
     ESP_LOGI(TAG, "USB MIDI keyboard connected -- streaming from EP 0x%02X",
              s_midi_dev.ep_in);
+
+    /* Allocate Bulk OUT transfer if endpoint exists (needed for LED control) */
+    if (s_midi_dev.ep_out != 0) {
+        size_t out_buf_size = 512; /* ample for batched SysEx LED updates */
+        err = usb_host_transfer_alloc(out_buf_size, 0, &s_midi_dev.xfer_out);
+        if (err == ESP_OK) {
+            s_midi_dev.xfer_out->device_handle = dev_hdl;
+            s_midi_dev.xfer_out->bEndpointAddress = s_midi_dev.ep_out;
+            s_midi_dev.xfer_out->callback = midi_out_transfer_cb;
+            s_midi_dev.xfer_out->context = &s_midi_dev;
+            s_midi_dev.xfer_out_busy = false;
+            ESP_LOGI(TAG, "Bulk OUT transfer allocated for EP 0x%02X", s_midi_dev.ep_out);
+        } else {
+            ESP_LOGW(TAG, "Failed to allocate OUT transfer: %s (LED output disabled)",
+                     esp_err_to_name(err));
+            s_midi_dev.xfer_out = NULL;
+        }
+    }
+
+    /* If Launchpad detected, enter Programmer Mode and notify sequencer */
+    if (s_midi_dev.is_launchpad && s_midi_dev.xfer_out) {
+        ESP_LOGI(TAG, "Launchpad X connected -- entering Programmer Mode");
+        launchpad_on_connect();
+    }
 }
 
 static void close_midi_device(void)
@@ -566,6 +629,10 @@ static void close_midi_device(void)
     if (!s_midi_dev.dev_hdl) return;
 
     s_midi_dev.connected = false;
+
+    if (s_midi_dev.is_launchpad) {
+        launchpad_on_disconnect();
+    }
 
     usb_host_interface_release(s_client_hdl, s_midi_dev.dev_hdl,
                                 s_midi_dev.midi_intf_num);
@@ -575,10 +642,15 @@ static void close_midi_device(void)
         s_midi_dev.xfer_in = NULL;
     }
 
+    if (s_midi_dev.xfer_out) {
+        usb_host_transfer_free(s_midi_dev.xfer_out);
+        s_midi_dev.xfer_out = NULL;
+    }
+
     usb_host_device_close(s_client_hdl, s_midi_dev.dev_hdl);
     memset(&s_midi_dev, 0, sizeof(s_midi_dev));
 
-    ESP_LOGI(TAG, "USB MIDI keyboard disconnected");
+    ESP_LOGI(TAG, "USB MIDI device disconnected");
 }
 
 /* ----------------------------------------------------------------
@@ -981,5 +1053,119 @@ bool esp32_midi_usb_connected(void)
     return s_midi_dev.connected;
 #else
     return false;
+#endif
+}
+
+bool esp32_midi_is_launchpad(void)
+{
+#if FMRACK_MIDI_USB_ENABLE
+    return s_midi_dev.connected && s_midi_dev.is_launchpad;
+#else
+    return false;
+#endif
+}
+
+#if FMRACK_MIDI_USB_ENABLE
+/* Wait for previous OUT transfer to complete, with timeout. */
+static bool wait_out_ready(int timeout_ms)
+{
+    int waited = 0;
+    while (s_midi_dev.xfer_out_busy && waited < timeout_ms) {
+        vTaskDelay(pdMS_TO_TICKS(1));
+        waited++;
+    }
+    return !s_midi_dev.xfer_out_busy;
+}
+#endif
+
+int esp32_midi_usb_send_packets(const uint8_t *packets, int len)
+{
+#if FMRACK_MIDI_USB_ENABLE
+    if (!s_midi_dev.connected || !s_midi_dev.xfer_out || len <= 0) return -1;
+    if (len % 4 != 0) return -1;
+    if (!wait_out_ready(50)) return -1;
+
+    if (len > (int)s_midi_dev.xfer_out->data_buffer_size)
+        len = (int)s_midi_dev.xfer_out->data_buffer_size;
+
+    memcpy(s_midi_dev.xfer_out->data_buffer, packets, len);
+    s_midi_dev.xfer_out->num_bytes = len;
+    s_midi_dev.xfer_out_busy = true;
+
+    esp_err_t err = usb_host_transfer_submit(s_midi_dev.xfer_out);
+    if (err != ESP_OK) {
+        s_midi_dev.xfer_out_busy = false;
+        ESP_LOGW(TAG, "MIDI OUT submit failed: %s", esp_err_to_name(err));
+        return -1;
+    }
+    return 0;
+#else
+    return -1;
+#endif
+}
+
+int esp32_midi_usb_send_sysex(const uint8_t *sysex, int len)
+{
+#if FMRACK_MIDI_USB_ENABLE
+    if (!s_midi_dev.connected || !s_midi_dev.xfer_out || len < 2) return -1;
+    if (!wait_out_ready(50)) return -1;
+
+    uint8_t *buf = s_midi_dev.xfer_out->data_buffer;
+    int buf_size = (int)s_midi_dev.xfer_out->data_buffer_size;
+    int pos = 0;
+    int i = 0;
+
+    while (i < len && (pos + 4) <= buf_size) {
+        int remaining = len - i;
+
+        if (remaining > 3) {
+            /* SysEx start or continue: 3 data bytes */
+            buf[pos++] = 0x04;
+            buf[pos++] = sysex[i++];
+            buf[pos++] = sysex[i++];
+            buf[pos++] = sysex[i++];
+        } else if (remaining == 3) {
+            /* SysEx end with 3 bytes */
+            buf[pos++] = 0x07;
+            buf[pos++] = sysex[i++];
+            buf[pos++] = sysex[i++];
+            buf[pos++] = sysex[i++];
+        } else if (remaining == 2) {
+            /* SysEx end with 2 bytes */
+            buf[pos++] = 0x06;
+            buf[pos++] = sysex[i++];
+            buf[pos++] = sysex[i++];
+            buf[pos++] = 0x00;
+        } else {
+            /* SysEx end with 1 byte */
+            buf[pos++] = 0x05;
+            buf[pos++] = sysex[i++];
+            buf[pos++] = 0x00;
+            buf[pos++] = 0x00;
+        }
+    }
+
+    s_midi_dev.xfer_out->num_bytes = pos;
+    s_midi_dev.xfer_out_busy = true;
+
+    esp_err_t err = usb_host_transfer_submit(s_midi_dev.xfer_out);
+    if (err != ESP_OK) {
+        s_midi_dev.xfer_out_busy = false;
+        return -1;
+    }
+    return 0;
+#else
+    return -1;
+#endif
+}
+
+int esp32_midi_usb_send_msg(uint8_t status, uint8_t data1, uint8_t data2)
+{
+#if FMRACK_MIDI_USB_ENABLE
+    uint8_t cin = (status >> 4) & 0x0F;
+    uint8_t pkt[4] = { cin, status, data1, data2 };
+    return esp32_midi_usb_send_packets(pkt, 4);
+#else
+    return -1;
 #endif
 }
