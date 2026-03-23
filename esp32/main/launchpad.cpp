@@ -336,7 +336,7 @@ void launchpad_refresh_grid(void)
 
     launchpad_batch_begin();
 
-    if (mode == SEQ_MODE_DRUM) {
+    if (mode == SEQ_MODE_DRUM || mode == SEQ_MODE_BOTH) {
         /* ---- Q1 + Q2: Step grid for selected drum ---- */
         for (uint8_t row = 5; row <= 8; row++) {
             for (uint8_t col = 1; col <= 8; col++) {
@@ -438,9 +438,9 @@ void launchpad_refresh_grid(void)
     launchpad_batch_set(0, LP_CC_SESSION,
         step_seq_is_playing() ? LP_COLOR_GREEN : LP_COLOR_RED);
     launchpad_batch_set(0, LP_CC_DRUMS,
-        (mode == SEQ_MODE_DRUM) ? LP_COLOR_WHITE : LP_COLOR_WHITE_DIM);
+        (mode == SEQ_MODE_DRUM || mode == SEQ_MODE_BOTH) ? LP_COLOR_WHITE : LP_COLOR_WHITE_DIM);
     launchpad_batch_set(0, LP_CC_KEYS,
-        (mode == SEQ_MODE_MELODIC) ? LP_COLOR_WHITE : LP_COLOR_WHITE_DIM);
+        (mode == SEQ_MODE_MELODIC || mode == SEQ_MODE_BOTH) ? LP_COLOR_WHITE : LP_COLOR_WHITE_DIM);
     launchpad_batch_set(0, LP_CC_USER, LP_COLOR_OFF);
 
     launchpad_batch_end();
@@ -466,7 +466,7 @@ void launchpad_handle_note(uint8_t note, uint8_t velocity)
 
 void launchpad_handle_cc(uint8_t cc, uint8_t value)
 {
-    if (value > 0) {
-        step_seq_handle_button(cc, value);
-    }
+    /* Forward both press (value>0) and release (value==0) so that
+     * step_seq_handle_button can track button-hold state for SEQ_MODE_BOTH. */
+    step_seq_handle_button(cc, value);
 }

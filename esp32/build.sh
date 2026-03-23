@@ -7,6 +7,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# If it exists, source the ESP-IDF export script to set up the environment
+# in case IDF_PATH is not already set
+if [ -f "$HOME/esp/esp-idf/export.sh" ] && [ -z "$IDF_PATH" ]; then
+    source "$HOME/esp/esp-idf/export.sh"
+fi
+
 # Check if IDF_PATH is set
 if [ -z "$IDF_PATH" ]; then
     echo "Error: IDF_PATH not set. Run: . \$IDF_PATH/export.sh"
@@ -27,6 +33,10 @@ idf.py build
 echo "Generating SPIFFS image..."
 SPIFFS_DIR="$SCRIPT_DIR/spiffs_data"
 SPIFFS_IMG="$SCRIPT_DIR/build/spiffs.bin"
+if [ ! -f "$SPIFFS_DIR/drums.sfo" ]; then
+    echo "drums.sfo not found -- running convert_sf2.sh..."
+    bash "$SCRIPT_DIR/tools/convert_sf2.sh"
+fi
 if [ -d "$SPIFFS_DIR" ]; then
     python3 "$IDF_PATH/components/spiffs/spiffsgen.py" \
         0x4F0000 "$SPIFFS_DIR" "$SPIFFS_IMG" \

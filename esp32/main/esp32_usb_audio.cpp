@@ -756,16 +756,24 @@ static void open_audio_device(uint8_t addr)
              (unsigned long)s_dev.dev_sample_rate,
              s_dev.ep_out, s_dev.ep_out_mps, (int)s_dev.need_src);
 
-    /* Verify MPS is large enough for the packet we'll send. */
+    /* Verify and clamp packet size to fit endpoint MPS.
+     * With multi-channel devices at high sample rates, (base_samp_per_ms + 1 fractional)
+     * can exceed the endpoint MPS. Clamp max_frames to ensure packets fit.
+     * Example: 6ch 48kHz 16-bit: 49 frames × 12 bytes = 588 > MPS 576 */
     uint32_t max_frames = s_dev.base_samp_per_ms + 1; /* +1 for fractional rounding */
     uint32_t bytes_per_pkt = max_frames * s_dev.channels * s_dev.bytes_per_sample;
+
+    if (bytes_per_pkt > s_dev.ep_out_mps) {
+        /* Clamp to fit within MPS */
+        max_frames = s_dev.ep_out_mps / (s_dev.channels * s_dev.bytes_per_sample);
+        bytes_per_pkt = max_frames * s_dev.channels * s_dev.bytes_per_sample;
+        ESP_LOGW(TAG, "USB audio: packet size exceeded MPS, clamped to max_frames=%lu (bytes=%lu)",
+                 (unsigned long)max_frames, (unsigned long)bytes_per_pkt);
+    }
+
     ESP_LOGI(TAG, "USB audio: bytes/pkt=%lu (max_frames=%lu × ch=%d × %d), ep MPS=%d",
              (unsigned long)bytes_per_pkt, (unsigned long)max_frames,
              s_dev.channels, s_dev.bytes_per_sample, s_dev.ep_out_mps);
-    if (bytes_per_pkt > s_dev.ep_out_mps) {
-        ESP_LOGW(TAG, "WARNING: packet size %lu > endpoint MPS %d — will truncate!",
-                 (unsigned long)bytes_per_pkt, s_dev.ep_out_mps);
-    }
 
     /* Claim AudioControl interface. */
     if (usb_host_interface_claim(s_client, hdl, ctrl_intf, 0) != ESP_OK) {

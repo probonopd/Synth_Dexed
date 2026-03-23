@@ -25,6 +25,7 @@ extern "C" {
 typedef enum {
     SEQ_MODE_DRUM = 0,
     SEQ_MODE_MELODIC,
+    SEQ_MODE_BOTH,   /* drum + melodic playing simultaneously */
 } seq_mode_t;
 
 /**

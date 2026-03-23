@@ -84,6 +84,10 @@ typedef struct {
     /* Page state */
     uint8_t page;
 
+    /* Mode button hold tracking (for SEQ_MODE_BOTH) */
+    bool drums_btn_held;
+    bool keys_btn_held;
+
     /* Thread safety */
     portMUX_TYPE mux;
 } seq_state_t;
@@ -157,7 +161,7 @@ static void seq_timer_callback(void *arg)
     int step = s->current_step;
 
     /* 3. Trigger notes at current step */
-    if (s->mode == SEQ_MODE_DRUM) {
+    if (s->mode == SEQ_MODE_DRUM || s->mode == SEQ_MODE_BOTH) {
         for (int d = 0; d < SEQ_NUM_DRUM_TRACKS; d++) {
             uint8_t vel = s->drum_tracks[d].steps[step].velocity;
             if (vel > 0 && s->active_note_count < SEQ_ACTIVE_NOTES_MAX) {
@@ -169,7 +173,8 @@ static void seq_timer_callback(void *arg)
                 s->active_note_count++;
             }
         }
-    } else {
+    }
+    if (s->mode == SEQ_MODE_MELODIC || s->mode == SEQ_MODE_BOTH) {
         seq_melodic_step_t *ms = &s->melodic_steps[step];
         for (int n = 0; n < ms->note_count && s->active_note_count < SEQ_ACTIVE_NOTES_MAX; n++) {
             if (ms->notes[n] > 0) {
@@ -295,7 +300,9 @@ bool step_seq_is_playing(void)
 void step_seq_set_mode(seq_mode_t mode)
 {
     s_seq.mode = mode;
-    ESP_LOGI(TAG, "Mode: %s", mode == SEQ_MODE_DRUM ? "DRUM" : "MELODIC");
+    ESP_LOGI(TAG, "Mode: %s",
+             mode == SEQ_MODE_DRUM ? "DRUM" :
+             mode == SEQ_MODE_MELODIC ? "MELODIC" : "BOTH");
     if (launchpad_is_connected()) {
         launchpad_refresh_grid();
     }
@@ -521,7 +528,7 @@ static const uint8_t velocity_levels[16] = {
 
 void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
 {
-    if (s_seq.mode == SEQ_MODE_DRUM) {
+    if (s_seq.mode == SEQ_MODE_DRUM || s_seq.mode == SEQ_MODE_BOTH) {
         if (lp_is_q1(row, col) || lp_is_q2(row, col)) {
             /* Step grid: toggle step for selected drum */
             int step = grid_to_step_index(row, col);
@@ -578,7 +585,7 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
 void step_seq_handle_grid_release(uint8_t row, uint8_t col)
 {
     /* Send Note Off for auditioned sounds */
-    if (s_seq.mode == SEQ_MODE_DRUM) {
+    if (s_seq.mode == SEQ_MODE_DRUM || s_seq.mode == SEQ_MODE_BOTH) {
         if (lp_is_q3(row, col)) {
             int drum = q3_to_drum_index(row, col);
             if (drum >= 0 && drum < SEQ_NUM_DRUM_TRACKS) {
@@ -605,35 +612,65 @@ void step_seq_handle_grid_release(uint8_t row, uint8_t col)
 
 void step_seq_handle_button(uint8_t cc, uint8_t value)
 {
-    (void)value;
-
     switch (cc) {
         case LP_CC_SESSION:
-            step_seq_toggle_play();
+            if (value > 0) step_seq_toggle_play();
             break;
 
         case LP_CC_DRUMS:
-            step_seq_set_mode(SEQ_MODE_DRUM);
+            if (value > 0) {
+                /* Press DRUMS button */
+                if (s_seq.keys_btn_held) {
+                    /* KEYS is already held → enter/toggle BOTH */
+                    if (s_seq.mode == SEQ_MODE_BOTH) {
+                        /* Already in BOTH, exit to MELODIC (KEYS is held) */
+                        step_seq_set_mode(SEQ_MODE_MELODIC);
+                    } else {
+                        /* Enter BOTH */
+                        step_seq_set_mode(SEQ_MODE_BOTH);
+                    }
+                } else {
+                    /* KEYS not held → enter DRUM only */
+                    step_seq_set_mode(SEQ_MODE_DRUM);
+                }
+            }
+            s_seq.drums_btn_held = (value > 0);
             break;
 
         case LP_CC_KEYS:
-            step_seq_set_mode(SEQ_MODE_MELODIC);
+            if (value > 0) {
+                /* Press KEYS button */
+                if (s_seq.drums_btn_held) {
+                    /* DRUMS is already held → enter/toggle BOTH */
+                    if (s_seq.mode == SEQ_MODE_BOTH) {
+                        /* Already in BOTH, exit to DRUM (DRUMS is held) */
+                        step_seq_set_mode(SEQ_MODE_DRUM);
+                    } else {
+                        /* Enter BOTH */
+                        step_seq_set_mode(SEQ_MODE_BOTH);
+                    }
+                } else {
+                    /* DRUMS not held → enter MELODIC only */
+                    step_seq_set_mode(SEQ_MODE_MELODIC);
+                }
+            }
+            s_seq.keys_btn_held = (value > 0);
             break;
 
         case LP_CC_UP:
-            step_seq_adjust_bpm(+5);
+            if (value > 0) step_seq_adjust_bpm(+5);
             break;
 
         case LP_CC_DOWN:
-            step_seq_adjust_bpm(-5);
+            if (value > 0) step_seq_adjust_bpm(-5);
             break;
 
         case LP_CC_LEFT:
-            step_seq_page_left();
+            if (value > 0) step_seq_page_left();
             break;
 
         case LP_CC_RIGHT:
-            step_seq_page_right();
+            if (value > 0) step_seq_page_right();
             break;
 
         default:
