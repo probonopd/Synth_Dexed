@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build upload monitor",
+			"type": "shell",
+			"command": "./build.sh upload monitor",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "flash and monitor",
+			"type": "shell",
+			"command": "./build.sh flash monitor",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}

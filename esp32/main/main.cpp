@@ -232,6 +232,27 @@ static void print_system_info(void)
 
 extern "C" void app_main(void)
 {
+    /* Log the reason for the previous reset so we can diagnose boot loops. */
+    {
+        esp_reset_reason_t reason = esp_reset_reason();
+        const char *reason_str = "UNKNOWN";
+        switch (reason) {
+            case ESP_RST_POWERON:  reason_str = "POWERON";  break;
+            case ESP_RST_EXT:      reason_str = "EXT_RESET"; break;
+            case ESP_RST_SW:       reason_str = "SW_RESET";  break;
+            case ESP_RST_PANIC:    reason_str = "PANIC";     break;
+            case ESP_RST_INT_WDT:  reason_str = "INT_WDT";  break;
+            case ESP_RST_TASK_WDT: reason_str = "TASK_WDT";  break;
+            case ESP_RST_WDT:      reason_str = "WDT_OTHER"; break;
+            case ESP_RST_DEEPSLEEP:reason_str = "DEEPSLEEP"; break;
+            case ESP_RST_BROWNOUT: reason_str = "BROWNOUT";  break;
+            case ESP_RST_SDIO:     reason_str = "SDIO";      break;
+            case ESP_RST_USB:      reason_str = "USB";       break;
+            default: break;
+        }
+        ESP_LOGW(TAG, "*** RESET REASON: %s (%d) ***", reason_str, (int)reason);
+    }
+
     // =====================
     // Very first: init LED so we can show boot status
     // =====================

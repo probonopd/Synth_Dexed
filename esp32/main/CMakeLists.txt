@@ -38,6 +38,15 @@ idf_component_register(
         esp_http_server
 )
 
+# Access the ESP-IDF USB host private headers so we can use usbh_ep_alloc()
+# directly.  This lets us allocate only the Bulk IN endpoint for MIDI devices,
+# saving one HCD channel per device (the ESP32-S3 DWC OTG only has 8 hardware
+# host channels, and usb_host_interface_claim() would allocate a pipe for the
+# unused Bulk OUT endpoint too).
+target_include_directories(${COMPONENT_LIB} PRIVATE
+    "$ENV{IDF_PATH}/components/usb/private_include"
+)
+
 # Add the Dexed engine source files
 set(DEXED_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
 
