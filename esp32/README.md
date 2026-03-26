@@ -62,10 +62,9 @@ Connect an I2S DAC module to the ESP32-S3:
 
 | ESP32-S3 GPIO | DAC Pin  | Signal     |
 |---------------|----------|------------|
-| GPIO 0        | MCLK     | Master Clock (256×fs = 12.288 MHz) |
-| GPIO 5        | BCK      | Bit Clock  |
-| GPIO 6        | WS/LRCK  | Word Select / Left-Right Clock |
-| GPIO 7        | DIN/SDIN | Serial Data |
+| GPIO 6        | BCK      | Bit Clock  |
+| GPIO 7        | WS/LRCK  | Word Select / Left-Right Clock |
+| GPIO 15       | DIN/SDIN | Serial Data |
 | 3.3V          | VCC      | Power      |
 | GND           | GND      | Ground     |
 

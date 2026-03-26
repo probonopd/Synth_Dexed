@@ -175,6 +175,23 @@
 #define FMRACK_BOOT_BUTTON_PIN  0
 
 // =====================
+// Estardyn SH1106 OLED + Rotary Encoder + Buttons
+// =====================
+// OLED I2C interface
+#define OLED_I2C_SDA_PIN        9
+#define OLED_I2C_SCL_PIN        10
+#define OLED_I2C_FREQ_HZ        400000
+
+// Front panel buttons
+#define CONFIRM_BTN_PIN         46
+#define BAK_BTN_PIN             14
+
+// Rotary encoder
+#define ENCODER_PUSH_PIN        11
+#define ENCODER_TRA_PIN         12   // A channel
+#define ENCODER_TRB_PIN         13   // B channel
+
+// =====================
 // Audio processing constants
 // =====================
 // I2S DMA ring: 8 descriptors x 256 frames = ~46 ms DMA buffer headroom.
@@ -239,7 +256,7 @@
 #ifdef CONFIG_FMRACK_CAPTIVE_AP_SSID
 #define FMRACK_CAPTIVE_AP_SSID CONFIG_FMRACK_CAPTIVE_AP_SSID
 #else
-#define FMRACK_CAPTIVE_AP_SSID "Synth-Dexed-Setup"
+#define FMRACK_CAPTIVE_AP_SSID "FMSynthESP-Setup"
 #endif
 
 // =====================

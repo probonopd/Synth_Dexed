@@ -429,6 +429,112 @@ void launchpad_refresh_grid(void)
             }
         }
     }
+    else if (mode == SEQ_MODE_CIRCLE) {
+        /* ---- Circle of Fifths chord mode ----
+         * Full 8x8 grid shows chords arranged by circle of fifths.
+         * Columns = circle position (left=subdominant, right=dominant)
+         * Rows 1-2: Major, 3-4: Minor, 5-6: Dom7, 7-8: Min7
+         *
+         * Colors encode momentum-based suggestions:
+         * - Currently playing chord = WHITE (bright)
+         * - Strong suggestion (score 5) = CYAN
+         * - Good suggestion (score 4) = GREEN
+         * - Moderate suggestion (3) = YELLOW
+         * - Weak (2) = dim ORANGE
+         * - Distant (0-1) = dim
+         * Tonic chord always gets a blue tint.
+         */
+        const harmonic_state_t *h = step_seq_get_harmonic_state();
+        uint8_t cur_abs_root = (h->key + h->chord_root) % 12;
+        chord_type_t cur_chord_type = h->chord_type;
+
+        for (uint8_t row = 1; row <= 8; row++) {
+            for (uint8_t col = 1; col <= 8; col++) {
+                uint8_t root;
+                chord_type_t ctype;
+                step_seq_get_circle_chord(row, col, &root, &ctype);
+
+                uint8_t color;
+
+                /* Is this the currently selected chord? */
+                if (root == cur_abs_root && ctype == cur_chord_type) {
+                    color = LP_CURRENT_CHORD;
+                }
+                /* Tonic of the key (special color regardless of suggestion) */
+                else if (root == h->key) {
+                    color = LP_TONIC_CHORD;
+                }
+                else {
+                    /* Use suggestion engine for coloring */
+                    uint8_t score = step_seq_get_suggestion_score(root);
+
+                    if (score >= 5) {
+                        color = LP_SUGGESTED_CHORD;    /* Cyan - strongest */
+                    } else if (score >= 4) {
+                        color = LP_CHORD_TONE;         /* Green - good */
+                    } else if (score >= 3) {
+                        color = LP_SUBDOMINANT_CHORD;  /* Green dim / Yellow */
+                    } else if (score >= 2) {
+                        color = LP_DOMINANT_CHORD;      /* Orange */
+                    } else {
+                        color = LP_COLOR_WHITE_DIM;     /* Distant */
+                    }
+                }
+
+                launchpad_batch_set(0, lp_pad_note(row, col), color);
+            }
+        }
+    }
+    else if (mode == SEQ_MODE_FIELD) {
+        /* ---- Melodic Field mode (2 rows per octave, 12 chromatic tones) ----
+         * Rows 1-6 only (rows 7-8 are disabled).
+         * Odd rows (1,3,5):  semitones 0-5  (C through F)
+         * Even rows (2,4,6): semitones 6-11 (F# through B)
+         * Row pairs: (1-2, 3-4, 5-6) = octaves (base, base+1, base+2)
+         *
+         * Only harmonic notes (chord/scale) are lit. Non-harmonic (red) notes are off.
+         */
+        const harmonic_state_t *h = step_seq_get_harmonic_state();
+        uint8_t abs_chord_root = (h->key + h->chord_root) % 12;
+
+        for (uint8_t row = 1; row <= 6; row++) {
+            for (uint8_t col = 1; col <= 6; col++) {
+                uint8_t note = step_seq_get_field_note(row, col);
+                uint8_t pc = note % 12;
+                uint8_t color;
+
+                /* Root of current chord = brightest blue */
+                if (pc == abs_chord_root) {
+                    color = LP_CHORD_ROOT;
+                }
+                /* Other chord tones = green */
+                else if (step_seq_is_chord_tone(pc, abs_chord_root, h->chord_type)) {
+                    color = LP_CHORD_TONE;
+                }
+                /* Scale tones = yellow (appears at tension >= 1) */
+                else if (h->tension >= 1 && step_seq_is_scale_tone(pc, h->key, h->scale_type)) {
+                    color = LP_SCALE_TONE;
+                }
+                /* Tension tones = orange (appears at tension >= 2) */
+                else if (h->tension >= 2) {
+                    color = LP_TENSION_TONE;
+                }
+                /* Non-harmonic (avoid) notes are OFF - not lit */
+                else {
+                    color = LP_COLOR_OFF;
+                }
+
+                launchpad_batch_set(0, lp_pad_note(row, col), color);
+            }
+        }
+        
+        /* Disable rows 7-8 completely */
+        for (uint8_t row = 7; row <= 8; row++) {
+            for (uint8_t col = 1; col <= 6; col++) {
+                launchpad_batch_set(0, lp_pad_note(row, col), LP_COLOR_OFF);
+            }
+        }
+    }
 
     /* ---- Top row buttons ---- */
     launchpad_batch_set(0, LP_CC_UP,      LP_COLOR_YELLOW);
@@ -442,6 +548,51 @@ void launchpad_refresh_grid(void)
     launchpad_batch_set(0, LP_CC_KEYS,
         (mode == SEQ_MODE_MELODIC || mode == SEQ_MODE_BOTH) ? LP_COLOR_WHITE : LP_COLOR_WHITE_DIM);
     launchpad_batch_set(0, LP_CC_USER, LP_COLOR_OFF);
+
+    /* ---- Right column buttons: mode indicators ---- */
+    bool is_seq = (mode == SEQ_MODE_DRUM || mode == SEQ_MODE_MELODIC || mode == SEQ_MODE_BOTH);
+    launchpad_batch_set(0, LP_CC_MODE_SEQ,
+        is_seq ? LP_MODE_ACTIVE : LP_MODE_INACTIVE);
+    launchpad_batch_set(0, LP_CC_MODE_CIRCLE,
+        (mode == SEQ_MODE_CIRCLE) ? LP_COLOR_BLUE : LP_MODE_INACTIVE);
+    launchpad_batch_set(0, LP_CC_MODE_FIELD,
+        (mode == SEQ_MODE_FIELD) ? LP_COLOR_GREEN : LP_MODE_INACTIVE);
+    
+    /* Key selection indicator: color represents key */
+    if (mode == SEQ_MODE_CIRCLE || mode == SEQ_MODE_FIELD) {
+        const harmonic_state_t *h = step_seq_get_harmonic_state();
+        /* Colors cycle through palette for different keys */
+        static const uint8_t key_colors[12] = {
+            LP_COLOR_WHITE, LP_COLOR_RED, LP_COLOR_ORANGE, LP_COLOR_YELLOW,
+            LP_COLOR_LIME, LP_COLOR_GREEN, LP_COLOR_CYAN, LP_COLOR_BLUE,
+            LP_COLOR_PURPLE, LP_COLOR_MAGENTA, LP_COLOR_PINK, LP_COLOR_PEACH
+        };
+        launchpad_batch_set(0, LP_CC_KEY_SELECT, key_colors[h->key]);
+        
+        /* Scale type indicator */
+        static const uint8_t scale_colors[SCALE_TYPE_COUNT] = {
+            LP_COLOR_WHITE, LP_COLOR_BLUE, LP_COLOR_GREEN, LP_COLOR_ORANGE,
+            LP_COLOR_PURPLE, LP_COLOR_YELLOW, LP_COLOR_RED, LP_COLOR_CYAN,
+            LP_COLOR_MAGENTA
+        };
+        launchpad_batch_set(0, LP_CC_SCALE_SELECT, scale_colors[h->scale_type]);
+        
+        /* Tension level indicator */
+        static const uint8_t tension_colors[4] = {
+            LP_COLOR_GREEN, LP_COLOR_YELLOW, LP_COLOR_ORANGE, LP_COLOR_RED
+        };
+        launchpad_batch_set(0, LP_CC_TENSION, tension_colors[h->tension]);
+        
+        launchpad_batch_set(0, LP_CC_RECORD_PROG, LP_COLOR_WHITE_DIM);
+        launchpad_batch_set(0, LP_CC_CLEAR, LP_COLOR_RED);
+    } else {
+        /* In sequencer modes, right column buttons 4-8 are dimmed */
+        launchpad_batch_set(0, LP_CC_KEY_SELECT, LP_COLOR_OFF);
+        launchpad_batch_set(0, LP_CC_SCALE_SELECT, LP_COLOR_OFF);
+        launchpad_batch_set(0, LP_CC_TENSION, LP_COLOR_OFF);
+        launchpad_batch_set(0, LP_CC_RECORD_PROG, LP_COLOR_OFF);
+        launchpad_batch_set(0, LP_CC_CLEAR, LP_COLOR_OFF);
+    }
 
     launchpad_batch_end();
 }

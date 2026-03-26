@@ -25,8 +25,49 @@ extern "C" {
 typedef enum {
     SEQ_MODE_DRUM = 0,
     SEQ_MODE_MELODIC,
-    SEQ_MODE_BOTH,   /* drum + melodic playing simultaneously */
+    SEQ_MODE_BOTH,      /* drum + melodic playing simultaneously */
+    SEQ_MODE_CIRCLE,    /* Circle of Fifths chord progression mode */
+    SEQ_MODE_FIELD,     /* Melodic field mode - notes guided by current chord */
 } seq_mode_t;
+
+/* Chord types */
+typedef enum {
+    CHORD_MAJ = 0,
+    CHORD_MIN,
+    CHORD_DOM7,
+    CHORD_MIN7,
+    CHORD_DIM,
+    CHORD_AUG,
+    CHORD_SUS4,
+    CHORD_SUS2,
+    CHORD_TYPE_COUNT
+} chord_type_t;
+
+/* Scale types */
+typedef enum {
+    SCALE_MAJOR = 0,
+    SCALE_MINOR,
+    SCALE_DORIAN,
+    SCALE_MIXOLYDIAN,
+    SCALE_PHRYGIAN,
+    SCALE_LYDIAN,
+    SCALE_LOCRIAN,
+    SCALE_PENTATONIC_MAJ,
+    SCALE_PENTATONIC_MIN,
+    SCALE_TYPE_COUNT
+} scale_type_t;
+
+/* Harmonic state - tracks current key, chord, and scale context */
+typedef struct {
+    uint8_t key;           /* 0-11 (C=0, C#=1, ... B=11) */
+    uint8_t chord_root;    /* 0-11 relative to key */
+    chord_type_t chord_type;
+    scale_type_t scale_type;
+    uint8_t tension;       /* 0-3 tension level affecting note selection */
+    uint8_t prev_chord_root;   /* previous chord root (for suggestion engine) */
+    chord_type_t prev_chord_type;
+    bool has_prev_chord;       /* true after first chord press */
+} harmonic_state_t;
 
 /**
  * Initialize the step sequencer.
@@ -76,6 +117,31 @@ uint8_t step_seq_get_base_octave(void);
 void step_seq_page_left(void);
 void step_seq_page_right(void);
 uint8_t step_seq_get_page(void);
+
+/* ---- Harmonic state (Circle/Field modes) ---- */
+void step_seq_set_key(uint8_t key);
+uint8_t step_seq_get_key(void);
+void step_seq_set_chord(uint8_t root, chord_type_t type);
+uint8_t step_seq_get_chord_root(void);
+chord_type_t step_seq_get_chord_type(void);
+void step_seq_set_scale(scale_type_t scale);
+scale_type_t step_seq_get_scale(void);
+void step_seq_set_tension(uint8_t tension);
+uint8_t step_seq_get_tension(void);
+const harmonic_state_t* step_seq_get_harmonic_state(void);
+
+/* Suggestion engine: score how well to_root follows the last chord (0-5). */
+uint8_t step_seq_get_suggestion_score(uint8_t to_root);
+
+/* Field mode: get the MIDI note mapped to a grid position (row/col 1-8). */
+uint8_t step_seq_get_field_note(uint8_t row, uint8_t col);
+
+/* Check if a pitch class is a chord/scale tone for display use. */
+bool step_seq_is_chord_tone(uint8_t pitch_class, uint8_t chord_root, chord_type_t chord_type);
+bool step_seq_is_scale_tone(uint8_t pitch_class, uint8_t key, scale_type_t scale_type);
+
+/* Get the chord root (semitone) for a circle grid position. */
+void step_seq_get_circle_chord(uint8_t row, uint8_t col, uint8_t* out_root, chord_type_t* out_type);
 
 /* ---- Input handlers (called from launchpad.cpp) ---- */
 void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity);

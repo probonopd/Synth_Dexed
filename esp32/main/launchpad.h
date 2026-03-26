@@ -63,6 +63,16 @@ static inline bool lp_is_q4(uint8_t row, uint8_t col) {
 #define LP_CC_RIGHT_COL_7   79
 #define LP_CC_RIGHT_COL_8   89
 
+/* ---- Right column button function aliases ---- */
+#define LP_CC_MODE_SEQ      LP_CC_RIGHT_COL_1   /* Step Sequencer mode */
+#define LP_CC_MODE_CIRCLE   LP_CC_RIGHT_COL_2   /* Circle of Fifths mode */
+#define LP_CC_MODE_FIELD    LP_CC_RIGHT_COL_3   /* Melodic Field mode */
+#define LP_CC_KEY_SELECT    LP_CC_RIGHT_COL_4   /* Cycle through keys */
+#define LP_CC_SCALE_SELECT  LP_CC_RIGHT_COL_5   /* Cycle scale types */
+#define LP_CC_TENSION       LP_CC_RIGHT_COL_6   /* Cycle tension level */
+#define LP_CC_RECORD_PROG   LP_CC_RIGHT_COL_7   /* Record chord progression */
+#define LP_CC_CLEAR         LP_CC_RIGHT_COL_8   /* Clear/Reset */
+
 /* ---- Launchpad X Color Palette (velocity values) ---- */
 #define LP_COLOR_OFF            0
 #define LP_COLOR_WHITE_DIM      1
@@ -91,6 +101,20 @@ static inline bool lp_is_q4(uint8_t row, uint8_t col) {
 #define LP_SEQ_STEP_ACTIVE      72   /* warm amber */
 #define LP_SEQ_SELECTED         LP_COLOR_WHITE
 #define LP_SEQ_EMPTY            LP_COLOR_OFF
+
+/* ---- Semantic colors for harmonic modes ---- */
+#define LP_CHORD_ROOT           LP_COLOR_BLUE       /* Root of chord */
+#define LP_CHORD_TONE           LP_COLOR_GREEN      /* 3rd, 5th, 7th */
+#define LP_SCALE_TONE           LP_COLOR_YELLOW     /* Scale notes */
+#define LP_TENSION_TONE         LP_COLOR_ORANGE     /* Tension notes */
+#define LP_AVOID_TONE           LP_COLOR_RED        /* Avoid notes */
+#define LP_CURRENT_CHORD        LP_COLOR_WHITE      /* Currently selected chord */
+#define LP_SUGGESTED_CHORD      LP_COLOR_CYAN       /* Suggested next chord */
+#define LP_TONIC_CHORD          LP_COLOR_BLUE       /* Tonic-related chords */
+#define LP_DOMINANT_CHORD       LP_COLOR_ORANGE     /* Dominant chords */
+#define LP_SUBDOMINANT_CHORD    LP_COLOR_GREEN      /* Subdominant chords */
+#define LP_MODE_ACTIVE          LP_COLOR_WHITE      /* Active mode indicator */
+#define LP_MODE_INACTIVE        LP_COLOR_WHITE_DIM  /* Inactive mode indicator */
 
 /* ---- Lifecycle ---- */
 void launchpad_init(void);
