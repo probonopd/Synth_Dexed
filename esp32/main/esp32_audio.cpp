@@ -25,9 +25,11 @@
 
 #include "esp32_audio.h"
 #include "esp32_config.h"
+#include "esp32_led.h"
 #include "dexed_raw.h"
 #include "tsf_engine.h"
 #include "esp32_usb_audio.h"
+#include "AudioEffectFreeverb.h"
 #include "AudioEffectSymphonic.h"
 
 #include "freertos/FreeRTOS.h"
@@ -59,6 +61,10 @@ static TaskHandle_t s_audio_stats_task_handle = NULL;
 // Mono int16 render buffer (internal SRAM).  The render task writes here,
 // then expands to stereo into the pre-render ring.
 static int16_t *s_mono_buffer = NULL;
+
+// Freeverb (mono-in / mono-out, before symphonic in the chain)
+static FMRack::AudioEffectFreeverb *s_freeverb = nullptr;
+static float *s_freeverb_delay_mem = nullptr;  // separate PSRAM delay-line buffer
 
 // SPX90 Symphonic effect (mono-in / stereo-out tri-chorus)
 static FMRack::AudioEffectSymphonic *s_symphonic = nullptr;
@@ -274,6 +280,44 @@ int esp32_audio_init(void)
         return -1;
     }
 
+    // Initialize Freeverb (mono reverb).  Delay-line memory (~55 KB) goes to
+    // PSRAM; the small control struct goes to internal SRAM for fast access.
+    // Block-at-a-time processing keeps each delay buffer in PSRAM cache.
+    // NOTE: use heap_caps_malloc (NOT calloc) — the constructor already memsets
+    // each sub-buffer.  A 55 KB calloc zero-fill on PSRAM ties up the SPI0 bus
+    // long enough to break concurrent USB enumeration (CHECK_SHORT_DEV_DESC).
+    if (!s_freeverb) {
+        const size_t delay_bytes = FMRack::AudioEffectFreeverb::TOTAL_DELAY_FLOATS * sizeof(float);
+        s_freeverb_delay_mem = (float *)heap_caps_malloc(delay_bytes, MALLOC_CAP_SPIRAM);
+        if (!s_freeverb_delay_mem) {
+            ESP_LOGW(TAG, "PSRAM alloc failed for Freeverb delay mem");
+        } else {
+            // Object also in PSRAM — keeps internal SRAM free for USB host
+            // DMA buffers.  Block-at-a-time processing keeps the small
+            // per-comb scalars in the 32 KB PSRAM data-cache anyway.
+            void *obj_mem = heap_caps_malloc(sizeof(FMRack::AudioEffectFreeverb),
+                                             MALLOC_CAP_SPIRAM);
+            if (obj_mem) {
+                s_freeverb = new (obj_mem) FMRack::AudioEffectFreeverb(s_freeverb_delay_mem);
+                // Reverb tuning: longer decay (~2s) with brighter high-frequency tail
+                // to prevent perceived «cut-off» on short FM notes.
+                // FIXED_GAIN raised to 0.04× so reverb fills quickly on short notes.
+                s_freeverb->setRoomSize(0.88f); // ~2 s T60
+                s_freeverb->setDamping(0.2f);   // less HF damping → brighter tail
+                s_freeverb->setWet(0.55f);      // wet moderately loud (FIXED_GAIN raised)
+                s_freeverb->setDry(0.4f);       // dry slightly lower so tail is audible
+                s_freeverb->setEnabled(true);
+                esp32_led_set_fx_mode(0);       // both effects active (default)
+                ESP_LOGI(TAG, "Freeverb initialized (enabled, delay=%u bytes in PSRAM)",
+                         (unsigned)delay_bytes);
+            } else {
+                heap_caps_free(s_freeverb_delay_mem);
+                s_freeverb_delay_mem = nullptr;
+                ESP_LOGW(TAG, "Failed to allocate Freeverb (disabled)");
+            }
+        }
+    }
+
     // Initialize SPX90 Symphonic effect.
     // Allocated in PSRAM (delay lines ~17KB); the hot-path float working
     // buffers (s_mono_float, s_left_float, s_right_float) are already in
@@ -370,14 +414,17 @@ static IRAM_ATTR void audio_render_task(void *param)
                 s_mono_float[i] = static_cast<float>(s_mono_buffer[i]) * scale_in;
             }
 
+            // Freeverb: mono-in / mono-out (modifies s_mono_float in-place)
+            if (s_freeverb)
+                s_freeverb->process(s_mono_float, num_samples);
+
             // Process: mono → stereo with tri-chorus effect
             s_symphonic->process(s_mono_float, s_left_float, s_right_float, num_samples);
 
             // Convert stereo float → interleaved int16 into the pre-ring slot
             for (int i = 0; i < num_samples; i++) {
-                // Apply 4x gain boost to symphonic output (2x * 2x)
-                float fL = s_left_float[i] * 32768.0f * 4.0f;
-                float fR = s_right_float[i] * 32768.0f * 4.0f;
+                float fL = s_left_float[i] * 32768.0f;
+                float fR = s_right_float[i] * 32768.0f;
 
                 // Clamp to int16 range
                 if (fL >  32767.0f) fL =  32767.0f;
@@ -397,28 +444,32 @@ static IRAM_ATTR void audio_render_task(void *param)
                 dst[i * 2 + 1] = sR;
             }
         } else {
-            // Bypass: expand mono → interleaved stereo with 4x gain (consistent with symphonic on).
+            // Freeverb still runs when symphonic is bypassed (mono path).
+            if (s_freeverb && s_freeverb->isEnabled()) {
+                const float scale_in = 1.0f / 32768.0f;
+                for (int i = 0; i < num_samples; i++) {
+                    s_mono_float[i] = static_cast<float>(s_mono_buffer[i]) * scale_in;
+                }
+                s_freeverb->process(s_mono_float, num_samples);
+                for (int i = 0; i < num_samples; i++) {
+                    float f = s_mono_float[i] * 32768.0f;
+                    if (f >  32767.0f) f =  32767.0f;
+                    if (f < -32768.0f) f = -32768.0f;
+                    s_mono_buffer[i] = static_cast<int16_t>(f);
+                }
+            }
+
+            // Bypass: expand mono → interleaved stereo (no gain adjustment).
             for (int i = 0; i < num_samples; i++) {
-                // Apply same 4x gain as symphonic path to maintain consistent volume
-                float fL = static_cast<float>(s_mono_buffer[i]) * 4.0f;
-                float fR = static_cast<float>(s_mono_buffer[i]) * 4.0f;
+                int16_t s = s_mono_buffer[i];
 
-                // Clamp to int16 range
-                if (fL >  32767.0f) fL =  32767.0f;
-                if (fL < -32768.0f) fL = -32768.0f;
-                if (fR >  32767.0f) fR =  32767.0f;
-                if (fR < -32768.0f) fR = -32768.0f;
-
-                int16_t sL = static_cast<int16_t>(fL);
-                int16_t sR = static_cast<int16_t>(fR);
-
-                // Peak/clip diagnostics on left channel (representative)
-                int16_t abs_s = (sL < 0) ? (int16_t)-sL : sL;
+                // Peak/clip diagnostics
+                int16_t abs_s = (s < 0) ? (int16_t)-s : s;
                 if (abs_s > peak) peak = abs_s;
-                if (sL == INT16_MAX || sL == INT16_MIN) clip++;
+                if (s == INT16_MAX || s == INT16_MIN) clip++;
 
-                dst[i * 2]     = sL;
-                dst[i * 2 + 1] = sR;
+                dst[i * 2]     = s;
+                dst[i * 2 + 1] = s;
             }
         }
 
@@ -787,6 +838,16 @@ void esp32_audio_stop(void)
         s_mono_buffer = NULL;
     }
 
+    if (s_freeverb) {
+        s_freeverb->~AudioEffectFreeverb();
+        heap_caps_free(s_freeverb);
+        s_freeverb = nullptr;
+    }
+    if (s_freeverb_delay_mem) {
+        heap_caps_free(s_freeverb_delay_mem);
+        s_freeverb_delay_mem = nullptr;
+    }
+
     if (s_symphonic) {
         s_symphonic->~AudioEffectSymphonic();
         heap_caps_free(s_symphonic);
@@ -806,7 +867,50 @@ void esp32_audio_toggle_symphonic(void)
     if (s_symphonic) {
         bool current = s_symphonic->isEnabled();
         s_symphonic->setEnabled(!current);
-        // Note: No logging here — this is called from ISR context where ESP_LOGI is unsafe.
-        // The rendering task will reflect the state change on the next block.
     }
+}
+
+void esp32_audio_toggle_freeverb(void)
+{
+    if (s_freeverb) {
+        bool current = s_freeverb->isEnabled();
+        s_freeverb->setEnabled(!current);
+    }
+}
+
+int esp32_audio_get_fx_mode(void)
+{
+    bool sym = s_symphonic ? s_symphonic->isEnabled() : false;
+    bool rev = s_freeverb  ? s_freeverb->isEnabled()  : false;
+    if  (sym && rev)  return 0;  // both
+    if  (!sym && rev) return 1;  // reverb only
+    if  (sym && !rev) return 2;  // symphonic only
+    return 3;                    // neither
+}
+
+void esp32_audio_cycle_effects(void)
+{
+    // Cycle through 4 states:
+    //   0: both ON  →  1: reverb only  →  2: symphonic only  →  3: neither  →  0
+    bool sym = s_symphonic ? s_symphonic->isEnabled() : false;
+    bool rev = s_freeverb  ? s_freeverb->isEnabled()  : false;
+
+    if (sym && rev) {
+        // both → reverb only
+        if (s_symphonic) s_symphonic->setEnabled(false);
+    } else if (!sym && rev) {
+        // reverb only → symphonic only
+        if (s_freeverb)  s_freeverb->setEnabled(false);
+        if (s_symphonic) s_symphonic->setEnabled(true);
+    } else if (sym && !rev) {
+        // symphonic only → neither
+        if (s_symphonic) s_symphonic->setEnabled(false);
+    } else {
+        // neither → both
+        if (s_symphonic) s_symphonic->setEnabled(true);
+        if (s_freeverb)  s_freeverb->setEnabled(true);
+    }
+
+    // Update LED fx-mode indicator immediately (ISR-safe volatile write)
+    esp32_led_set_fx_mode(esp32_audio_get_fx_mode());
 }

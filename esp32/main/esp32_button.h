@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,6 +24,13 @@ int esp32_button_init(void);
  * Deinitialize button handler.
  */
 void esp32_button_deinit(void);
+
+/**
+ * Returns true when the user has long-pressed to enable WLAN mode.
+ * Stays true until another long-press disables WLAN.
+ * Use this to drive the LED indicator during wlan_init().
+ */
+bool esp32_button_is_wlan_mode(void);
 
 #ifdef __cplusplus
 }

@@ -51,6 +51,26 @@ bool esp32_audio_is_running(void);
  */
 void esp32_audio_toggle_symphonic(void);
 
+/**
+ * Toggle the Freeverb reverb on/off.
+ * Thread-safe - can be called from any task.
+ */
+void esp32_audio_toggle_freeverb(void);
+
+/**
+ * Cycle through 4 effect states:
+ *   both ON → reverb only → symphonic only → neither → both ON
+ * Thread-safe - can be called from ISR context.
+ */
+void esp32_audio_cycle_effects(void);
+
+/**
+ * Get the current effects mode.
+ * @return 0=both ON, 1=reverb only, 2=symphonic only, 3=neither
+ * ISR-safe.
+ */
+int esp32_audio_get_fx_mode(void);
+
 #ifdef __cplusplus
 }
 #endif

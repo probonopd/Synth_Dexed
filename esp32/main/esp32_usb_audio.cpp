@@ -925,8 +925,11 @@ static void usb_audio_task(void *arg)
     }
 
     while (s_running) {
-        /* 1 ms timeout keeps us responsive to isochronous callbacks. */
-        usb_host_client_handle_events(s_client, pdMS_TO_TICKS(1));
+        /* When streaming, 1 ms timeout keeps us responsive to isochronous
+         * callbacks.  When idle (no device), back off to 50 ms to save CPU
+         * — there is nothing time-critical to service. */
+        const int timeout_ms = (s_dev.state == AUDIO_IDLE) ? 50 : 1;
+        usb_host_client_handle_events(s_client, pdMS_TO_TICKS(timeout_ms));
 
         /* Process connect action. */
         if ((s_actions & ACTION_OPEN) && s_dev.state == AUDIO_IDLE) {
@@ -969,20 +972,40 @@ static void usb_audio_task(void *arg)
         /* Reset rescan counter when not idle (device connected). */
         if (s_dev.state != AUDIO_IDLE) s_rescan_count = 0;
 
-        /* Heartbeat every ~2 s (2000 × 1 ms) — fast enough to catch issues. */
+        /* Heartbeat — only log when state or counters change, avoiding
+         * log spam when the system is idle or streaming steadily.
+         * Check every ~2 s based on elapsed iterations (varies with timeout). */
         static uint32_t s_loop_count = 0;
-        if (++s_loop_count >= 2000) {
+        static int      s_last_state = -1;
+        static uint32_t s_last_ok    = 0;
+        static uint32_t s_last_err   = 0;
+        static uint32_t s_last_under = 0;
+        static uint32_t s_last_over  = 0;
+        const uint32_t heartbeat_iters = (s_dev.state == AUDIO_IDLE) ? 40 : 2000;
+        if (++s_loop_count >= heartbeat_iters) {
             s_loop_count = 0;
             int fill = ring_fill_level();
-            ESP_LOGI(TAG, "USB-A: st=%d pend=%d ok=%lu err=%lu ring=%d/%d "
-                     "underrun=%lu overflow=%lu resubfail=%lu",
-                     (int)s_dev.state, s_dev.xfer_pending,
-                     (unsigned long)s_isoc_ok_count,
-                     (unsigned long)s_isoc_err_count_total,
-                     fill, RING_STEREO_PAIRS - 1,
-                     (unsigned long)s_ring_underruns,
-                     (unsigned long)s_ring_overflows,
-                     (unsigned long)s_resubmit_fails);
+            bool changed = ((int)s_dev.state != s_last_state ||
+                            s_isoc_ok_count != s_last_ok ||
+                            s_isoc_err_count_total != s_last_err ||
+                            s_ring_underruns != s_last_under ||
+                            s_ring_overflows != s_last_over);
+            if (changed) {
+                ESP_LOGI(TAG, "USB-A: st=%d pend=%d ok=%lu err=%lu ring=%d/%d "
+                         "underrun=%lu overflow=%lu resubfail=%lu",
+                         (int)s_dev.state, s_dev.xfer_pending,
+                         (unsigned long)s_isoc_ok_count,
+                         (unsigned long)s_isoc_err_count_total,
+                         fill, RING_STEREO_PAIRS - 1,
+                         (unsigned long)s_ring_underruns,
+                         (unsigned long)s_ring_overflows,
+                         (unsigned long)s_resubmit_fails);
+                s_last_state = (int)s_dev.state;
+                s_last_ok    = s_isoc_ok_count;
+                s_last_err   = s_isoc_err_count_total;
+                s_last_under = s_ring_underruns;
+                s_last_over  = s_ring_overflows;
+            }
         }
     }
 

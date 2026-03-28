@@ -55,6 +55,7 @@ static rmt_channel_handle_t s_led_chan = NULL;
 static rmt_encoder_handle_t s_encoder = NULL;
 
 static volatile led_state_t s_state = LED_STATE_OFF;
+static volatile int s_fx_mode = 0; /* 0=both  1=reverb  2=symphonic  3=neither */
 static TaskHandle_t s_led_task = NULL;
 
 /* ── RMT simple encoder callback ── */
@@ -116,9 +117,10 @@ static void led_task(void *param)
     while (true) {
         led_state_t st = s_state;
 
-        /* Auto-transition: if in READY or USB_CONNECTED,
+        /* Auto-transition: if in READY, USB_CONNECTED or WLAN_ACTIVE,
          * upgrade to PLAYING when voices are active */
-        if (st == LED_STATE_READY || st == LED_STATE_USB_CONNECTED) {
+        if (st == LED_STATE_READY || st == LED_STATE_USB_CONNECTED ||
+            st == LED_STATE_WLAN_ACTIVE) {
             if (dexed_raw_is_initialized() && dexed_raw_get_active_voices() > 0) {
                 st = LED_STATE_PLAYING;
             }
@@ -149,27 +151,66 @@ static void led_task(void *param)
                 break;
 
             case LED_STATE_READY: {
-                /* Breathing blue */
+                /* Breathing animation — color depends on active effects mode */
                 float breath = (sinf((float)tick * 0.05f) + 1.0f) * 0.5f;
-                uint8_t v = (uint8_t)(5.0f + breath * 35.0f);
-                esp32_led_set_rgb(0, 0, v);
+                float scale = 0.1f + breath * 0.7f;
+                switch (s_fx_mode) {
+                    case 1: /* reverb only — purple */
+                        esp32_led_set_rgb((uint8_t)(20*scale), 0, (uint8_t)(40*scale)); break;
+                    case 2: /* symphonic only — amber */
+                        esp32_led_set_rgb((uint8_t)(40*scale), (uint8_t)(15*scale), 0); break;
+                    case 3: /* neither — cool white */
+                        esp32_led_set_rgb((uint8_t)(20*scale), (uint8_t)(20*scale), (uint8_t)(20*scale)); break;
+                    default: /* both active — cyan */
+                        esp32_led_set_rgb(0, (uint8_t)(40*scale), (uint8_t)(40*scale)); break;
+                }
                 vTaskDelay(pdMS_TO_TICKS(30));
                 tick++;
                 break;
             }
 
-            case LED_STATE_USB_CONNECTED:
-                /* Solid green */
-                esp32_led_set_rgb(0, 30, 0);
+            case LED_STATE_USB_CONNECTED: {
+                /* Solid dim fx_mode color */
+                float scale = 0.45f;
+                switch (s_fx_mode) {
+                    case 1: /* reverb only — purple */
+                        esp32_led_set_rgb((uint8_t)(20*scale), 0, (uint8_t)(40*scale)); break;
+                    case 2: /* symphonic only — amber */
+                        esp32_led_set_rgb((uint8_t)(40*scale), (uint8_t)(15*scale), 0); break;
+                    case 3: /* neither — cool white */
+                        esp32_led_set_rgb((uint8_t)(20*scale), (uint8_t)(20*scale), (uint8_t)(20*scale)); break;
+                    default: /* both active — cyan */
+                        esp32_led_set_rgb(0, (uint8_t)(40*scale), (uint8_t)(40*scale)); break;
+                }
                 vTaskDelay(pdMS_TO_TICKS(100));
                 break;
+            }
 
             case LED_STATE_PLAYING: {
-                /* Pulsing cyan */
+                /* Pulsing fx_mode color — faster pulse than breathing */
                 float pulse = (sinf((float)tick * 0.15f) + 1.0f) * 0.5f;
-                uint8_t v = (uint8_t)(10.0f + pulse * 40.0f);
-                esp32_led_set_rgb(0, v, v);
+                float scale = 0.2f + pulse * 0.8f;
+                switch (s_fx_mode) {
+                    case 1: /* reverb only — purple */
+                        esp32_led_set_rgb((uint8_t)(20*scale), 0, (uint8_t)(40*scale)); break;
+                    case 2: /* symphonic only — amber */
+                        esp32_led_set_rgb((uint8_t)(40*scale), (uint8_t)(15*scale), 0); break;
+                    case 3: /* neither — cool white */
+                        esp32_led_set_rgb((uint8_t)(20*scale), (uint8_t)(20*scale), (uint8_t)(20*scale)); break;
+                    default: /* both active — cyan */
+                        esp32_led_set_rgb(0, (uint8_t)(40*scale), (uint8_t)(40*scale)); break;
+                }
                 vTaskDelay(pdMS_TO_TICKS(20));
+                tick++;
+                break;
+            }
+
+            case LED_STATE_WLAN_ACTIVE: {
+                /* Pulsing orange — WLAN mode active, no notes playing */
+                float pulse = (sinf((float)tick * 0.08f) + 1.0f) * 0.5f;
+                float scale = 0.15f + pulse * 0.85f;
+                esp32_led_set_rgb((uint8_t)(50*scale), (uint8_t)(18*scale), 0);
+                vTaskDelay(pdMS_TO_TICKS(25));
                 tick++;
                 break;
             }
@@ -236,6 +277,11 @@ void esp32_led_set_state(led_state_t state)
 led_state_t esp32_led_get_state(void)
 {
     return s_state;
+}
+
+void esp32_led_set_fx_mode(int mode)
+{
+    s_fx_mode = mode;
 }
 
 void esp32_led_start(void)

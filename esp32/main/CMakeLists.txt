@@ -12,6 +12,7 @@ idf_component_register(
         "esp32_config.cpp"
         "esp32_led.cpp"
         "esp32_button.cpp"
+        "AudioEffectFreeverb.cpp"
         "AudioEffectSymphonic.cpp"
         "launchpad.cpp"
         "step_sequencer.cpp"

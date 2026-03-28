@@ -176,6 +176,21 @@ typedef struct {
     } bar_chord_notes[12];  /* max 12 notes in a chord */
     int bar_chord_note_count;
 
+    /* Chord step sequencer (Circle mode, rows 5-8 → 32 quarter-note steps,
+     * laid out the same as the drum grid: row 8 = steps 0-7, row 7 = 8-15,
+     * row 6 = 16-23, row 5 = 24-31.  Loops every 4 drum-pattern cycles.) */
+    struct {
+        uint8_t    chord_root;    /* absolute semitone 0-11 */
+        chord_type_t chord_type;
+        bool       active;        /* step is programmed */
+    } chord_seq_steps[32];
+    int chord_seq_step;           /* 0-31 = currently playing quarter step; -1 when stopped */
+
+    /* Last chord manually selected via rows 1-4 (used to populate seq steps) */
+    uint8_t      selected_chord_root;
+    chord_type_t selected_chord_type;
+    bool         has_selected_chord;
+
     /* Page state */
     uint8_t page;
 
@@ -255,56 +270,102 @@ static void seq_timer_callback(void *arg)
     s->current_step = (s->current_step + 1) % s->num_steps;
     int step = s->current_step;
 
-    /* 3. At bar start (step 0): turn off previous bar chord, play new one for legato across bar */
-    if (step == 0 && s->playing && s->held_chord.active) {
-        /* Turn off previous bar chord notes */
-        for (int i = 0; i < s->bar_chord_note_count; i++) {
-            if (s->bar_chord_notes[i].active) {
-                dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
-                s->bar_chord_notes[i].active = false;
-            }
+    /* 3. At each quarter-note boundary (every 4 steps): advance chord sequencer or bar chord */
+    if (step % 4 == 0 && s->playing) {
+        /* Advance chord-seq playhead independently (0-31 over 4 drum loops) */
+        s->chord_seq_step = (s->chord_seq_step < 0) ? 0 : (s->chord_seq_step + 1) % 32;
+        int q = s->chord_seq_step;
+
+        /* Check whether the chord step sequencer has any programmed steps */
+        bool chord_seq_has_steps = false;
+        for (int i = 0; i < 32; i++) {
+            if (s->chord_seq_steps[i].active) { chord_seq_has_steps = true; break; }
         }
-        s->bar_chord_note_count = 0;
 
-        /* Play new bar chord notes (legato — will sustain until next bar) */
-        uint8_t chord_root = s->held_chord.chord_root;
-        chord_type_t chord_type = s->held_chord.chord_type;
-        uint16_t mask = chord_masks[chord_type];
-        uint8_t base_note = (s->base_octave + 3) * 12 + chord_root;
+        uint8_t play_root = 0xFF;   /* 0xFF = no chord this quarter */
+        chord_type_t play_type = CHORD_MAJ;
 
-        for (int i = 0; i < 12 && s->bar_chord_note_count < 12; i++) {
-            if ((mask >> i) & 1) {
-                uint8_t note = base_note + i;
-                if (note <= 127) {
-                    dexed_raw_handle_midi(0x90, note, 100);  /* 100 = mf velocity */
-                    s->bar_chord_notes[s->bar_chord_note_count].note = note;
-                    s->bar_chord_notes[s->bar_chord_note_count].active = true;
-                    s->bar_chord_note_count++;
+        if (chord_seq_has_steps) {
+            if (s->chord_seq_steps[q].active) {
+                play_root = s->chord_seq_steps[q].chord_root;
+                play_type = s->chord_seq_steps[q].chord_type;
+            }
+        } else if (step == 0 && s->held_chord.active) {
+            /* Legacy: held chord fires once per 2-bar loop (only when no chord seq programmed) */
+            play_root = s->held_chord.chord_root;
+            play_type = s->held_chord.chord_type;
+        }
+
+        /* At every quarter boundary that belongs to the chord sequencer, stop the previous chord */
+        if (chord_seq_has_steps) {
+            for (int i = 0; i < s->bar_chord_note_count; i++) {
+                if (s->bar_chord_notes[i].active) {
+                    dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
+                    s->bar_chord_notes[i].active = false;
+                }
+            }
+            s->bar_chord_note_count = 0;
+        } else if (step == 0 && s->held_chord.active) {
+            /* Legacy path: stop previous bar chord at loop start */
+            for (int i = 0; i < s->bar_chord_note_count; i++) {
+                if (s->bar_chord_notes[i].active) {
+                    dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
+                    s->bar_chord_notes[i].active = false;
+                }
+            }
+            s->bar_chord_note_count = 0;
+        }
+
+        if (play_root != 0xFF) {
+            /* Update harmonic state so FIELD page + suggestion engine reflect the new chord */
+            uint8_t abs_old = (s->harmonic.key + s->harmonic.chord_root) % 12;
+            s->harmonic.prev_chord_root = abs_old;
+            s->harmonic.prev_chord_type = s->harmonic.chord_type;
+            s->harmonic.has_prev_chord  = true;
+            s->harmonic.chord_root = (play_root - s->harmonic.key + 12) % 12;
+            s->harmonic.chord_type = play_type;
+
+            /* Keep held_chord in sync so the Circle display stays coherent */
+            if (chord_seq_has_steps) {
+                s->held_chord.chord_root = play_root;
+                s->held_chord.chord_type = play_type;
+                s->held_chord.active     = true;
+            }
+
+            /* Play new chord notes (legato — sustains until next chord trigger) */
+            uint16_t mask = chord_masks[play_type];
+            uint8_t base_note = (uint8_t)((s->base_octave + 3) * 12 + play_root);
+            for (int i = 0; i < 12 && s->bar_chord_note_count < 12; i++) {
+                if ((mask >> i) & 1) {
+                    uint8_t note = base_note + i;
+                    if (note <= 127) {
+                        dexed_raw_handle_midi(0x90, note, 100);  /* mf velocity */
+                        s->bar_chord_notes[s->bar_chord_note_count].note   = note;
+                        s->bar_chord_notes[s->bar_chord_note_count].active = true;
+                        s->bar_chord_note_count++;
+                    }
                 }
             }
         }
     }
 
-    /* 4. Trigger notes at current step */
-    if (s->mode == SEQ_MODE_DRUM || s->mode == SEQ_MODE_BOTH) {
-        for (int d = 0; d < SEQ_NUM_DRUM_TRACKS; d++) {
-            uint8_t vel = s->drum_tracks[d].steps[step].velocity;
-            if (vel > 0 && s->active_note_count < SEQ_ACTIVE_NOTES_MAX) {
-                uint8_t note = drum_midi_notes[d];
-                seq_drum_note_on(note, vel);
-                s->active_notes[s->active_note_count].note = note;
-                s->active_notes[s->active_note_count].channel =
-                    tsf_engine_is_loaded() ? SEQ_CH_TSF : SEQ_CH_DEX;
-                s->active_note_count++;
-            }
+    /* 4. Trigger notes at current step.
+     * Playback is always active regardless of display mode — mode only controls
+     * which page is shown on the Launchpad, not which tracks fire. */
+    for (int d = 0; d < SEQ_NUM_DRUM_TRACKS; d++) {
+        uint8_t vel = s->drum_tracks[d].steps[step].velocity;
+        if (vel > 0) {
+            seq_drum_note_on(drum_midi_notes[d], vel);
+            /* Drum notes NOT tracked in active_notes[]: sample engine handles
+             * its own decay; note-off on next tick would cut samples short. */
         }
     }
-    if (s->mode == SEQ_MODE_MELODIC || s->mode == SEQ_MODE_BOTH) {
+    {
         seq_melodic_step_t *ms = &s->melodic_steps[step];
         for (int n = 0; n < ms->note_count && s->active_note_count < SEQ_ACTIVE_NOTES_MAX; n++) {
             if (ms->notes[n] > 0) {
                 dexed_raw_handle_midi(0x90, ms->notes[n], ms->velocities[n]);
-                s->active_notes[s->active_note_count].note = ms->notes[n];
+                s->active_notes[s->active_note_count].note    = ms->notes[n];
                 s->active_notes[s->active_note_count].channel = 0;
                 s->active_note_count++;
             }
@@ -354,6 +415,17 @@ int step_seq_init(void)
         s_seq.field_notes[i].note = 0;
         s_seq.field_notes[i].active = false;
     }
+
+    /* Initialize chord step sequencer */
+    for (int i = 0; i < 32; i++) {
+        s_seq.chord_seq_steps[i].chord_root = 0;
+        s_seq.chord_seq_steps[i].chord_type = CHORD_MAJ;
+        s_seq.chord_seq_steps[i].active = false;
+    }
+    s_seq.chord_seq_step = -1;
+    s_seq.selected_chord_root = 0;
+    s_seq.selected_chord_type = CHORD_MAJ;
+    s_seq.has_selected_chord  = false;
 
     esp_timer_create_args_t timer_args = {
         .callback = seq_timer_callback,
@@ -427,6 +499,7 @@ void step_seq_stop(void)
     s_seq.bar_chord_note_count = 0;
     
     s_seq.current_step = -1;
+    s_seq.chord_seq_step = -1;
     portEXIT_CRITICAL(&s_seq.mux);
 
     ESP_LOGI(TAG, "Sequencer stopped");
@@ -850,14 +923,15 @@ static void get_circle_chord(uint8_t row, uint8_t col, uint8_t key,
     int circle_pos = ((int)semitone_to_circle[key] + circle_offset + 12) % 12;
     *out_root = circle_to_semitone[circle_pos];
 
-    if (row <= 2) {
+    /* One row per chord type; rows 5-8 are unused (dark). */
+    if (row == 1) {
         *out_type = CHORD_MAJ;
-    } else if (row <= 4) {
+    } else if (row == 2) {
         *out_type = CHORD_MIN;
-    } else if (row <= 6) {
+    } else if (row == 3) {
         *out_type = CHORD_DOM7;
     } else {
-        *out_type = CHORD_MIN7;
+        *out_type = CHORD_MIN7;  /* row 4; rows 5-8 not reachable */
     }
 }
 
@@ -1025,21 +1099,19 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
         }
     }
     else if (s_seq.mode == SEQ_MODE_CIRCLE) {
-        /* Circle of Fifths chord mode - full grid is chords */
-        if (lp_is_grid(row, col)) {
+        /* Circle of Fifths chord mode - rows 1-4 only (rows 5-8 are dark/unused) */
+        if (lp_is_grid(row, col) && row <= 4) {
             uint8_t chord_root;
             chord_type_t chord_type;
             get_circle_chord(row, col, s_seq.harmonic.key, &chord_root, &chord_type);
 
-            /* Check if user pressed the same chord again (toggle off) */
+            /* If a different chord was held, stop it first */
             if (s_seq.held_chord.active &&
-                s_seq.held_chord.chord_root == chord_root &&
-                s_seq.held_chord.chord_type == chord_type) {
-                /* Toggle off: stop the chord */
-                stop_chord(chord_root, chord_type, s_seq.base_octave + 3);
-                s_seq.held_chord.active = false;
-                
-                /* Turn off bar chord notes if sequencer is running */
+                (s_seq.held_chord.chord_root != chord_root ||
+                 s_seq.held_chord.chord_type != chord_type)) {
+                stop_chord(s_seq.held_chord.chord_root, s_seq.held_chord.chord_type,
+                           s_seq.base_octave + 3);
+                /* Also clear any lingering bar-chord notes */
                 portENTER_CRITICAL(&s_seq.mux);
                 for (int i = 0; i < s_seq.bar_chord_note_count; i++) {
                     if (s_seq.bar_chord_notes[i].active) {
@@ -1049,41 +1121,67 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                 }
                 s_seq.bar_chord_note_count = 0;
                 portEXIT_CRITICAL(&s_seq.mux);
-                
-                ESP_LOGI(TAG, "Circle: %s%s (held) [released]",
-                         note_names[chord_root], chord_type_names[chord_type]);
-            } else {
-                /* New chord pressed: stop any previous held chord */
-                if (s_seq.held_chord.active) {
-                    stop_chord(s_seq.held_chord.chord_root, s_seq.held_chord.chord_type,
-                               s_seq.base_octave + 3);
+            }
+
+            /* Save previous chord for suggestion engine */
+            uint8_t abs_old = (s_seq.harmonic.key + s_seq.harmonic.chord_root) % 12;
+            s_seq.harmonic.prev_chord_root = abs_old;
+            s_seq.harmonic.prev_chord_type = s_seq.harmonic.chord_type;
+            s_seq.harmonic.has_prev_chord = true;
+
+            /* Update harmonic state to new chord */
+            s_seq.harmonic.chord_root = (chord_root - s_seq.harmonic.key + 12) % 12;
+            s_seq.harmonic.chord_type = chord_type;
+
+            /* Always play chord — pressing the same pad again re-triggers it */
+            play_chord(chord_root, chord_type, velocity, s_seq.base_octave + 3);
+            s_seq.held_chord.chord_root = chord_root;
+            s_seq.held_chord.chord_type = chord_type;
+            s_seq.held_chord.active = true;
+
+            /* Track last manually-selected chord for step assignment */
+            s_seq.selected_chord_root = chord_root;
+            s_seq.selected_chord_type = chord_type;
+            s_seq.has_selected_chord  = true;
+
+            ESP_LOGI(TAG, "Circle: %s%s (held, +3 octaves) (prev %s)",
+                     note_names[chord_root], chord_type_names[chord_type],
+                     s_seq.harmonic.has_prev_chord ? note_names[abs_old] : "none");
+        }
+        else if (lp_is_grid(row, col) && row >= 5) {
+            /* Chord step sequencer: rows 5-8, cols 1-8 → steps 0-31
+             * same layout as drum grid: row 8 = steps 0-7, row 7 = 8-15,
+             * row 6 = 16-23, row 5 = 24-31 */
+            int seq_step = (8 - row) * 8 + (col - 1);  /* 0-31 */
+            if (seq_step >= 0 && seq_step < 32 && s_seq.has_selected_chord) {
+                bool cleared = false;
+                portENTER_CRITICAL(&s_seq.mux);
+                if (s_seq.chord_seq_steps[seq_step].active &&
+                    s_seq.chord_seq_steps[seq_step].chord_root == s_seq.selected_chord_root &&
+                    s_seq.chord_seq_steps[seq_step].chord_type == s_seq.selected_chord_type) {
+                    /* Same chord already on this step → clear it */
+                    s_seq.chord_seq_steps[seq_step].active = false;
+                    cleared = true;
+                } else {
+                    /* Different or empty → assign last manually-selected chord */
+                    s_seq.chord_seq_steps[seq_step].chord_root = s_seq.selected_chord_root;
+                    s_seq.chord_seq_steps[seq_step].chord_type = s_seq.selected_chord_type;
+                    s_seq.chord_seq_steps[seq_step].active = true;
                 }
-
-                /* Save previous chord for suggestion engine */
-                uint8_t abs_old = (s_seq.harmonic.key + s_seq.harmonic.chord_root) % 12;
-                s_seq.harmonic.prev_chord_root = abs_old;
-                s_seq.harmonic.prev_chord_type = s_seq.harmonic.chord_type;
-                s_seq.harmonic.has_prev_chord = true;
-
-                /* Update harmonic state to new chord */
-                s_seq.harmonic.chord_root = (chord_root - s_seq.harmonic.key + 12) % 12;
-                s_seq.harmonic.chord_type = chord_type;
-
-                /* Play the chord (3 octaves higher) and mark as held */
-                play_chord(chord_root, chord_type, velocity, s_seq.base_octave + 3);
-                s_seq.held_chord.chord_root = chord_root;
-                s_seq.held_chord.chord_type = chord_type;
-                s_seq.held_chord.active = true;
-
-                ESP_LOGI(TAG, "Circle: %s%s (held, +3 octaves) (prev %s)",
-                         note_names[chord_root], chord_type_names[chord_type],
-                         s_seq.harmonic.has_prev_chord ? note_names[abs_old] : "none");
+                portEXIT_CRITICAL(&s_seq.mux);
+                if (cleared) {
+                    ESP_LOGI(TAG, "ChordSeq step %d cleared", seq_step);
+                } else {
+                    ESP_LOGI(TAG, "ChordSeq step %d: %s%s", seq_step,
+                             note_names[s_seq.selected_chord_root],
+                             chord_type_names[s_seq.selected_chord_type]);
+                }
             }
         }
     }
     else if (s_seq.mode == SEQ_MODE_FIELD) {
-        /* Melodic field mode - rows 1-6 only (rows 7-8 disabled) */
-        if (lp_is_grid(row, col) && row <= 6) {
+        /* Melodic field mode - rows 1-6, cols 1-6 only (rows 7-8 and cols 7-8 disabled) */
+        if (lp_is_grid(row, col) && row <= 6 && col <= 6) {
             uint8_t note = get_field_note(row, col, &s_seq.harmonic);
             
             /* Track the note for release */
@@ -1140,8 +1238,8 @@ void step_seq_handle_grid_release(uint8_t row, uint8_t col)
         (void)col;
     }
     else if (s_seq.mode == SEQ_MODE_FIELD) {
-        /* Release note when pad released */
-        if (lp_is_grid(row, col)) {
+        /* Release note when pad released (cols 7-8 are inactive, no-op) */
+        if (lp_is_grid(row, col) && row <= 6 && col <= 6) {
             int pad_idx = (row - 1) * 8 + (col - 1);
             if (pad_idx >= 0 && pad_idx < 64 && s_seq.field_notes[pad_idx].active) {
                 uint8_t note = s_seq.field_notes[pad_idx].note;
@@ -1351,4 +1449,30 @@ bool step_seq_is_scale_tone(uint8_t pitch_class, uint8_t key, scale_type_t scale
 void step_seq_get_circle_chord(uint8_t row, uint8_t col, uint8_t* out_root, chord_type_t* out_type)
 {
     get_circle_chord(row, col, s_seq.harmonic.key, out_root, out_type);
+}
+/* ================================================
+ * Chord step sequencer query API
+ * ================================================ */
+
+bool step_seq_chord_seq_step_active(uint8_t step)
+{
+    if (step >= 32) return false;
+    return s_seq.chord_seq_steps[step].active;
+}
+
+uint8_t step_seq_chord_seq_step_root(uint8_t step)
+{
+    if (step >= 32) return 0;
+    return s_seq.chord_seq_steps[step].chord_root;
+}
+
+chord_type_t step_seq_chord_seq_step_type(uint8_t step)
+{
+    if (step >= 32) return CHORD_MAJ;
+    return s_seq.chord_seq_steps[step].chord_type;
+}
+
+int step_seq_chord_seq_current(void)
+{
+    return s_seq.chord_seq_step;
 }

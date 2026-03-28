@@ -160,15 +160,19 @@ static void led_monitor_task(void *param)
             continue;
         }
 
-        /* Check for active voices (takes precedence) */
+        /* Check for active voices (takes precedence over everything) */
         if (dexed_raw_is_initialized() && dexed_raw_get_active_voices() > 0) {
             esp32_led_set_state(LED_STATE_PLAYING);
         }
-        /* Check USB keyboard connection */
+        /* WLAN mode active (or connecting) — orange pulse */
+        else if (esp32_button_is_wlan_mode()) {
+            esp32_led_set_state(LED_STATE_WLAN_ACTIVE);
+        }
+        /* USB MIDI keyboard connected */
         else if (esp32_midi_usb_connected()) {
             esp32_led_set_state(LED_STATE_USB_CONNECTED);
         }
-        /* Idle — ready */
+        /* Idle — ready, synth mode */
         else {
             esp32_led_set_state(LED_STATE_READY);
         }
@@ -420,8 +424,7 @@ extern "C" void app_main(void)
     //   On a successful STA connection Apple MIDI + mDNS are started
     //   automatically so the synth appears in Audio MIDI Setup on the Mac.
     // =====================
-    ESP_LOGI(TAG, "[6/6] Initializing WLAN (Apple MIDI + captive portal)...");
-    esp32_wlan_init();
+    ESP_LOGI(TAG, "[6/6] WLAN deferred — long-press BOOT button to enable WLAN mode");
 
     // =====================
     // Startup sound: C major chord (C4-E4-G4)

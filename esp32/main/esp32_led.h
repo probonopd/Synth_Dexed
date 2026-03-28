@@ -31,6 +31,7 @@ typedef enum {
     LED_STATE_READY,         /* Blue — ready, no USB keyboard */
     LED_STATE_USB_CONNECTED, /* Green — USB MIDI keyboard attached */
     LED_STATE_PLAYING,       /* Cyan pulse — notes are sounding */
+    LED_STATE_WLAN_ACTIVE,   /* Orange pulse — WLAN mode on, no notes */
     LED_STATE_ERROR,         /* Red fast blink — error */
 } led_state_t;
 
@@ -58,6 +59,17 @@ void esp32_led_set_state(led_state_t state);
  * Get the current LED state.
  */
 led_state_t esp32_led_get_state(void);
+
+/**
+ * Set the current effects mode (0=both, 1=reverb only, 2=symphonic only, 3=neither).
+ * ISR-safe — just writes a volatile.  The LED task uses this to select the
+ * indication color for READY / USB_CONNECTED / PLAYING states.
+ *   Mode 0 (both on)       → cyan
+ *   Mode 1 (reverb only)   → purple
+ *   Mode 2 (symphonic only)→ amber
+ *   Mode 3 (neither)       → cool white
+ */
+void esp32_led_set_fx_mode(int mode);
 
 /**
  * Start the LED animation task (call after esp32_led_init).

@@ -143,6 +143,12 @@ bool step_seq_is_scale_tone(uint8_t pitch_class, uint8_t key, scale_type_t scale
 /* Get the chord root (semitone) for a circle grid position. */
 void step_seq_get_circle_chord(uint8_t row, uint8_t col, uint8_t* out_root, chord_type_t* out_type);
 
+/* ---- Chord step sequencer (Circle mode, rows 5-8) ---- */
+bool         step_seq_chord_seq_step_active(uint8_t step);  /* is step programmed? */
+uint8_t      step_seq_chord_seq_step_root(uint8_t step);    /* absolute root semitone */
+chord_type_t step_seq_chord_seq_step_type(uint8_t step);    /* chord quality */
+int          step_seq_chord_seq_current(void);               /* current playing step (0-7) or -1 */
+
 /* ---- Input handlers (called from launchpad.cpp) ---- */
 void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity);
 void step_seq_handle_grid_release(uint8_t row, uint8_t col);

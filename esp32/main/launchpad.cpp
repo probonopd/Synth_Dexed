@@ -448,7 +448,32 @@ void launchpad_refresh_grid(void)
         uint8_t cur_abs_root = (h->key + h->chord_root) % 12;
         chord_type_t cur_chord_type = h->chord_type;
 
-        for (uint8_t row = 1; row <= 8; row++) {
+        /* Rows 5-8: chord step sequencer — same grid layout as drum page.
+         * (8-row)*8+(col-1) gives step index 0-31; row 8=steps 0-7 … row 5=steps 24-31. */
+        {
+            int cur_q = step_seq_chord_seq_current();
+            for (uint8_t row = 5; row <= 8; row++) {
+                for (uint8_t col = 1; col <= 8; col++) {
+                    int si = (8 - row) * 8 + (col - 1);  /* 0-31 */
+                    bool is_active = step_seq_chord_seq_step_active((uint8_t)si);
+                    uint8_t color;
+                    if (cur_q == si) {
+                        color = is_active ? LP_SEQ_PLAYHEAD_HIT : LP_SEQ_PLAYHEAD;
+                    } else if (is_active) {
+                        chord_type_t ct = step_seq_chord_seq_step_type((uint8_t)si);
+                        if      (ct == CHORD_MAJ)  color = LP_COLOR_CYAN;
+                        else if (ct == CHORD_MIN)  color = LP_COLOR_BLUE;
+                        else if (ct == CHORD_DOM7) color = LP_COLOR_ORANGE;
+                        else                       color = LP_COLOR_PURPLE;
+                    } else {
+                        color = LP_COLOR_OFF;
+                    }
+                    launchpad_batch_set(0, lp_pad_note(row, col), color);
+                }
+            }
+        }
+
+        for (uint8_t row = 1; row <= 4; row++) {
             for (uint8_t col = 1; col <= 8; col++) {
                 uint8_t root;
                 chord_type_t ctype;
@@ -528,11 +553,15 @@ void launchpad_refresh_grid(void)
             }
         }
         
-        /* Disable rows 7-8 completely */
+        /* Disable rows 7-8 and cols 7-8 for all rows in field mode */
         for (uint8_t row = 7; row <= 8; row++) {
-            for (uint8_t col = 1; col <= 6; col++) {
+            for (uint8_t col = 1; col <= 8; col++) {
                 launchpad_batch_set(0, lp_pad_note(row, col), LP_COLOR_OFF);
             }
+        }
+        for (uint8_t row = 1; row <= 6; row++) {
+            launchpad_batch_set(0, lp_pad_note(row, 7), LP_COLOR_OFF);
+            launchpad_batch_set(0, lp_pad_note(row, 8), LP_COLOR_OFF);
         }
     }
 
