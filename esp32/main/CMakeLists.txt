@@ -20,6 +20,7 @@ idf_component_register(
         "tsf_engine.cpp"
         "atomic_compat.c"
         "esp32_syslog.c"
+        "esp32_oled.cpp"
     INCLUDE_DIRS
         "."
         "${CMAKE_CURRENT_SOURCE_DIR}/../../src"
@@ -37,6 +38,7 @@ idf_component_register(
         esp_driver_rmt
         mdns
         esp_http_server
+        nixy4__u8g2
 )
 
 # Access the ESP-IDF USB host private headers so we can use usbh_ep_alloc()

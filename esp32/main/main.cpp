@@ -34,6 +34,7 @@
 #include "tsf_engine.h"
 #include "step_sequencer.h"
 #include "launchpad.h"
+#include "esp32_oled.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -326,6 +327,9 @@ extern "C" void app_main(void)
     if (step_seq_init() != 0) {
         ESP_LOGW(TAG, "Step sequencer init failed (non-fatal)");
     }
+
+    // OLED display (non-fatal if not connected)
+    esp32_oled_init();
 
     // Launch TSF drum engine loader as a background task.
     // MIDI (USB host) is started AFTER TSF completes to prevent concurrent

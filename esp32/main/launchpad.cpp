@@ -8,6 +8,7 @@
 #include "launchpad.h"
 #include "step_sequencer.h"
 #include "esp32_midi.h"
+#include "esp32_oled.h"
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
@@ -329,6 +330,9 @@ static uint8_t keyboard_pad_to_midi_note(uint8_t row, uint8_t col)
 void launchpad_refresh_grid(void)
 {
     if (!s_connected) return;
+
+    /* Update OLED chord name whenever the grid refreshes */
+    esp32_oled_update_chord();
 
     seq_mode_t mode = step_seq_get_mode();
     int playhead = step_seq_get_current_step();
