@@ -74,6 +74,12 @@ typedef struct {
  * Creates esp_timer (does not start it).
  * @return 0 on success, -1 on failure.
  */
+
+/* FIELD-page lookahead: how many milliseconds before a chord change the display
+ * (and note quantizer) should already show the upcoming chord. Adjust to taste.
+ * This is a fixed wall-clock window — independent of BPM. */
+#define SEQ_FIELD_LOOKAHEAD_MS  250
+
 int step_seq_init(void);
 
 /**
@@ -136,6 +142,10 @@ uint8_t step_seq_get_suggestion_score(uint8_t to_root);
 /* Field mode note quantizer: snaps non-lit notes to next lower lit note.
  * Apply to external Note On and Note Off when in FIELD mode. */
 uint8_t step_seq_field_quantize_note(uint8_t midi_note);
+
+/* Lookahead harmonic state for FIELD display: previews the next chord 1/16-note early
+ * while the sequencer is running.  Identical to step_seq_get_harmonic_state() when stopped. */
+const harmonic_state_t* step_seq_get_display_harmonic_state(void);
 
 /* Melodic mode velocity scaling: scales velocity by harmonic role (chord/scale/tension).
  * Returns velocity unchanged when not in MELODIC mode. */

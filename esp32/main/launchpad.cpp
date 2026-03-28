@@ -519,7 +519,7 @@ void launchpad_refresh_grid(void)
          *
          * Only harmonic notes (chord/scale) are lit. Non-harmonic notes are off.
          */
-        const harmonic_state_t *h = step_seq_get_harmonic_state();
+        const harmonic_state_t *h = step_seq_get_display_harmonic_state();
         uint8_t abs_chord_root = (h->key + h->chord_root) % 12;
 
         for (uint8_t row = 1; row <= 8; row++) {

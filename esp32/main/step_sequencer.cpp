@@ -143,6 +143,7 @@ typedef struct {
 
     /* Harmonic mode state */
     harmonic_state_t harmonic;
+    harmonic_state_t display_harmonic; /* lookahead: 1/16 ahead of harmonic while playing */
 
     /* Clock */
     uint16_t    bpm;
@@ -376,6 +377,24 @@ static void seq_timer_callback(void *arg)
         }
     }
 
+    /* Lookahead for FIELD display: switch the display chord SEQ_FIELD_LOOKAHEAD_MS
+     * before it actually plays.  Comparison is in µs so the window is a fixed
+     * wall-clock duration, fully independent of BPM. */
+    s->display_harmonic = s->harmonic;
+    if (s->playing && s->chord_seq_step >= 0) {
+        uint64_t period_us          = step_period_us(s->bpm);
+        int      steps_to_next      = 4 - (step % 4);          /* 1-4 steps until next quarter */
+        uint64_t time_to_next_us    = (uint64_t)steps_to_next * period_us;
+        if (time_to_next_us <= (uint64_t)SEQ_FIELD_LOOKAHEAD_MS * 1000ULL) {
+            int next_q = (s->chord_seq_step + 1) % 32;
+            if (s->chord_seq_steps[next_q].active) {
+                s->display_harmonic.chord_root =
+                    (s->chord_seq_steps[next_q].chord_root - s->harmonic.key + 12) % 12;
+                s->display_harmonic.chord_type = s->chord_seq_steps[next_q].chord_type;
+            }
+        }
+    }
+
     portEXIT_CRITICAL(&s->mux);
 
     /* 5. Update Launchpad display (outside critical section) */
@@ -407,6 +426,7 @@ int step_seq_init(void)
     s_seq.harmonic.prev_chord_root = 0;
     s_seq.harmonic.prev_chord_type = CHORD_MAJ;
     s_seq.harmonic.has_prev_chord = false;
+    s_seq.display_harmonic = s_seq.harmonic; /* starts identical */
 
     /* Initialize held chord tracking */
     s_seq.held_chord.chord_root = 0;
@@ -936,7 +956,7 @@ static uint8_t field_quantize(uint8_t midi_note)
     for (int delta = 0; delta <= 12; delta++) {
         int candidate = (int)midi_note - delta;
         if (candidate < 0) break;
-        if (is_note_lit((uint8_t)candidate, &s_seq.harmonic)) return (uint8_t)candidate;
+        if (is_note_lit((uint8_t)candidate, &s_seq.display_harmonic)) return (uint8_t)candidate;
     }
     return midi_note;  /* fallback: nothing found, pass through */
 }
@@ -1233,7 +1253,7 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
              *   chord tone (root/other) → full pad velocity
              *   scale tone (yellow)     → 66 %
              *   tension tone (orange)   → 33 % */
-            uint8_t score = score_note(note, &s_seq.harmonic);
+            uint8_t score = score_note(note, &s_seq.display_harmonic);
             uint8_t play_vel;
             if (score >= 200) {
                 play_vel = velocity;               /* chord tone → full */
@@ -1490,13 +1510,18 @@ uint8_t step_seq_field_quantize_note(uint8_t midi_note)
     return field_quantize(midi_note);
 }
 
+const harmonic_state_t* step_seq_get_display_harmonic_state(void)
+{
+    return &s_seq.display_harmonic;
+}
+
 /* Scale velocity by harmonic role when in FIELD mode.
  * Chord tone → full, scale tone (yellow) → ~66 %, tension (orange) → ~33 %.
  * Pass-through unchanged in all other modes. */
 uint8_t step_seq_melodic_scale_velocity(uint8_t midi_note, uint8_t velocity)
 {
     if (s_seq.mode != SEQ_MODE_FIELD) return velocity;
-    uint8_t sc = score_note(midi_note, &s_seq.harmonic);
+    uint8_t sc = score_note(midi_note, &s_seq.display_harmonic);
     if (sc >= 200) return velocity;                          /* chord tone */
     if (sc >= 120) return (uint8_t)((velocity * 2 + 2) / 3); /* scale tone ~66 % */
     uint8_t v = (uint8_t)((velocity + 2) / 3);               /* tension ~33 % */
