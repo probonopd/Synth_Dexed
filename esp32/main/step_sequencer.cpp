@@ -204,6 +204,13 @@ typedef struct {
 
 static seq_state_t s_seq;
 
+/* Live "hold while pressed" state for the lower half of Circle mode (rows 5-8).
+ * We track the exact MIDI notes that were turned on so release sends precise note-offs. */
+static struct {
+    uint8_t notes[12];
+    int     note_count;
+} s_circle_lower_hold = {};
+
 /* ================================================
  * Timer helpers
  * ================================================ */
@@ -296,27 +303,24 @@ static void seq_timer_callback(void *arg)
             play_type = s->held_chord.chord_type;
         }
 
-        /* At every quarter boundary that belongs to the chord sequencer, stop the previous chord */
-        if (chord_seq_has_steps) {
-            for (int i = 0; i < s->bar_chord_note_count; i++) {
-                if (s->bar_chord_notes[i].active) {
-                    dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
-                    s->bar_chord_notes[i].active = false;
-                }
-            }
-            s->bar_chord_note_count = 0;
-        } else if (step == 0 && s->held_chord.active) {
-            /* Legacy path: stop previous bar chord at loop start */
-            for (int i = 0; i < s->bar_chord_note_count; i++) {
-                if (s->bar_chord_notes[i].active) {
-                    dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
-                    s->bar_chord_notes[i].active = false;
-                }
-            }
-            s->bar_chord_note_count = 0;
+        /* At every quarter boundary that belongs to the chord sequencer, stop the previous
+         * chord ONLY when a new chord is about to play — this gives legato sustain across
+         * empty steps so chords ring until the next programmed step. */
+        if (!chord_seq_has_steps && step == 0 && s->held_chord.active) {
+            /* Legacy: held chord fires once per 2-bar loop */
+            play_root = s->held_chord.chord_root;
+            play_type = s->held_chord.chord_type;
         }
 
         if (play_root != 0xFF) {
+            /* Stop previous bar chord notes now that a new one is starting */
+            for (int i = 0; i < s->bar_chord_note_count; i++) {
+                if (s->bar_chord_notes[i].active) {
+                    dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
+                    s->bar_chord_notes[i].active = false;
+                }
+            }
+            s->bar_chord_note_count = 0;
             /* Update harmonic state so FIELD page + suggestion engine reflect the new chord */
             uint8_t abs_old = (s->harmonic.key + s->harmonic.chord_root) % 12;
             s->harmonic.prev_chord_root = abs_old;
@@ -339,7 +343,7 @@ static void seq_timer_callback(void *arg)
                 if ((mask >> i) & 1) {
                     uint8_t note = base_note + i;
                     if (note <= 127) {
-                        dexed_raw_handle_midi(0x90, note, 100);  /* mf velocity */
+                        dexed_raw_handle_midi(0x90, note, 64);   /* 50% velocity */
                         s->bar_chord_notes[s->bar_chord_note_count].note   = note;
                         s->bar_chord_notes[s->bar_chord_note_count].active = true;
                         s->bar_chord_note_count++;
@@ -910,6 +914,33 @@ static uint8_t score_note(uint8_t midi_note, const harmonic_state_t* h)
     return 40;  /* Chromatic / tension */
 }
 
+/* Returns true if a MIDI note is "lit" (visible) in FIELD mode given current harmonic state.
+ * Matches exactly the color logic in launchpad.cpp FIELD display. */
+static bool is_note_lit(uint8_t midi_note, const harmonic_state_t* h)
+{
+    uint8_t pc            = midi_note % 12;
+    uint8_t abs_chord_root = (h->key + h->chord_root) % 12;
+    if (pc == abs_chord_root)                                           return true;
+    if (is_chord_tone(pc, abs_chord_root, h->chord_type))               return true;
+    if (h->tension >= 1 && is_scale_tone(pc, h->key, h->scale_type))   return true;
+    if (h->tension >= 2)                                                return true;
+    return false;
+}
+
+/* Quantize a MIDI note for FIELD mode: if the note is not lit, walk downward
+ * (up to 12 semitones) until we find a lit note and return it. */
+static uint8_t field_quantize(uint8_t midi_note)
+{
+    if (s_seq.mode != SEQ_MODE_FIELD) return midi_note;
+    /* Walk down until we hit a lit pitch class */
+    for (int delta = 0; delta <= 12; delta++) {
+        int candidate = (int)midi_note - delta;
+        if (candidate < 0) break;
+        if (is_note_lit((uint8_t)candidate, &s_seq.harmonic)) return (uint8_t)candidate;
+    }
+    return midi_note;  /* fallback: nothing found, pass through */
+}
+
 /* Get the chord root+type for a position in Circle mode grid.
  *
  * Columns map to circle-of-fifths positions centred on the key.
@@ -1105,23 +1136,20 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             chord_type_t chord_type;
             get_circle_chord(row, col, s_seq.harmonic.key, &chord_root, &chord_type);
 
-            /* If a different chord was held, stop it first */
-            if (s_seq.held_chord.active &&
-                (s_seq.held_chord.chord_root != chord_root ||
-                 s_seq.held_chord.chord_type != chord_type)) {
-                stop_chord(s_seq.held_chord.chord_root, s_seq.held_chord.chord_type,
-                           s_seq.base_octave + 3);
-                /* Also clear any lingering bar-chord notes */
-                portENTER_CRITICAL(&s_seq.mux);
-                for (int i = 0; i < s_seq.bar_chord_note_count; i++) {
-                    if (s_seq.bar_chord_notes[i].active) {
-                        dexed_raw_handle_midi(0x80, s_seq.bar_chord_notes[i].note, 0);
-                        s_seq.bar_chord_notes[i].active = false;
-                    }
+            /* Stop any previously held notes (previous press or bar-chord) */
+            for (int i = 0; i < s_circle_lower_hold.note_count; i++)
+                dexed_raw_handle_midi(0x80, s_circle_lower_hold.notes[i], 0);
+            s_circle_lower_hold.note_count = 0;
+            /* Also clear bar-chord notes fired by the timer */
+            portENTER_CRITICAL(&s_seq.mux);
+            for (int i = 0; i < s_seq.bar_chord_note_count; i++) {
+                if (s_seq.bar_chord_notes[i].active) {
+                    dexed_raw_handle_midi(0x80, s_seq.bar_chord_notes[i].note, 0);
+                    s_seq.bar_chord_notes[i].active = false;
                 }
-                s_seq.bar_chord_note_count = 0;
-                portEXIT_CRITICAL(&s_seq.mux);
             }
+            s_seq.bar_chord_note_count = 0;
+            portEXIT_CRITICAL(&s_seq.mux);
 
             /* Save previous chord for suggestion engine */
             uint8_t abs_old = (s_seq.harmonic.key + s_seq.harmonic.chord_root) % 12;
@@ -1133,18 +1161,25 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             s_seq.harmonic.chord_root = (chord_root - s_seq.harmonic.key + 12) % 12;
             s_seq.harmonic.chord_type = chord_type;
 
-            /* Always play chord — pressing the same pad again re-triggers it */
-            play_chord(chord_root, chord_type, velocity, s_seq.base_octave + 3);
-            s_seq.held_chord.chord_root = chord_root;
-            s_seq.held_chord.chord_type = chord_type;
-            s_seq.held_chord.active = true;
-
             /* Track last manually-selected chord for step assignment */
             s_seq.selected_chord_root = chord_root;
             s_seq.selected_chord_type = chord_type;
             s_seq.has_selected_chord  = true;
 
-            ESP_LOGI(TAG, "Circle: %s%s (held, +3 octaves) (prev %s)",
+            /* Play and record exact notes — stopped precisely on pad release */
+            uint16_t mask = chord_masks[chord_type];
+            uint8_t base_note = (uint8_t)((s_seq.base_octave + 3) * 12 + chord_root);
+            for (int i = 0; i < 12; i++) {
+                if ((mask >> i) & 1) {
+                    uint8_t n = base_note + i;
+                    if (n <= 127 && s_circle_lower_hold.note_count < 12) {
+                        dexed_raw_handle_midi(0x90, n, velocity);
+                        s_circle_lower_hold.notes[s_circle_lower_hold.note_count++] = n;
+                    }
+                }
+            }
+
+            ESP_LOGI(TAG, "Circle: %s%s (hold-while-pressed) (prev %s)",
                      note_names[chord_root], chord_type_names[chord_type],
                      s_seq.harmonic.has_prev_chord ? note_names[abs_old] : "none");
         }
@@ -1177,26 +1212,41 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                              chord_type_names[s_seq.selected_chord_type]);
                 }
             }
+            /* No sound on sequencer grid pads — step-toggle only */
         }
     }
     else if (s_seq.mode == SEQ_MODE_FIELD) {
-        /* Melodic field mode - rows 1-6, cols 1-6 only (rows 7-8 and cols 7-8 disabled) */
-        if (lp_is_grid(row, col) && row <= 6 && col <= 6) {
+        /* Melodic field mode - all rows 1-8, cols 1-6 only (cols 7-8 disabled) */
+        if (lp_is_grid(row, col) && col <= 6) {
             uint8_t note = get_field_note(row, col, &s_seq.harmonic);
-            
-            /* Track the note for release */
+            /* Quantize: if this pad is off (not lit), redirect to nearest lower lit note */
+            note = field_quantize(note);
+
+            /* Track the (possibly redirected) note for release */
             int pad_idx = (row - 1) * 8 + (col - 1);
             if (pad_idx >= 0 && pad_idx < 64) {
                 s_seq.field_notes[pad_idx].note = note;
                 s_seq.field_notes[pad_idx].active = true;
             }
             
-            /* Play the note through Dexed */
-            dexed_raw_handle_midi(0x90, note, velocity);
-            
+            /* Scale velocity by harmonic role:
+             *   chord tone (root/other) → full pad velocity
+             *   scale tone (yellow)     → 66 %
+             *   tension tone (orange)   → 33 % */
             uint8_t score = score_note(note, &s_seq.harmonic);
-            ESP_LOGD(TAG, "Field: note=%d (%s) score=%d", 
-                     note, note_names[note % 12], score);
+            uint8_t play_vel;
+            if (score >= 200) {
+                play_vel = velocity;               /* chord tone → full */
+            } else if (score >= 120) {
+                play_vel = (uint8_t)((velocity * 2 + 2) / 3);   /* ~66 % */
+            } else {
+                play_vel = (uint8_t)((velocity + 2) / 3);        /* ~33 % */
+            }
+            if (play_vel < 1) play_vel = 1;
+
+            dexed_raw_handle_midi(0x90, note, play_vel);
+            ESP_LOGD(TAG, "Field: note=%d (%s) score=%d vel=%d",
+                     note, note_names[note % 12], score, play_vel);
         }
     }
 
@@ -1233,13 +1283,17 @@ void step_seq_handle_grid_release(uint8_t row, uint8_t col)
         }
     }
     else if (s_seq.mode == SEQ_MODE_CIRCLE) {
-        /* Do NOT stop chord on release — it sustains until toggled off or new chord pressed */
-        (void)row;
-        (void)col;
+        /* Rows 1-4 are hold-while-pressed — stop recorded notes on release */
+        if (row <= 4 && s_circle_lower_hold.note_count > 0) {
+            for (int i = 0; i < s_circle_lower_hold.note_count; i++)
+                dexed_raw_handle_midi(0x80, s_circle_lower_hold.notes[i], 0);
+            s_circle_lower_hold.note_count = 0;
+        }
+        /* Rows 5-8 are step-toggle only — no sound to stop */
     }
     else if (s_seq.mode == SEQ_MODE_FIELD) {
         /* Release note when pad released (cols 7-8 are inactive, no-op) */
-        if (lp_is_grid(row, col) && row <= 6 && col <= 6) {
+        if (lp_is_grid(row, col) && col <= 6) {
             int pad_idx = (row - 1) * 8 + (col - 1);
             if (pad_idx >= 0 && pad_idx < 64 && s_seq.field_notes[pad_idx].active) {
                 uint8_t note = s_seq.field_notes[pad_idx].note;
@@ -1429,6 +1483,24 @@ uint8_t step_seq_get_suggestion_score(uint8_t to_root)
         return 1;
     }
     return compute_suggestion(s_seq.harmonic.prev_chord_root, to_root, &s_seq.harmonic);
+}
+
+uint8_t step_seq_field_quantize_note(uint8_t midi_note)
+{
+    return field_quantize(midi_note);
+}
+
+/* Scale velocity by harmonic role when in FIELD mode.
+ * Chord tone → full, scale tone (yellow) → ~66 %, tension (orange) → ~33 %.
+ * Pass-through unchanged in all other modes. */
+uint8_t step_seq_melodic_scale_velocity(uint8_t midi_note, uint8_t velocity)
+{
+    if (s_seq.mode != SEQ_MODE_FIELD) return velocity;
+    uint8_t sc = score_note(midi_note, &s_seq.harmonic);
+    if (sc >= 200) return velocity;                          /* chord tone */
+    if (sc >= 120) return (uint8_t)((velocity * 2 + 2) / 3); /* scale tone ~66 % */
+    uint8_t v = (uint8_t)((velocity + 2) / 3);               /* tension ~33 % */
+    return v < 1 ? 1 : v;
 }
 
 uint8_t step_seq_get_field_note(uint8_t row, uint8_t col)

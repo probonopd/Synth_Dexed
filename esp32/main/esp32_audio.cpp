@@ -302,12 +302,12 @@ int esp32_audio_init(void)
                 // Reverb tuning: longer decay (~2s) with brighter high-frequency tail
                 // to prevent perceived «cut-off» on short FM notes.
                 // FIXED_GAIN raised to 0.04× so reverb fills quickly on short notes.
-                s_freeverb->setRoomSize(0.88f); // ~2 s T60
+                s_freeverb->setRoomSize(0.70f); // ~1 s T60 (half of previous 0.88)
                 s_freeverb->setDamping(0.2f);   // less HF damping → brighter tail
                 s_freeverb->setWet(0.55f);      // wet moderately loud (FIXED_GAIN raised)
                 s_freeverb->setDry(0.4f);       // dry slightly lower so tail is audible
-                s_freeverb->setEnabled(true);
-                esp32_led_set_fx_mode(0);       // both effects active (default)
+                s_freeverb->setEnabled(false);
+                esp32_led_set_fx_mode(3);       // both effects off at boot
                 ESP_LOGI(TAG, "Freeverb initialized (enabled, delay=%u bytes in PSRAM)",
                          (unsigned)delay_bytes);
             } else {
@@ -335,8 +335,8 @@ int esp32_audio_init(void)
             s_symphonic->setMix(1.0f);
             s_symphonic->setDepth(0.5f);
             s_symphonic->setSpeed(0.7f);
-            s_symphonic->setEnabled(true);
-            ESP_LOGI(TAG, "SPX90 Symphonic effect initialized (enabled)");
+            s_symphonic->setEnabled(false);
+            ESP_LOGI(TAG, "SPX90 Symphonic effect initialized (disabled)");
         } else {
             ESP_LOGW(TAG, "Failed to allocate Symphonic effect (disabled)");
         }
@@ -891,24 +891,24 @@ int esp32_audio_get_fx_mode(void)
 void esp32_audio_cycle_effects(void)
 {
     // Cycle through 4 states:
-    //   0: both ON  →  1: reverb only  →  2: symphonic only  →  3: neither  →  0
+    //   3: neither  →  2: symphonic only  →  1: delay(reverb) only  →  0: both  →  3
     bool sym = s_symphonic ? s_symphonic->isEnabled() : false;
     bool rev = s_freeverb  ? s_freeverb->isEnabled()  : false;
 
-    if (sym && rev) {
-        // both → reverb only
-        if (s_symphonic) s_symphonic->setEnabled(false);
-    } else if (!sym && rev) {
-        // reverb only → symphonic only
-        if (s_freeverb)  s_freeverb->setEnabled(false);
+    if (!sym && !rev) {
+        // neither → symphonic only
         if (s_symphonic) s_symphonic->setEnabled(true);
     } else if (sym && !rev) {
-        // symphonic only → neither
+        // symphonic only → delay(reverb) only
         if (s_symphonic) s_symphonic->setEnabled(false);
-    } else {
-        // neither → both
-        if (s_symphonic) s_symphonic->setEnabled(true);
         if (s_freeverb)  s_freeverb->setEnabled(true);
+    } else if (!sym && rev) {
+        // delay only → both
+        if (s_symphonic) s_symphonic->setEnabled(true);
+    } else {
+        // both → neither
+        if (s_symphonic) s_symphonic->setEnabled(false);
+        if (s_freeverb)  s_freeverb->setEnabled(false);
     }
 
     // Update LED fx-mode indicator immediately (ISR-safe volatile write)

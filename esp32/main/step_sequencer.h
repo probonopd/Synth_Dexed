@@ -133,6 +133,14 @@ const harmonic_state_t* step_seq_get_harmonic_state(void);
 /* Suggestion engine: score how well to_root follows the last chord (0-5). */
 uint8_t step_seq_get_suggestion_score(uint8_t to_root);
 
+/* Field mode note quantizer: snaps non-lit notes to next lower lit note.
+ * Apply to external Note On and Note Off when in FIELD mode. */
+uint8_t step_seq_field_quantize_note(uint8_t midi_note);
+
+/* Melodic mode velocity scaling: scales velocity by harmonic role (chord/scale/tension).
+ * Returns velocity unchanged when not in MELODIC mode. */
+uint8_t step_seq_melodic_scale_velocity(uint8_t midi_note, uint8_t velocity);
+
 /* Field mode: get the MIDI note mapped to a grid position (row/col 1-8). */
 uint8_t step_seq_get_field_note(uint8_t row, uint8_t col);
 

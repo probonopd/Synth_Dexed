@@ -52,6 +52,7 @@ static inline bool lp_is_q4(uint8_t row, uint8_t col) {
 #define LP_CC_DRUMS     96
 #define LP_CC_KEYS      97
 #define LP_CC_USER      98
+#define LP_LOGO_NOTE    99   /* Novation logo LED (Programmer Mode, top-right) */
 
 /* ---- Right column button CCs (row 1 bottom to row 8 top) ---- */
 #define LP_CC_RIGHT_COL_1   19

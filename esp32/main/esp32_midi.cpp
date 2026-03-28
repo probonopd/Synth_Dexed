@@ -159,7 +159,13 @@ static void midi_parser_process_byte(midi_parser_t *p, uint8_t byte)
 
     if (p->data_count >= p->data_needed) {
         if (p->data_needed == 2) {
-            dexed_raw_handle_midi(p->status, p->data[0], p->data[1]);
+            /* In FIELD mode, quantize note on/off to nearest lower lit note */
+            uint8_t s = p->status & 0xF0;
+            uint8_t d0 = p->data[0];
+            uint8_t d1 = p->data[1];
+            if (s == 0x80 || s == 0x90) d0 = step_seq_field_quantize_note(d0);
+            if (s == 0x90 && d1 > 0)    d1 = step_seq_melodic_scale_velocity(d0, d1);
+            dexed_raw_handle_midi(p->status, d0, d1);
         } else if (p->data_needed == 1) {
             dexed_raw_handle_midi(p->status, p->data[0], 0);
         }
@@ -330,7 +336,11 @@ static void usb_midi_process_packet(const uint8_t *pkt, midi_device_t *dev)
             if (dev->is_launchpad) {
                 launchpad_handle_note(b1, (cin == 0x08) ? 0 : b2);
             } else {
-                dexed_raw_handle_midi(b0, b1, b2);
+                /* In FIELD mode, quantize to nearest lower lit note */
+                uint8_t qb1 = step_seq_field_quantize_note(b1);
+                uint8_t qb2 = ((b0 & 0xF0) == 0x90 && b2 > 0)
+                              ? step_seq_melodic_scale_velocity(qb1, b2) : b2;
+                dexed_raw_handle_midi(b0, qb1, qb2);
             }
             break;
 

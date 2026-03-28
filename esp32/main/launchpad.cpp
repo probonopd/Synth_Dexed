@@ -512,17 +512,17 @@ void launchpad_refresh_grid(void)
     }
     else if (mode == SEQ_MODE_FIELD) {
         /* ---- Melodic Field mode (2 rows per octave, 12 chromatic tones) ----
-         * Rows 1-6 only (rows 7-8 are disabled).
-         * Odd rows (1,3,5):  semitones 0-5  (C through F)
-         * Even rows (2,4,6): semitones 6-11 (F# through B)
-         * Row pairs: (1-2, 3-4, 5-6) = octaves (base, base+1, base+2)
+         * All 8 rows used (rows 7-8 = 4th octave).
+         * Odd rows (1,3,5,7):  semitones 0-5  (C through F)
+         * Even rows (2,4,6,8): semitones 6-11 (F# through B)
+         * Row pairs: (1-2, 3-4, 5-6, 7-8) = octaves (base, base+1, base+2, base+3)
          *
-         * Only harmonic notes (chord/scale) are lit. Non-harmonic (red) notes are off.
+         * Only harmonic notes (chord/scale) are lit. Non-harmonic notes are off.
          */
         const harmonic_state_t *h = step_seq_get_harmonic_state();
         uint8_t abs_chord_root = (h->key + h->chord_root) % 12;
 
-        for (uint8_t row = 1; row <= 6; row++) {
+        for (uint8_t row = 1; row <= 8; row++) {
             for (uint8_t col = 1; col <= 6; col++) {
                 uint8_t note = step_seq_get_field_note(row, col);
                 uint8_t pc = note % 12;
@@ -551,15 +551,7 @@ void launchpad_refresh_grid(void)
 
                 launchpad_batch_set(0, lp_pad_note(row, col), color);
             }
-        }
-        
-        /* Disable rows 7-8 and cols 7-8 for all rows in field mode */
-        for (uint8_t row = 7; row <= 8; row++) {
-            for (uint8_t col = 1; col <= 8; col++) {
-                launchpad_batch_set(0, lp_pad_note(row, col), LP_COLOR_OFF);
-            }
-        }
-        for (uint8_t row = 1; row <= 6; row++) {
+            /* Cols 7-8 always off */
             launchpad_batch_set(0, lp_pad_note(row, 7), LP_COLOR_OFF);
             launchpad_batch_set(0, lp_pad_note(row, 8), LP_COLOR_OFF);
         }
@@ -621,6 +613,16 @@ void launchpad_refresh_grid(void)
         launchpad_batch_set(0, LP_CC_TENSION, LP_COLOR_OFF);
         launchpad_batch_set(0, LP_CC_RECORD_PROG, LP_COLOR_OFF);
         launchpad_batch_set(0, LP_CC_CLEAR, LP_COLOR_OFF);
+    }
+
+    /* Novation logo: blink bright green on quarter-note beats when sequencer running */
+    {
+        int cs = step_seq_get_current_step();
+        uint8_t logo_color = LP_COLOR_OFF;
+        if (step_seq_is_playing() && cs >= 0 && (cs % 4 == 0)) {
+            logo_color = LP_SEQ_PLAYHEAD_HIT;
+        }
+        launchpad_batch_set(0, LP_LOGO_NOTE, logo_color);
     }
 
     launchpad_batch_end();
