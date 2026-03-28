@@ -1,22 +1,27 @@
 /*
- * esp32_oled.cpp — SH1106 128×64 OLED chord-name display
+ * esp32_oled.cpp — SH1106 128×64 OLED display driver
  *
- * Uses the nixy4/u8g2 managed component (ESP-IDF fork of olikraus/u8g2).
- * Driver:  u8g2_Setup_sh1106_i2c_128x64_noname_f (full-buffer, 1 kB RAM)
- * Fonts:   u8g2_font_logisoso38_tr  — root note  (e.g. "C#")
- *          u8g2_font_logisoso20_tr  — chord type (e.g. "maj", "m7")
- * Layout (128×64 px):
- *   y  2–40  : root note  (logisoso38, baseline y=40)
- *   y 42–62  : chord type (logisoso20, baseline y=62)
+ * Two display modes:
+ *   1. Chord view (default): root note in big font + chord type
+ *   2. Status overlay (2 s timeout): label + value for mode/BPM/FX/etc.
  *
- * I2C pins: SDA=GPIO9, SCL=GPIO10  (see pins.md)
- * I2C addr: 0x3C (7-bit)
+ * Uses nixy4/u8g2 component — full upstream u8g2 API, real bitmap fonts.
+ * Driver:  u8g2_Setup_sh1106_i2c_128x64_noname_f
+ * I2C:     SDA=GPIO9, SCL=GPIO10, addr=0x3C  (see pins.md)
+ *
+ * Public API:
+ *   esp32_oled_init()              — call once at boot
+ *   esp32_oled_update_chord()      — call from launchpad_refresh_grid()
+ *   esp32_oled_show_status(l1,l2)  — call from any state-change site;
+ *                                    auto-returns to chord view after 2 s
  */
 
 #include "esp32_oled.h"
 #include "step_sequencer.h"
 
 #include "esp_log.h"
+#include "esp_timer.h"
+#include <stdio.h>
 #include <string.h>
 
 #include "u8g2.h"
@@ -24,27 +29,100 @@
 
 static const char *TAG = "oled";
 
-#define OLED_I2C_ADDR    0x3C   /* 7-bit */
-#define OLED_SDA_PIN     9
-#define OLED_SCL_PIN     10
+/* ---- Hardware ---- */
+#define OLED_I2C_ADDR       0x3C
+#define OLED_SDA_PIN        9
+#define OLED_SCL_PIN        10
+
+/* ---- Status overlay timeout ---- */
+#define STATUS_DURATION_US  2000000LL   /* 2 seconds */
 
 static u8g2_t               s_u8g2;
 static u8g2_esp32_i2c_ctx_t s_i2c_ctx;
 static bool                 s_initialized = false;
 
-/* Mirror of the chord name tables in step_sequencer.cpp */
+/* Timestamp after which status view expires; 0 = chord view */
+static volatile int64_t     s_status_until_us = 0;
+
+/* ---- String tables ---- */
 static const char * const s_note_names[12] = {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 };
-static const char * const s_chord_type_names[CHORD_TYPE_COUNT] = {
+static const char * const s_chord_type_names[] = {
     "maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2"
 };
+/* Must match seq_mode_t: DRUM=0 MELODIC=1 BOTH=2 CIRCLE=3 FIELD=4 */
+static const char * const s_mode_names[] = {
+    "DRUM", "MELODIC", "BOTH", "CIRCLE", "FIELD"
+};
+static const char * const s_scale_names[] = {
+    "Major", "Minor", "Dorian", "Mixolyd",
+    "Phryg", "Lydian", "Locrian", "Penta+", "Penta-"
+};
+static const char * const s_fx_names[] = {
+    "Rev+Sym", "Reverb", "Symphon", "FX Off"
+};
 
+/* ------------------------------------------------------------------ */
+/*  Internal helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+static void draw_centered(u8g2_t *u, u8g2_uint_t y, const char *str)
+{
+    u8g2_uint_t w = u8g2_GetStrWidth(u, str);
+    u8g2_uint_t x = (u8g2_uint_t)((128 - (int)w) / 2);
+    if ((int)x < 0) x = 0;
+    u8g2_DrawStr(u, x, y, str);
+}
+
+/* ---- Chord view ---- */
+static void draw_chord(void)
+{
+    const harmonic_state_t *h = step_seq_get_display_harmonic_state();
+    if (!h) return;
+
+    uint8_t abs_root = (uint8_t)((h->key + h->chord_root) % 12);
+    const char *note  = s_note_names[abs_root];
+    const char *ctype = s_chord_type_names[(int)h->chord_type];
+
+    u8g2_ClearBuffer(&s_u8g2);
+
+    /* Root note — centered, large */
+    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
+    draw_centered(&s_u8g2, 42, note);
+
+    /* Chord type — centered, medium */
+    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso20_tr);
+    draw_centered(&s_u8g2, 62, ctype);
+
+    u8g2_SendBuffer(&s_u8g2);
+}
+
+/* ---- Status overlay ---- */
+static void draw_status(const char *label, const char *value)
+{
+    u8g2_ClearBuffer(&s_u8g2);
+
+    /* Small label at top */
+    u8g2_SetFont(&s_u8g2, u8g2_font_6x13_tr);
+    draw_centered(&s_u8g2, 14, label);
+
+    /* Thin separator line */
+    u8g2_DrawHLine(&s_u8g2, 0, 17, 128);
+
+    /* Big value */
+    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso24_tr);
+    draw_centered(&s_u8g2, 56, value);
+
+    u8g2_SendBuffer(&s_u8g2);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Public API                                                           */
 /* ------------------------------------------------------------------ */
 
 int esp32_oled_init(void)
 {
-    /* Configure the ESP32 I2C hardware context used by u8g2 */
     s_i2c_ctx.cfg.i2c_port      = 0;
     s_i2c_ctx.cfg.sda_pin       = OLED_SDA_PIN;
     s_i2c_ctx.cfg.scl_pin       = OLED_SCL_PIN;
@@ -59,29 +137,23 @@ int esp32_oled_init(void)
         return -1;
     }
 
-    /* SH1106 128×64 I2C, full-buffer mode */
     u8g2_Setup_sh1106_i2c_128x64_noname_f(
         &s_u8g2,
         U8G2_R0,
         u8x8_byte_esp32_hw_i2c,
         u8x8_gpio_and_delay_esp32_i2c
     );
-
-    /* u8g2 needs the 8-bit I2C address (7-bit << 1) */
     u8x8_SetI2CAddress(&s_u8g2.u8x8, OLED_I2C_ADDR << 1);
-
     u8g2_InitDisplay(&s_u8g2);
-    u8g2_SetPowerSave(&s_u8g2, 0);   /* display on */
+    u8g2_SetPowerSave(&s_u8g2, 0);
 
     s_initialized = true;
-    ESP_LOGI(TAG, "SH1106 128x64 OLED ready (SDA=%d SCL=%d addr=0x%02X)",
-             OLED_SDA_PIN, OLED_SCL_PIN, OLED_I2C_ADDR);
+    ESP_LOGI(TAG, "SH1106 128x64 ready (SDA=%d SCL=%d)", OLED_SDA_PIN, OLED_SCL_PIN);
 
     /* Splash screen */
     u8g2_ClearBuffer(&s_u8g2);
     u8g2_SetFont(&s_u8g2, u8g2_font_logisoso24_tr);
-    int sw = (int)u8g2_GetStrWidth(&s_u8g2, "Synth Dexed");
-    u8g2_DrawStr(&s_u8g2, (128 - sw) / 2, 40, "Synth Dexed");
+    draw_centered(&s_u8g2, 42, "Synth Dexed");
     u8g2_SendBuffer(&s_u8g2);
 
     return 0;
@@ -90,30 +162,79 @@ int esp32_oled_init(void)
 void esp32_oled_update_chord(void)
 {
     if (!s_initialized) return;
+    if (esp_timer_get_time() < s_status_until_us) return;  /* status still active */
+    draw_chord();
+}
 
-    const harmonic_state_t *h = step_seq_get_display_harmonic_state();
-    if (!h) return;
+void esp32_oled_show_status(const char *line1, const char *line2)
+{
+    if (!s_initialized) return;
+    s_status_until_us = esp_timer_get_time() + STATUS_DURATION_US;
+    draw_status(line1 ? line1 : "", line2 ? line2 : "");
+}
 
-    /* Absolute chord root: key + chord_root (both 0-11) */
-    uint8_t abs_root = (uint8_t)((h->key + h->chord_root) % 12);
-    const char *note  = s_note_names[abs_root];
-    const char *ctype = s_chord_type_names[(int)h->chord_type];
+/* ---- Convenience wrappers ---- */
 
-    u8g2_ClearBuffer(&s_u8g2);
+void esp32_oled_show_mode(int mode)
+{
+    if (!s_initialized) return;
+    const char *name = (mode >= 0 && mode < 5) ? s_mode_names[mode] : "?";
+    esp32_oled_show_status("MODE", name);
+}
 
-    /* ── Line 1: root note in large font, horizontally centered ── */
-    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
-    int w1 = (int)u8g2_GetStrWidth(&s_u8g2, note);
-    int x1 = (128 - w1) / 2;
-    if (x1 < 0) x1 = 0;
-    u8g2_DrawStr(&s_u8g2, (u8g2_uint_t)x1, 40, note);  /* baseline y=40 */
+void esp32_oled_show_bpm(uint16_t bpm)
+{
+    if (!s_initialized) return;
+    char val[8];
+    snprintf(val, sizeof(val), "%u", (unsigned)bpm);
+    esp32_oled_show_status("BPM", val);
+}
 
-    /* ── Line 2: chord type in medium font, horizontally centered ── */
-    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso20_tr);
-    int w2 = (int)u8g2_GetStrWidth(&s_u8g2, ctype);
-    int x2 = (128 - w2) / 2;
-    if (x2 < 0) x2 = 0;
-    u8g2_DrawStr(&s_u8g2, (u8g2_uint_t)x2, 62, ctype); /* baseline y=62 */
+void esp32_oled_show_key(uint8_t key)
+{
+    if (!s_initialized) return;
+    const char *name = (key < 12) ? s_note_names[key] : "?";
+    esp32_oled_show_status("KEY", name);
+}
 
-    u8g2_SendBuffer(&s_u8g2);
+void esp32_oled_show_scale(int scale)
+{
+    if (!s_initialized) return;
+    const char *name = (scale >= 0 && scale < 9) ? s_scale_names[scale] : "?";
+    esp32_oled_show_status("SCALE", name);
+}
+
+void esp32_oled_show_tension(uint8_t tension)
+{
+    if (!s_initialized) return;
+    char val[4];
+    snprintf(val, sizeof(val), "%u", (unsigned)tension);
+    esp32_oled_show_status("TENSION", val);
+}
+
+void esp32_oled_show_octave(uint8_t octave)
+{
+    if (!s_initialized) return;
+    char val[4];
+    snprintf(val, sizeof(val), "%u", (unsigned)octave);
+    esp32_oled_show_status("OCTAVE", val);
+}
+
+void esp32_oled_show_transport(bool playing)
+{
+    if (!s_initialized) return;
+    esp32_oled_show_status(playing ? "PLAY" : "STOP", playing ? ">" : "[]");
+}
+
+void esp32_oled_show_fx(int fx_mode)
+{
+    if (!s_initialized) return;
+    const char *name = (fx_mode >= 0 && fx_mode < 4) ? s_fx_names[fx_mode] : "?";
+    esp32_oled_show_status("FX", name);
+}
+
+void esp32_oled_show_wlan(bool on)
+{
+    if (!s_initialized) return;
+    esp32_oled_show_status("WLAN", on ? "ON" : "OFF");
 }

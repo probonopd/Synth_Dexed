@@ -8,6 +8,7 @@
 
 #include "step_sequencer.h"
 #include "launchpad.h"
+#include "esp32_oled.h"
 #include "dexed_raw.h"
 #include "tsf_engine.h"
 #include "esp32_config.h"
@@ -218,6 +219,26 @@ static struct {
  * harmonic state changes between press and release. */
 static uint8_t s_field_note_map[128] = {};
 
+/* Returns true if `note` is currently pressed by the user (Launchpad FIELD pad
+ * or external MIDI keyboard).  Any MIDI note-off guarded by this check will
+ * be skipped so that automatic chord transitions never cut a user-held note.
+ * In non-FIELD mode the remap table stores raw→raw for keyboard notes, so
+ * keyboard notes remain visible regardless of the current sequencer mode. */
+static bool is_user_held(uint8_t note)
+{
+    /* Launchpad FIELD pad notes */
+    for (int i = 0; i < 64; i++) {
+        if (s_seq.field_notes[i].active && s_seq.field_notes[i].note == note)
+            return true;
+    }
+    /* External MIDI keyboard notes (values in the remap table) */
+    for (int i = 0; i < 128; i++) {
+        if (s_field_note_map[i] != 0 && s_field_note_map[i] == note)
+            return true;
+    }
+    return false;
+}
+
 /* ================================================
  * Timer helpers
  * ================================================ */
@@ -323,7 +344,8 @@ static void seq_timer_callback(void *arg)
             /* Stop previous bar chord notes now that a new one is starting */
             for (int i = 0; i < s->bar_chord_note_count; i++) {
                 if (s->bar_chord_notes[i].active) {
-                    dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
+                    if (!is_user_held(s->bar_chord_notes[i].note))
+                        dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
                     s->bar_chord_notes[i].active = false;
                 }
             }
@@ -500,6 +522,7 @@ void step_seq_play(void)
     esp_timer_start_periodic(s_seq.timer, period);
     ESP_LOGI(TAG, "Sequencer started (BPM=%d, period=%llu us)",
              s_seq.bpm, (unsigned long long)period);
+    esp32_oled_show_transport(true);
 
     if (launchpad_is_connected()) {
         launchpad_refresh_grid();
@@ -533,6 +556,7 @@ void step_seq_stop(void)
     portEXIT_CRITICAL(&s_seq.mux);
 
     ESP_LOGI(TAG, "Sequencer stopped");
+    esp32_oled_show_transport(false);
 
     if (launchpad_is_connected()) {
         launchpad_refresh_grid();
@@ -565,7 +589,8 @@ void step_seq_set_mode(seq_mode_t mode)
         "DRUM", "MELODIC", "BOTH", "CIRCLE", "FIELD"
     };
     ESP_LOGI(TAG, "Mode: %s", mode_names[mode]);
-    
+    esp32_oled_show_mode((int)mode);
+
     if (launchpad_is_connected()) {
         launchpad_refresh_grid();
     }
@@ -590,6 +615,7 @@ void step_seq_set_bpm(uint16_t bpm)
         esp_timer_restart(s_seq.timer, step_period_us(bpm));
     }
     ESP_LOGI(TAG, "BPM: %d", bpm);
+    esp32_oled_show_bpm(bpm);
 }
 
 void step_seq_adjust_bpm(int16_t delta)
@@ -707,6 +733,7 @@ void step_seq_set_base_octave(uint8_t octave)
 {
     if (octave > 8) octave = 8;
     s_seq.base_octave = octave;
+    esp32_oled_show_octave(octave);
 }
 
 uint8_t step_seq_get_base_octave(void)
@@ -742,6 +769,7 @@ void step_seq_set_key(uint8_t key)
     if (key >= 12) key = 0;
     s_seq.harmonic.key = key;
     ESP_LOGI(TAG, "Key: %s", note_names[key]);
+    esp32_oled_show_key(key);
 }
 
 uint8_t step_seq_get_key(void)
@@ -775,6 +803,7 @@ void step_seq_set_scale(scale_type_t scale)
     if (scale >= SCALE_TYPE_COUNT) scale = SCALE_MAJOR;
     s_seq.harmonic.scale_type = scale;
     ESP_LOGI(TAG, "Scale type: %d", scale);
+    esp32_oled_show_scale((int)scale);
 }
 
 scale_type_t step_seq_get_scale(void)
@@ -787,6 +816,7 @@ void step_seq_set_tension(uint8_t tension)
     if (tension > 3) tension = 3;
     s_seq.harmonic.tension = tension;
     ESP_LOGI(TAG, "Tension: %d", tension);
+    esp32_oled_show_tension(tension);
 }
 
 uint8_t step_seq_get_tension(void)
@@ -1017,7 +1047,7 @@ static void stop_chord(uint8_t root, chord_type_t type, uint8_t base_octave)
     for (int i = 0; i < 12; i++) {
         if ((mask >> i) & 1) {
             uint8_t note = base_note + i;
-            if (note <= 127) {
+            if (note <= 127 && !is_user_held(note)) {
                 dexed_raw_handle_midi(0x80, note, 0);
             }
         }
@@ -1162,15 +1192,17 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             chord_type_t chord_type;
             get_circle_chord(row, col, s_seq.harmonic.key, &chord_root, &chord_type);
 
-            /* Stop any previously held notes (previous press or bar-chord) */
+            /* Stop any previously held notes — but never cut a user-held note */
             for (int i = 0; i < s_circle_lower_hold.note_count; i++)
-                dexed_raw_handle_midi(0x80, s_circle_lower_hold.notes[i], 0);
+                if (!is_user_held(s_circle_lower_hold.notes[i]))
+                    dexed_raw_handle_midi(0x80, s_circle_lower_hold.notes[i], 0);
             s_circle_lower_hold.note_count = 0;
             /* Also clear bar-chord notes fired by the timer */
             portENTER_CRITICAL(&s_seq.mux);
             for (int i = 0; i < s_seq.bar_chord_note_count; i++) {
                 if (s_seq.bar_chord_notes[i].active) {
-                    dexed_raw_handle_midi(0x80, s_seq.bar_chord_notes[i].note, 0);
+                    if (!is_user_held(s_seq.bar_chord_notes[i].note))
+                        dexed_raw_handle_midi(0x80, s_seq.bar_chord_notes[i].note, 0);
                     s_seq.bar_chord_notes[i].active = false;
                 }
             }

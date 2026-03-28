@@ -18,6 +18,7 @@
 #include "esp32_button.h"
 #include "esp32_config.h"
 #include "esp32_audio.h"
+#include "esp32_oled.h"
 #include "esp32_wifi.h"
 #include "esp32_led.h"
 
@@ -87,17 +88,20 @@ static void button_task(void *param)
         if (event == BTN_EVENT_SHORT) {
             /* Short press: advance through the 4 effects modes */
             esp32_audio_cycle_effects();
+            esp32_oled_show_fx(esp32_audio_get_fx_mode());
 
         } else if (event == BTN_EVENT_LONG) {
             if (!s_wlan_active) {
                 /* ── Enter WLAN mode ── */
                 ESP_LOGI(TAG, "Long press: WLAN mode ON (synth audio continues)");
+                esp32_oled_show_wlan(true);
                 esp32_led_set_state(LED_STATE_WLAN_ACTIVE);
                 esp32_wlan_init();          /* blocking: connects or starts AP */
                 s_wlan_active = true;
             } else {
                 /* ── Return to synth-only mode ── */
                 ESP_LOGI(TAG, "Long press: WLAN mode OFF → synth-only mode");
+                esp32_oled_show_wlan(false);
                 esp32_wlan_stop();
                 s_wlan_active = false;
                 esp32_led_set_state(LED_STATE_READY);
