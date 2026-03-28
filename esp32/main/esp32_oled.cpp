@@ -138,12 +138,19 @@ static void oled_poll_task(void *)
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(50));
         if (!s_initialized) continue;
+
+        /* Voice change: show immediately on OLED */
         if (dexed_raw_poll_voice_changed()) {
             char vname[12] = {0};
             dexed_raw_get_current_voice_name(vname, sizeof(vname));
             if (vname[0] != '\0') {
                 esp32_oled_show_status("VOICE", vname);
             }
+        }
+
+        /* Outro fill done: stop the sequencer from the main task context */
+        if (step_seq_consume_outro_fill_done()) {
+            step_seq_stop();
         }
     }
 }
@@ -184,7 +191,7 @@ int esp32_oled_init(void)
     /* Splash screen */
     u8g2_ClearBuffer(&s_u8g2);
     u8g2_SetFont(&s_u8g2, u8g2_font_logisoso24_tr);
-    draw_centered(&s_u8g2, 42, "Synth Dexed");
+    draw_centered(&s_u8g2, 42, "...");
     u8g2_SendBuffer(&s_u8g2);
 
     /* Polling task: detects voice changes immediately */

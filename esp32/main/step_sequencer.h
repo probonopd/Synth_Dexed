@@ -92,6 +92,8 @@ void step_seq_play(void);
 void step_seq_stop(void);
 void step_seq_toggle_play(void);
 bool step_seq_is_playing(void);
+/* Returns true once when an outro fill has finished (main task should call step_seq_stop). */
+bool step_seq_consume_outro_fill_done(void);
 
 /* ---- Mode ---- */
 void step_seq_set_mode(seq_mode_t mode);

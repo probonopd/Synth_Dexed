@@ -100,6 +100,18 @@ int tsf_engine_reload(void);
  */
 int tsf_engine_active_voices(void);
 
+/** @return total number of presets in the loaded SFO. */
+int tsf_engine_get_preset_count(void);
+
+/** @return index of the currently active drum preset (0-based). */
+int tsf_engine_get_current_preset(void);
+
+/** Copy preset name at idx into out[len] (null-terminated). */
+void tsf_engine_copy_preset_name(int idx, char *out, int len);
+
+/** Select drum preset by index. Thread-safe. Returns 0 on success. */
+int tsf_engine_select_preset(int idx);
+
 /**
  * Load progress indicator (for boot-time diagnostics / Launchpad display).
  *

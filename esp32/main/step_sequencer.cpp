@@ -200,6 +200,18 @@ typedef struct {
     bool drums_btn_held;
     bool keys_btn_held;
 
+    /* Drum fill state (intro / outro) */
+    int  fill_steps_remaining; /* > 0 while a fill is playing */
+    bool fill_is_outro;        /* true = outro: stop after fill */
+    bool fill_outro_done;      /* set by timer; cleared by main-task stop */
+    bool fill_outro_pending;   /* wait for next bar boundary, then arm outro */
+    bool started_with_fill;    /* this run was started via long-press intro */
+
+    /* Tight voicing (Circle mode) */
+    bool    tight_voicing;           /* true = close-position (default) */
+    uint8_t tight_prev_notes[12];    /* MIDI notes of last voiced chord */
+    int     tight_prev_count;        /* count of notes in tight_prev_notes */
+
     /* Thread safety */
     portMUX_TYPE mux;
 } seq_state_t;
@@ -289,11 +301,75 @@ static inline void seq_note_off_routed(uint8_t channel, uint8_t note)
  * Timer callback -- called from esp_timer task (Core 0)
  * ================================================ */
 
+/* Long-press tracking for SESSION button (main-task read only outside ISR) */
+static volatile int64_t s_session_press_us = 0;
+#define SESSION_LONG_PRESS_US  500000LL   /* 500 ms */
+
+/* ---- Drum fill patterns (16 steps each) ----
+ * Each row: drum-track index, intro velocities, outro velocities.
+ * Intro: builds up into the groove (crash on beat 1, kick on quarters, snare
+ *        roll at end).  Outro: snare roll building to crash on final step. */
+#define FILL_PATTERN_LEN 16
+struct fill_entry { int idx; uint8_t in_v[16]; uint8_t out_v[16]; };
+static const fill_entry s_fill_patterns[] = {
+    { 0,  /* kick */
+      {100,0,0,0,100,0,0,0,100,0,0,0,100,0,0,  0},
+      {100,0,0,0,  0,0,0,0,100,0,0,0,  0,0,0,  0} },
+    { 2,  /* snare */
+      {  0,0,0,0, 80,0,0,0,  0,0,0,0, 90,90,100,100},
+      {  0,0,80,70,80,70,80,70,  0,70,80,90,100,100,100,  0} },
+    { 6,  /* closed hi-hat */
+      { 60,60,60,60, 60,60,60,60, 80,80,80,80,  0, 0, 0,  0},
+      { 70,70,70,70, 70,70,70,70, 80,80,80,90,  0, 0, 0,  0} },
+    { 13, /* crash cymbal (GM note 49) */
+      { 90, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0,  0},
+      {  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0,100} },
+};
+#define FILL_NUM_TRACKS 4
+
+/* ---------------------------------------------------------------------------
+ * voice_tight_notes — close-position chord voicing
+ *
+ * Given a chord mask (bits 0-11 = semitones above root) and the absolute
+ * root pitch class, positions each note as close as possible to the centroid
+ * of the previous chord (default A3=57 when no prev).  Output notes are in
+ * MIDI range 24-108.
+ * -------------------------------------------------------------------------*/
+static void voice_tight_notes(uint16_t mask, uint8_t abs_root,
+                               const uint8_t *prev, int prev_cnt,
+                               uint8_t *out, int *out_cnt)
+{
+    uint8_t classes[12]; int n = 0;
+    for (int i = 0; i < 12; i++)
+        if ((mask >> i) & 1) classes[n++] = (uint8_t)((abs_root + i) % 12);
+    int center = 57;  /* A3 default */
+    if (prev_cnt > 0) {
+        int sum = 0;
+        for (int i = 0; i < prev_cnt; i++) sum += prev[i];
+        center = sum / prev_cnt;
+    }
+    int cnt = 0;
+    for (int i = 0; i < n; i++) {
+        int pc = (int)classes[i];
+        int note = pc + ((center - pc + 6) / 12) * 12;
+        while (note < 24)  note += 12;
+        while (note > 108) note -= 12;
+        out[cnt++] = (uint8_t)note;
+    }
+    *out_cnt = cnt;
+}
+
 static void seq_timer_callback(void *arg)
 {
     seq_state_t *s = (seq_state_t *)arg;
 
     portENTER_CRITICAL(&s->mux);
+
+    /* Guard: outro fill has finished — wait for main task to call stop */
+    if (s->fill_outro_done) {
+        portEXIT_CRITICAL(&s->mux);
+        return;
+    }
 
     /* 1. Note Off for all currently sounding step notes (NOT bar chord notes) */
     for (int i = 0; i < s->active_note_count; i++) {
@@ -305,8 +381,28 @@ static void seq_timer_callback(void *arg)
     s->current_step = (s->current_step + 1) % s->num_steps;
     int step = s->current_step;
 
-    /* 3. At each quarter-note boundary (every 4 steps): advance chord sequencer or bar chord */
-    if (step % 4 == 0 && s->playing) {
+    /* Arm pending outro at the start of the next bar */
+    if (s->fill_outro_pending && step == 0 && s->fill_steps_remaining == 0) {
+        s->fill_outro_pending   = false;
+        s->fill_is_outro        = true;
+        s->fill_outro_done      = false;
+        s->fill_steps_remaining = s->num_steps;
+        /* Silence all sounding notes immediately so only the fill plays */
+        for (int i = 0; i < s->bar_chord_note_count; i++) {
+            if (s->bar_chord_notes[i].active) {
+                dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
+                s->bar_chord_notes[i].active = false;
+            }
+        }
+        s->bar_chord_note_count = 0;
+        for (int i = 0; i < s->active_note_count; i++)
+            seq_note_off_routed(s->active_notes[i].channel, s->active_notes[i].note);
+        s->active_note_count = 0;
+    }
+
+    /* 3. At each quarter-note boundary (every 4 steps): advance chord sequencer or bar chord.
+     * Skipped during outro fill so no new notes are triggered. */
+    if (step % 4 == 0 && s->playing && !s->fill_is_outro) {
         /* Advance chord-seq playhead independently (0-31 over 4 drum loops) */
         s->chord_seq_step = (s->chord_seq_step < 0) ? 0 : (s->chord_seq_step + 1) % 32;
         int q = s->chord_seq_step;
@@ -367,24 +463,80 @@ static void seq_timer_callback(void *arg)
 
             /* Play new chord notes (legato — sustains until next chord trigger) */
             uint16_t mask = chord_masks[play_type];
-            uint8_t base_note = (uint8_t)((s->base_octave + 3) * 12 + play_root);
-            for (int i = 0; i < 12 && s->bar_chord_note_count < 12; i++) {
-                if ((mask >> i) & 1) {
-                    uint8_t note = base_note + i;
+            if (s->tight_voicing) {
+                uint8_t tnotes[12]; int tcnt = 0;
+                voice_tight_notes(mask, play_root,
+                                  s->tight_prev_notes, s->tight_prev_count,
+                                  tnotes, &tcnt);
+                for (int i = 0; i < tcnt && s->bar_chord_note_count < 12; i++) {
+                    uint8_t note = tnotes[i];
                     if (note <= 127) {
-                        dexed_raw_handle_midi(0x90, note, 64);   /* 50% velocity */
+                        dexed_raw_handle_midi(0x90, note, 64);
                         s->bar_chord_notes[s->bar_chord_note_count].note   = note;
                         s->bar_chord_notes[s->bar_chord_note_count].active = true;
                         s->bar_chord_note_count++;
                     }
                 }
+            } else {
+                uint8_t base_note = (uint8_t)((s->base_octave + 3) * 12 + play_root);
+                for (int i = 0; i < 12 && s->bar_chord_note_count < 12; i++) {
+                    if ((mask >> i) & 1) {
+                        uint8_t note = base_note + i;
+                        if (note <= 127) {
+                            dexed_raw_handle_midi(0x90, note, 64);   /* 50% velocity */
+                            s->bar_chord_notes[s->bar_chord_note_count].note   = note;
+                            s->bar_chord_notes[s->bar_chord_note_count].active = true;
+                            s->bar_chord_note_count++;
+                        }
+                    }
+                }
             }
+            /* Update tight voicing centroid */
+            s->tight_prev_count = s->bar_chord_note_count;
+            for (int i = 0; i < s->bar_chord_note_count; i++)
+                s->tight_prev_notes[i] = s->bar_chord_notes[i].note;
         }
     }
 
     /* 4. Trigger notes at current step.
      * Playback is always active regardless of display mode — mode only controls
      * which page is shown on the Launchpad, not which tracks fire. */
+
+    /* Fill intercept: play fill patterns instead of programmed tracks */
+    if (s->fill_steps_remaining > 0) {
+        int fi_step = step % FILL_PATTERN_LEN;
+        for (int fi = 0; fi < FILL_NUM_TRACKS; fi++) {
+            uint8_t vel = s->fill_is_outro
+                        ? s_fill_patterns[fi].out_v[fi_step]
+                        : s_fill_patterns[fi].in_v[fi_step];
+            if (vel > 0)
+                seq_drum_note_on(drum_midi_notes[s_fill_patterns[fi].idx], vel);
+        }
+        s->fill_steps_remaining--;
+        if (s->fill_steps_remaining == 0) {
+            if (s->fill_is_outro) {
+                /* Stop all notes and signal main task to call step_seq_stop() */
+                for (int i = 0; i < s->active_note_count; i++)
+                    seq_note_off_routed(s->active_notes[i].channel,
+                                        s->active_notes[i].note);
+                s->active_note_count = 0;
+                for (int i = 0; i < s->bar_chord_note_count; i++) {
+                    if (s->bar_chord_notes[i].active) {
+                        dexed_raw_handle_midi(0x80, s->bar_chord_notes[i].note, 0);
+                        s->bar_chord_notes[i].active = false;
+                    }
+                }
+                s->bar_chord_note_count = 0;
+                /* Signal main task to call step_seq_stop() — do NOT set playing=false
+                 * here; step_seq_stop() must do it so the timer gets cancelled. */
+                s->fill_outro_done = true;
+            }
+            /* Intro fill done: normal playback resumes from next tick */
+        }
+        portEXIT_CRITICAL(&s->mux);
+        return;
+    }
+
     for (int d = 0; d < SEQ_NUM_DRUM_TRACKS; d++) {
         uint8_t vel = s->drum_tracks[d].steps[step].velocity;
         if (vel > 0) {
@@ -462,6 +614,10 @@ int step_seq_init(void)
     s_seq.held_chord.active = false;
     s_seq.held_chord.bar_chord_played = false;
 
+    /* Tight voicing defaults */
+    s_seq.tight_voicing    = true;
+    s_seq.tight_prev_count = 0;
+
     /* Initialize field notes tracking */
     for (int i = 0; i < 64; i++) {
         s_seq.field_notes[i].note = 0;
@@ -533,7 +689,9 @@ void step_seq_stop(void)
 {
     if (!s_seq.playing) return;
     esp_timer_stop(s_seq.timer);
-    s_seq.playing = false;
+    s_seq.playing          = false;
+    s_seq.started_with_fill = false;
+    s_seq.fill_outro_pending = false;
 
     /* All notes off */
     portENTER_CRITICAL(&s_seq.mux);
@@ -575,6 +733,13 @@ void step_seq_toggle_play(void)
 bool step_seq_is_playing(void)
 {
     return s_seq.playing;
+}
+
+bool step_seq_consume_outro_fill_done(void)
+{
+    if (!s_seq.fill_outro_done) return false;
+    s_seq.fill_outro_done = false;
+    return true;
 }
 
 /* ================================================
@@ -1236,16 +1401,34 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
 
             /* Play and record exact notes — stopped precisely on pad release */
             uint16_t mask = chord_masks[chord_type];
-            uint8_t base_note = (uint8_t)((s_seq.base_octave + 3) * 12 + chord_root);
-            for (int i = 0; i < 12; i++) {
-                if ((mask >> i) & 1) {
-                    uint8_t n = base_note + i;
+            if (s_seq.tight_voicing) {
+                uint8_t tnotes[12]; int tcnt = 0;
+                voice_tight_notes(mask, chord_root,
+                                  s_seq.tight_prev_notes, s_seq.tight_prev_count,
+                                  tnotes, &tcnt);
+                for (int i = 0; i < tcnt; i++) {
+                    uint8_t n = tnotes[i];
                     if (n <= 127 && s_circle_lower_hold.note_count < 12) {
                         dexed_raw_handle_midi(0x90, n, velocity);
                         s_circle_lower_hold.notes[s_circle_lower_hold.note_count++] = n;
                     }
                 }
+            } else {
+                uint8_t base_note = (uint8_t)((s_seq.base_octave + 3) * 12 + chord_root);
+                for (int i = 0; i < 12; i++) {
+                    if ((mask >> i) & 1) {
+                        uint8_t n = base_note + i;
+                        if (n <= 127 && s_circle_lower_hold.note_count < 12) {
+                            dexed_raw_handle_midi(0x90, n, velocity);
+                            s_circle_lower_hold.notes[s_circle_lower_hold.note_count++] = n;
+                        }
+                    }
+                }
             }
+            /* Update tight voicing centroid */
+            s_seq.tight_prev_count = s_circle_lower_hold.note_count;
+            for (int i = 0; i < s_circle_lower_hold.note_count; i++)
+                s_seq.tight_prev_notes[i] = s_circle_lower_hold.notes[i];
 
             ESP_LOGI(TAG, "Circle: %s%s (hold-while-pressed) (prev %s)",
                      note_names[chord_root], chord_type_names[chord_type],
@@ -1381,7 +1564,49 @@ void step_seq_handle_button(uint8_t cc, uint8_t value)
 {
     switch (cc) {
         case LP_CC_SESSION:
-            if (value > 0) step_seq_toggle_play();
+            if (value > 0) {
+                /* Record press time for long-press detection */
+                s_session_press_us = esp_timer_get_time();
+            } else {
+                /* Button released — decide short vs long press */
+                if (s_session_press_us == 0) break;  /* spurious release */
+                int64_t elapsed = esp_timer_get_time() - s_session_press_us;
+                s_session_press_us = 0;
+                if (!s_seq.playing) {
+                    /* ---- START ---- */
+                    if (elapsed >= SESSION_LONG_PRESS_US) {
+                        /* Long press: intro fill, mark as fill-start run */
+                        portENTER_CRITICAL(&s_seq.mux);
+                        s_seq.fill_is_outro        = false;
+                        s_seq.fill_outro_done      = false;
+                        s_seq.fill_outro_pending   = false;
+                        s_seq.fill_steps_remaining = s_seq.num_steps;
+                        portEXIT_CRITICAL(&s_seq.mux);
+                        step_seq_play();
+                        portENTER_CRITICAL(&s_seq.mux);
+                        s_seq.started_with_fill = true;
+                        portEXIT_CRITICAL(&s_seq.mux);
+                        ESP_LOGI(TAG, "Intro fill started");
+                        esp32_oled_show_status("FILL", "INTRO");
+                    } else {
+                        /* Short press: immediate start, no fill */
+                        step_seq_play();
+                    }
+                } else {
+                    /* ---- STOP ---- */
+                    if (s_seq.started_with_fill || elapsed >= SESSION_LONG_PRESS_US) {
+                        /* Outro fill — schedule for next bar boundary */
+                        portENTER_CRITICAL(&s_seq.mux);
+                        s_seq.fill_outro_pending = true;
+                        portEXIT_CRITICAL(&s_seq.mux);
+                        ESP_LOGI(TAG, "Outro fill pending (next bar)");
+                        esp32_oled_show_status("FILL", "OUTRO");
+                    } else {
+                        /* Short press on a non-fill-start run: immediate stop */
+                        step_seq_stop();
+                    }
+                }
+            }
             break;
 
         case LP_CC_DRUMS:
@@ -1395,6 +1620,17 @@ void step_seq_handle_button(uint8_t cc, uint8_t value)
                     } else {
                         /* Enter BOTH */
                         step_seq_set_mode(SEQ_MODE_BOTH);
+                    }
+                } else if (s_seq.mode == SEQ_MODE_DRUM || s_seq.mode == SEQ_MODE_BOTH) {
+                    /* Already in drum mode → cycle through drum presets */
+                    int npresets = tsf_engine_get_preset_count();
+                    if (npresets > 1) {
+                        int next = (tsf_engine_get_current_preset() + 1) % npresets;
+                        tsf_engine_select_preset(next);
+                        char pname[24] = {0};
+                        tsf_engine_copy_preset_name(next, pname, sizeof(pname));
+                        esp32_oled_show_status("DRUM KIT", pname[0] ? pname : "?");
+                        ESP_LOGI(TAG, "Drum preset: %d '%s'", next, pname[0] ? pname : "?");
                     }
                 } else {
                     /* KEYS not held → enter DRUM only */
@@ -1457,10 +1693,19 @@ void step_seq_handle_button(uint8_t cc, uint8_t value)
 
         case LP_CC_MODE_CIRCLE:
             if (value > 0) {
-                /* Initialize held chord tracking when entering Circle mode */
-                s_seq.held_chord.active = false;
-                step_seq_set_mode(SEQ_MODE_CIRCLE);
-                ESP_LOGI(TAG, "Mode: Circle of Fifths");
+                if (s_seq.mode == SEQ_MODE_CIRCLE) {
+                    /* Already in Circle mode → toggle tight voicing */
+                    s_seq.tight_voicing = !s_seq.tight_voicing;
+                    esp32_oled_show_status("VOICING",
+                                          s_seq.tight_voicing ? "TIGHT" : "FREE");
+                    ESP_LOGI(TAG, "Tight voicing: %s",
+                             s_seq.tight_voicing ? "ON" : "OFF");
+                } else {
+                    /* Initialize held chord tracking when entering Circle mode */
+                    s_seq.held_chord.active = false;
+                    step_seq_set_mode(SEQ_MODE_CIRCLE);
+                    ESP_LOGI(TAG, "Mode: Circle of Fifths");
+                }
             }
             break;
 

@@ -36,6 +36,7 @@ extern "C" void tsf_impl_reset_counters(void);
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
+#include "freertos/task.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -63,11 +64,12 @@ static const char *TAG = "tsf_engine";
  * ===================================================================== */
 
 static tsf *s_tsf = nullptr;
-static volatile bool s_loaded = false;     /* checked from audio thread */
-static volatile bool s_reloading = false;  /* pause rendering during reload */
-static volatile int8_t s_load_progress = 0; /* 0=idle, 1-7=loading, 8=done, -1..=-5=failed */
-static volatile uint8_t s_error_detail = 0; /* TSF_ERR_* bitmask */
+static volatile bool s_loaded = false;
+static volatile bool s_reloading = false;
+static volatile int8_t s_load_progress = 0;
+static volatile uint8_t s_error_detail = 0;
 static int s_sample_rate = 48000;
+static int s_current_preset_idx = 0;
 
 /* =====================================================================
  * MIDI queue — same pattern as dexed_raw.cpp
@@ -288,6 +290,7 @@ static int load_sfo(const char *path)
 
     if (pi >= 0) {
         tsf_channel_set_presetindex(t, 9, pi);
+        s_current_preset_idx = pi;
         ESP_LOGI(TAG, "[tsf 3/5] Ch9 preset set: index=%d bank=%d prog=%d name='%s'",
                  pi,
                  tsf_channel_get_preset_bank(t, 9),
@@ -444,6 +447,42 @@ int tsf_engine_active_voices(void)
 {
     if (!s_loaded || !s_tsf) return 0;
     return tsf_active_voice_count(s_tsf);
+}
+
+int tsf_engine_get_preset_count(void)
+{
+    if (!s_loaded || !s_tsf) return 0;
+    return tsf_get_presetcount(s_tsf);
+}
+
+int tsf_engine_get_current_preset(void)
+{
+    return s_current_preset_idx;
+}
+
+void tsf_engine_copy_preset_name(int idx, char *out, int len)
+{
+    if (!out || len <= 0) return;
+    out[0] = '\0';
+    if (!s_loaded || !s_tsf) return;
+    int n = tsf_get_presetcount(s_tsf);
+    if (idx < 0 || idx >= n) return;
+    const char *name = tsf_get_presetname(s_tsf, idx);
+    if (!name) return;
+    snprintf(out, (size_t)len, "%s", name);
+}
+
+int tsf_engine_select_preset(int idx)
+{
+    if (!s_loaded || !s_tsf) return -1;
+    if (idx < 0 || idx >= tsf_get_presetcount(s_tsf)) return -1;
+    s_reloading = true;          /* pause audio rendering */
+    vTaskDelay(pdMS_TO_TICKS(5)); /* let any in-flight render finish */
+    tsf_channel_set_presetindex(s_tsf, 9, idx);
+    s_current_preset_idx = idx;
+    s_reloading = false;
+    ESP_LOGI("tsf", "Drum preset -> %d '%s'", idx, tsf_get_presetname(s_tsf, idx));
+    return 0;
 }
 
 int tsf_engine_get_load_progress(void)
