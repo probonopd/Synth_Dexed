@@ -140,8 +140,14 @@ const harmonic_state_t* step_seq_get_harmonic_state(void);
 uint8_t step_seq_get_suggestion_score(uint8_t to_root);
 
 /* Field mode note quantizer: snaps non-lit notes to next lower lit note.
- * Apply to external Note On and Note Off when in FIELD mode. */
+ * Apply to external Note On only — see below for note-off. */
 uint8_t step_seq_field_quantize_note(uint8_t midi_note);
+
+/* Field mode note remap table: call record_noteon after every quantized note-on
+ * so that resolve_noteoff can return the correct playing note for the release,
+ * independent of any subsequent harmonic state changes. */
+void    step_seq_field_record_noteon(uint8_t raw_note, uint8_t quantized_note);
+uint8_t step_seq_field_resolve_noteoff(uint8_t raw_note);
 
 /* Lookahead harmonic state for FIELD display: previews the next chord 1/16-note early
  * while the sequencer is running.  Identical to step_seq_get_harmonic_state() when stopped. */

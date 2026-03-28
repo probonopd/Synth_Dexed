@@ -143,7 +143,7 @@ typedef struct {
 
     /* Harmonic mode state */
     harmonic_state_t harmonic;
-    harmonic_state_t display_harmonic; /* lookahead: 1/16 ahead of harmonic while playing */
+    harmonic_state_t display_harmonic; /* lookahead: previews next chord SEQ_FIELD_LOOKAHEAD_MS early */
 
     /* Clock */
     uint16_t    bpm;
@@ -211,6 +211,12 @@ static struct {
     uint8_t notes[12];
     int     note_count;
 } s_circle_lower_hold = {};
+
+/* Per-raw-note remap table for external MIDI in FIELD mode.
+ * Stores the quantized note that was actually started for each incoming note,
+ * so note-offs are always sent to the correct playing voice even if the
+ * harmonic state changes between press and release. */
+static uint8_t s_field_note_map[128] = {};
 
 /* ================================================
  * Timer helpers
@@ -1508,6 +1514,24 @@ uint8_t step_seq_get_suggestion_score(uint8_t to_root)
 uint8_t step_seq_field_quantize_note(uint8_t midi_note)
 {
     return field_quantize(midi_note);
+}
+
+/* Record that `raw` was remapped to `quantized` on note-on.
+ * Must be called after every quantized note-on so note-off can find it. */
+void step_seq_field_record_noteon(uint8_t raw, uint8_t quantized)
+{
+    if (raw < 128) s_field_note_map[raw] = quantized ? quantized : raw;
+}
+
+/* Return the note to use for note-off corresponding to a raw incoming note,
+ * then clear the mapping.  Falls back to `raw` if no mapping was stored.
+ * This ensures note-offs are never affected by harmonic changes. */
+uint8_t step_seq_field_resolve_noteoff(uint8_t raw)
+{
+    if (raw >= 128) return raw;
+    uint8_t mapped = s_field_note_map[raw];
+    s_field_note_map[raw] = 0;
+    return mapped ? mapped : raw;
 }
 
 const harmonic_state_t* step_seq_get_display_harmonic_state(void)
