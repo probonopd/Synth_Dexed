@@ -51,6 +51,12 @@ int dexed_raw_load_bank_syx(const char *path);
 // Returns 0 on success.
 int dexed_raw_select_bank_program(int voice_index0);
 
+// Returns true once after a voice change (poll from non-audio thread).
+bool dexed_raw_poll_voice_changed(void);
+
+// Copies the current voice name (trimmed, null-terminated) into out[len].
+void dexed_raw_get_current_voice_name(char *out, int len);
+
 #ifdef __cplusplus
 }
 #endif

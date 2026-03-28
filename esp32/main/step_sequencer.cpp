@@ -785,7 +785,9 @@ void step_seq_set_chord(uint8_t root, chord_type_t type)
     s_seq.harmonic.chord_type = type;
     
     uint8_t abs_root = (s_seq.harmonic.key + root) % 12;
-    ESP_LOGI(TAG, "Chord: %s%s", note_names[abs_root], chord_type_names[type]);
+    char roman[8] = {0};
+    step_seq_chord_roman_numeral(root, type, s_seq.harmonic.scale_type, roman, sizeof(roman));
+    ESP_LOGI(TAG, "Chord: %s (%s%s)", roman, note_names[abs_root], chord_type_names[type]);
 }
 
 uint8_t step_seq_get_chord_root(void)
@@ -1147,16 +1149,24 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             }
         }
         else if (lp_is_q3(row, col)) {
-            /* Drum pad selection + audition */
+            /* Drum pad selection + audition.
+             * On pressure-sensitive pads (Launchpad X) adopt the actual played
+             * velocity as the new current velocity so the next programmed step
+             * uses it too.  A pad reporting exactly 64 is almost certainly a
+             * fixed-velocity device — keep the existing velocity in that case. */
             int drum = q3_to_drum_index(row, col);
             if (drum >= 0 && drum < SEQ_NUM_DRUM_TRACKS) {
                 step_seq_select_drum((uint8_t)drum);
-                /* Audition: trigger the drum sound */
-                seq_drum_note_on(drum_midi_notes[drum], s_seq.current_velocity);
+                uint8_t v = (velocity > 0 && velocity != 64)
+                            ? velocity
+                            : s_seq.current_velocity;
+                if (v != s_seq.current_velocity) step_seq_set_velocity(v);
+                /* Audition: trigger the drum sound at played velocity */
+                seq_drum_note_on(drum_midi_notes[drum], v);
             }
         }
         else if (lp_is_q4(row, col)) {
-            /* Velocity selection */
+            /* Velocity selection grid — fixed preset levels per cell */
             int vel_idx = q4_to_velocity_index(row, col);
             if (vel_idx >= 0 && vel_idx < 16) {
                 step_seq_set_velocity(velocity_levels[vel_idx]);
@@ -1265,7 +1275,12 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                 if (cleared) {
                     ESP_LOGI(TAG, "ChordSeq step %d cleared", seq_step);
                 } else {
-                    ESP_LOGI(TAG, "ChordSeq step %d: %s%s", seq_step,
+                    char _roman[8] = {0};
+                    step_seq_chord_roman_numeral(s_seq.selected_chord_root,
+                        s_seq.selected_chord_type, s_seq.harmonic.scale_type,
+                        _roman, sizeof(_roman));
+                    ESP_LOGI(TAG, "ChordSeq step %d: %s (%s%s)", seq_step,
+                             _roman,
                              note_names[s_seq.selected_chord_root],
                              chord_type_names[s_seq.selected_chord_type]);
                 }
@@ -1587,6 +1602,62 @@ uint8_t step_seq_melodic_scale_velocity(uint8_t midi_note, uint8_t velocity)
 uint8_t step_seq_get_field_note(uint8_t row, uint8_t col)
 {
     return get_field_note(row, col, &s_seq.harmonic);
+}
+
+/* ================================================
+ * Roman numeral helper
+ * ================================================ */
+
+/* Per-scale degree offsets from key root (semitones); 0xFF = sentinel */
+static const uint8_t s_degree_offsets[SCALE_TYPE_COUNT][8] = {
+    {0,2,4,5,7,9,11,0xFF},       /* MAJOR       */
+    {0,2,3,5,7,8,10,0xFF},       /* MINOR       */
+    {0,2,3,5,7,9,10,0xFF},       /* DORIAN      */
+    {0,2,4,5,7,9,10,0xFF},       /* MIXOLYDIAN  */
+    {0,1,3,5,7,8,10,0xFF},       /* PHRYGIAN    */
+    {0,2,4,6,7,9,11,0xFF},       /* LYDIAN      */
+    {0,1,3,5,6,8,10,0xFF},       /* LOCRIAN     */
+    {0,2,4,7,9,0xFF,0xFF,0xFF},  /* PENTA_MAJ   */
+    {0,3,5,7,10,0xFF,0xFF,0xFF}, /* PENTA_MIN   */
+};
+
+static const char * const s_roman_up[7]  = {"I","II","III","IV","V","VI","VII"};
+static const char * const s_roman_lo[7]  = {"i","ii","iii","iv","v","vi","vii"};
+
+static bool chord_is_major_quality(chord_type_t t)
+{
+    return t == CHORD_MAJ || t == CHORD_DOM7 || t == CHORD_AUG
+        || t == CHORD_SUS4 || t == CHORD_SUS2;
+}
+
+void step_seq_chord_roman_numeral(uint8_t chord_root_rel, chord_type_t type,
+                                  scale_type_t scale, char *out, int len)
+{
+    if (!out || len < 2) return;
+    const uint8_t *deg = s_degree_offsets[scale < SCALE_TYPE_COUNT ? (int)scale : 0];
+    bool maj = chord_is_major_quality(type);
+
+    /* Exact match */
+    for (int i = 0; i < 7 && deg[i] != 0xFF; i++) {
+        if (deg[i] == chord_root_rel) {
+            snprintf(out, (size_t)len, "%s", maj ? s_roman_up[i] : s_roman_lo[i]);
+            return;
+        }
+    }
+    /* Chromatic note — prefix nearest diatonic degree with b or # */
+    int best = 0, best_dist = 12;
+    for (int i = 0; i < 7 && deg[i] != 0xFF; i++) {
+        int d = abs((int)deg[i] - (int)chord_root_rel);
+        if (d > 6) d = 12 - d;
+        if (d < best_dist) { best_dist = d; best = i; }
+    }
+    /* flat if chord_root is one semitone below that degree */
+    int diff = (int)chord_root_rel - (int)deg[best];
+    if (diff < -6) diff += 12;
+    if (diff >  6) diff -= 12;
+    const char *pfx = (diff < 0) ? "b" : "#";
+    snprintf(out, (size_t)len, "%s%s", pfx,
+             maj ? s_roman_up[best] : s_roman_lo[best]);
 }
 
 bool step_seq_is_chord_tone(uint8_t pitch_class, uint8_t chord_root, chord_type_t type)

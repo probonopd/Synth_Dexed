@@ -162,6 +162,10 @@ uint8_t step_seq_get_field_note(uint8_t row, uint8_t col);
 
 /* Check if a pitch class is a chord/scale tone for display use. */
 bool step_seq_is_chord_tone(uint8_t pitch_class, uint8_t chord_root, chord_type_t chord_type);
+
+/* Writes Roman numeral representation of chord (e.g. "V", "vi", "bVII") into out[len]. */
+void step_seq_chord_roman_numeral(uint8_t chord_root_rel, chord_type_t type,
+                                  scale_type_t scale, char *out, int len);
 bool step_seq_is_scale_tone(uint8_t pitch_class, uint8_t key, scale_type_t scale_type);
 
 /* Get the chord root (semitone) for a circle grid position. */

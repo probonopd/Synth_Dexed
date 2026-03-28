@@ -93,7 +93,25 @@ static IRAM_ATTR bool sysex_q_pop(const uint8_t **data, int *len)
     return ok;
 }
 
-static volatile int s_last_active_voices = 0;
+static volatile int  s_last_active_voices = 0;
+static volatile int  s_current_program   = -1;
+static volatile bool s_voice_changed     = false;
+static char          s_current_voice_name[12] = {0};
+
+/* Extract, sanitise and cache the DX7 voice name from a 156-byte voice blob.
+ * Name is at bytes 145-154; safe to call from the audio IRAM callback. */
+static IRAM_ATTR void capture_voice_name(const uint8_t *voice156)
+{
+    const char *src = (const char *)&voice156[145];
+    int end = 0;
+    for (int i = 0; i < 10; i++) {
+        char c = src[i];
+        if ((unsigned char)c < 0x20) c = ' ';
+        s_current_voice_name[i] = c;
+        if (c != ' ') end = i + 1;
+    }
+    s_current_voice_name[end] = '\0';
+}
 
 static IRAM_ATTR void midi_q_push(uint8_t status, uint8_t data1, uint8_t data2)
 {
@@ -274,6 +292,9 @@ void dexed_raw_process_audio(float *left_out, float *right_out, int num_samples)
             const int program0 = (int)(msg.data1 & 0x7F);
             if (program0 >= 0 && program0 < 32) {
                 s_dexed->loadVoiceParameters(s_bank_voices[program0]);
+                capture_voice_name(s_bank_voices[program0]);
+                s_current_program = program0;
+                s_voice_changed   = true;
             }
         } else {
             uint8_t midiData[3] = { msg.status, msg.data1, msg.data2 };
@@ -336,6 +357,9 @@ IRAM_ATTR void dexed_raw_process_audio_i16(int16_t *out, int num_samples)
             const int program0 = (int)(msg.data1 & 0x7F);
             if (program0 >= 0 && program0 < 32) {
                 s_dexed->loadVoiceParameters(s_bank_voices[program0]);
+                capture_voice_name(s_bank_voices[program0]);
+                s_current_program = program0;
+                s_voice_changed   = true;
             }
         } else {
             uint8_t midiData[3] = { msg.status, msg.data1, msg.data2 };
@@ -421,8 +445,10 @@ int dexed_raw_load_voice_from_performance_ini(const char *path)
         if (parse_voice_data_line(line + 10, voice) == 0) {
             if (lock_engine(pdMS_TO_TICKS(100))) {
                 s_dexed->loadVoiceParameters(voice);
+                capture_voice_name(voice);
+                s_voice_changed = true;
                 unlock_engine();
-                ESP_LOGI(TAG, "Loaded VoiceData1 from %s", path);
+                ESP_LOGI(TAG, "Loaded VoiceData1 '%s' from %s", s_current_voice_name, path);
                 rc = 0;
             }
         }
@@ -565,11 +591,11 @@ int dexed_raw_load_voice_from_bank_syx(const char *path, int voice_index0)
 
     if (!lock_engine(pdMS_TO_TICKS(200))) return -1;
     s_dexed->loadVoiceParameters(voice156);
+    capture_voice_name(voice156);
+    s_voice_changed = true;
     unlock_engine();
 
-    char name[11] = {0};
-    memcpy(name, &voice156[145], 10);
-    ESP_LOGI(TAG, "Loaded bank voice %d: '%s'", voice_index0 + 1, name);
+    ESP_LOGI(TAG, "Loaded bank voice %d: '%s'", voice_index0 + 1, s_current_voice_name);
     return 0;
 }
 
@@ -616,7 +642,30 @@ int dexed_raw_select_bank_program(int voice_index0)
 
     if (!lock_engine(pdMS_TO_TICKS(200))) return -1;
     s_dexed->loadVoiceParameters(s_bank_voices[voice_index0]);
+    capture_voice_name(s_bank_voices[voice_index0]);
+    s_current_program  = voice_index0;
+    s_voice_changed    = true;
     s_last_active_voices = (int)s_dexed->getNumNotesPlaying();
     unlock_engine();
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Voice name helpers
+// ---------------------------------------------------------------------------
+
+/* Returns true once after a voice change, then false until the next change. */
+bool dexed_raw_poll_voice_changed(void)
+{
+    if (!s_voice_changed) return false;
+    s_voice_changed = false;
+    return true;
+}
+
+/* Copies the current voice name (trimmed, null-terminated) into out[len]. */
+void dexed_raw_get_current_voice_name(char *out, int len)
+{
+    if (!out || len <= 0) return;
+    if (s_current_voice_name[0] == '\0') { out[0] = '\0'; return; }
+    snprintf(out, (size_t)len, "%s", s_current_voice_name);
 }

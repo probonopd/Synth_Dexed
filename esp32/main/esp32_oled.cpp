@@ -18,9 +18,12 @@
 
 #include "esp32_oled.h"
 #include "step_sequencer.h"
+#include "dexed_raw.h"
 
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -85,15 +88,24 @@ static void draw_chord(void)
     const char *note  = s_note_names[abs_root];
     const char *ctype = s_chord_type_names[(int)h->chord_type];
 
+    /* Roman numeral for the current scale degree */
+    char roman[8] = {0};
+    step_seq_chord_roman_numeral(h->chord_root, h->chord_type,
+                                 h->scale_type, roman, sizeof(roman));
+
+    /* Full chord name e.g. "Gmaj", "Am7" */
+    char fullname[14] = {0};
+    snprintf(fullname, sizeof(fullname), "%s%s", note, ctype);
+
     u8g2_ClearBuffer(&s_u8g2);
 
-    /* Root note — centered, large */
+    /* Roman numeral — centered, large */
     u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
-    draw_centered(&s_u8g2, 42, note);
+    draw_centered(&s_u8g2, 42, roman);
 
-    /* Chord type — centered, medium */
+    /* Full chord name — centered, medium */
     u8g2_SetFont(&s_u8g2, u8g2_font_logisoso20_tr);
-    draw_centered(&s_u8g2, 62, ctype);
+    draw_centered(&s_u8g2, 62, fullname);
 
     u8g2_SendBuffer(&s_u8g2);
 }
@@ -115,6 +127,25 @@ static void draw_status(const char *label, const char *value)
     draw_centered(&s_u8g2, 56, value);
 
     u8g2_SendBuffer(&s_u8g2);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Background voice-change poller                                       */
+/* ------------------------------------------------------------------ */
+
+static void oled_poll_task(void *)
+{
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(50));
+        if (!s_initialized) continue;
+        if (dexed_raw_poll_voice_changed()) {
+            char vname[12] = {0};
+            dexed_raw_get_current_voice_name(vname, sizeof(vname));
+            if (vname[0] != '\0') {
+                esp32_oled_show_status("VOICE", vname);
+            }
+        }
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -155,6 +186,9 @@ int esp32_oled_init(void)
     u8g2_SetFont(&s_u8g2, u8g2_font_logisoso24_tr);
     draw_centered(&s_u8g2, 42, "Synth Dexed");
     u8g2_SendBuffer(&s_u8g2);
+
+    /* Polling task: detects voice changes immediately */
+    xTaskCreate(oled_poll_task, "oled_poll", 2048, nullptr, 2, nullptr);
 
     return 0;
 }
