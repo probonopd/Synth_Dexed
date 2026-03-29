@@ -40,6 +40,13 @@ typedef enum {
     CHORD_AUG,
     CHORD_SUS4,
     CHORD_SUS2,
+    CHORD_MAJ7,
+    CHORD_MIN_MAJ7,
+    CHORD_DOM9,
+    CHORD_MIN9,
+    CHORD_MAJ9,
+    CHORD_MAJ6,
+    CHORD_MIN6,
     CHORD_TYPE_COUNT
 } chord_type_t;
 

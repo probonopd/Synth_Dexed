@@ -58,7 +58,8 @@ static const char * const s_note_names[12] = {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
 };
 static const char * const s_chord_type_names[] = {
-    "maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2"
+    "maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2",
+    "maj7", "m/M7", "9", "m9", "maj9", "6", "m6", "?"
 };
 /* Must match seq_mode_t: DRUM=0 MELODIC=1 BOTH=2 CIRCLE=3 FIELD=4 */
 static const char * const s_mode_names[] = {
@@ -238,10 +239,11 @@ static void oled_poll_task(void *)
             
             if (active_pitch_count == 1 && single_note_pc >= 0) {
                 /* Single note: display just the note name */
+                static const char* notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
                 step_seq_update_guessed_chord(single_note_pc, 0xFF, 255);  /* type 0xFF = single note marker */
-                ESP_LOGI(TAG, "Single note: %d", single_note_pc);
+                ESP_LOGI(TAG, "Single note: %s", notes[single_note_pc]);
                 esp32_oled_update_chord();
-            } else if (active_pitch_count >= 3) {
+            } else if (active_pitch_count >= 2) {
                 /* Multiple notes: analyze for chords with harmonic context */
                 const harmonic_state_t* harmonic = step_seq_get_harmonic_state();
                 chord_guess_t guesses[3];
@@ -249,19 +251,27 @@ static void oled_poll_task(void *)
                 
                 if (guess_count > 0) {
                     /* Good match found, update state with top guess and trigger display */
+                    static const char* notes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+                    static const char* types[16] = {"maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2", "maj7", "m/M7", "9", "m9", "maj9", "6", "m6", "?"};
                     step_seq_update_guessed_chord(guesses[0].root, guesses[0].type, guesses[0].score);
                     
                     /* Store alternatives for display */
                     oled_set_alternatives(guesses, guess_count);
                     
-                    ESP_LOGI(TAG, "Guessed chord: root=%u type=%u score=%u", guesses[0].root, guesses[0].type, guesses[0].score);
+                    /* Log all guesses with their scores */
+                    const char* chord_name = (guesses[0].type < 16) ? types[guesses[0].type] : "?";
+                    ESP_LOGI(TAG, "Guessed chords (top=%s%s score=%u):", notes[guesses[0].root], chord_name, guesses[0].score);
+                    for (int i = 0; i < guess_count; i++) {
+                        const char* type_str = (guesses[i].type < 16) ? types[guesses[i].type] : "?";
+                        ESP_LOGI(TAG, "  [%d] %s%s score=%u", i, notes[guesses[i].root], type_str, guesses[i].score);
+                    }
                     esp32_oled_update_chord();
                 } else {
-                    /* No valid chord */
+                    /* No valid chord found */
                     step_seq_update_guessed_chord(0xFF, 0xFF, 0);
                 }
             } else {
-                /* 0 or 2 notes: don't display */
+                /* 0 notes: don't display */
                 step_seq_update_guessed_chord(0xFF, 0xFF, 0);
             }
         }

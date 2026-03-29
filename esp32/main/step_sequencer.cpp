@@ -75,14 +75,21 @@ static const uint8_t semitone_to_circle[12] = {
 
 /* Chord intervals as bitmasks (12 bits for chromatic notes) */
 static const uint16_t chord_masks[CHORD_TYPE_COUNT] = {
-    0b000010010001,  /* MAJ:  root, M3, P5 */
-    0b000010001001,  /* MIN:  root, m3, P5 */
-    0b010010010001,  /* DOM7: root, M3, P5, m7 */
-    0b010010001001,  /* MIN7: root, m3, P5, m7 */
-    0b000001001001,  /* DIM:  root, m3, dim5 */
-    0b000100010001,  /* AUG:  root, M3, aug5 */
-    0b000010100001,  /* SUS4: root, P4, P5 */
-    0b000010000101,  /* SUS2: root, M2, P5 */
+    0b000010010001,  /* 0: MAJ      root, M3, P5 */
+    0b000010001001,  /* 1: MIN      root, m3, P5 */
+    0b010010010001,  /* 2: DOM7     root, M3, P5, m7 */
+    0b010010001001,  /* 3: MIN7     root, m3, P5, m7 */
+    0b000001001001,  /* 4: DIM      root, m3, dim5 */
+    0b000100010001,  /* 5: AUG      root, M3, aug5 */
+    0b000010100001,  /* 6: SUS4     root, P4, P5 */
+    0b000010000101,  /* 7: SUS2     root, M2, P5 */
+    0b100010010001,  /* 8: MAJ7     root, M3, P5, M7 */
+    0b100010001001,  /* 9: MIN/MAJ7 root, m3, P5, M7 */
+    0b010010110001,  /* 10: DOM9    root, M3, P5, m7, M2 */
+    0b010010101001,  /* 11: MIN9    root, m3, P5, m7, M2 */
+    0b100010110001,  /* 12: MAJ9    root, M3, P5, M7, M2 */
+    0b001010010001,  /* 13: MAJ6    root, M3, P5, M6 */
+    0b001010001001,  /* 14: MIN6    root, m3, P5, M6 */
 };
 
 /* Scale intervals as bitmasks */
@@ -105,7 +112,8 @@ static const char* note_names[12] = {
 
 /* Chord type names for debugging */
 static const char* chord_type_names[CHORD_TYPE_COUNT] = {
-    "maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2"
+    "maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2",
+    "maj7", "m/M7", "9", "m9", "maj9", "6", "m6"
 };
 
 /* ================================================

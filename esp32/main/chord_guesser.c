@@ -3,54 +3,85 @@
  *
  * Algorithm: Score-based matching
  * 1. Extract pitch classes from held notes
- * 2. For each possible chord (root 0-11, type 0-7):
+ * 2. For each possible chord (root 0-11, type 0-15):
  *    - Score = (matching chord tones * 100) - (non-harmonic notes * 25)
  * 3. Return chords sorted by score
  *
- * Time complexity: O(1) — fixed 12 roots × 8 types = 96 checks per call
+ * Time complexity: O(1) — fixed 12 roots × 16 types = 192 checks per call
  */
 
 #include "chord_guesser.h"
 #include "step_sequencer.h"
 #include "esp_log.h"
 #include <stddef.h>
+#include <stdio.h>
 
 static const char* TAG = "chord_guesser";
 
-/* Chord bitmasks (from step_sequencer.cpp) */
-static const uint16_t chord_masks[8] = {
-    0b000010010001,  /* MAJ:  root, M3, P5 */
-    0b000010001001,  /* MIN:  root, m3, P5 */
-    0b010010010001,  /* DOM7: root, M3, P5, m7 */
-    0b010010001001,  /* MIN7: root, m3, P5, m7 */
-    0b000001001001,  /* DIM:  root, m3, dim5 */
-    0b000100010001,  /* AUG:  root, M3, aug5 */
-    0b000010100001,  /* SUS4: root, P4, P5 */
-    0b000010000101,  /* SUS2: root, M2, P5 */
+/* Note names for formatting */
+static const char* note_names[12] = {
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
+};
+
+/* Chord type names matching chord_type_t enum */
+static const char* chord_type_names[16] = {
+    "maj", "min", "7", "m7", "dim", "aug", "sus4", "sus2",
+    "maj7", "m/M7", "9", "m9", "maj9", "6", "m6", "?"
+};
+
+/* Expanded chord bitmasks (each bit = semitone interval from root) */
+static const uint16_t chord_masks[16] = {
+    0b000010010001,  /* 0: MAJ      root, M3, P5 */
+    0b000010001001,  /* 1: MIN      root, m3, P5 */
+    0b010010010001,  /* 2: DOM7     root, M3, P5, m7 */
+    0b010010001001,  /* 3: MIN7     root, m3, P5, m7 */
+    0b000001001001,  /* 4: DIM      root, m3, dim5 */
+    0b000100010001,  /* 5: AUG      root, M3, aug5 */
+    0b000010100001,  /* 6: SUS4     root, P4, P5 */
+    0b000010000101,  /* 7: SUS2     root, M2, P5 */
+    0b100010010001,  /* 8: MAJ7     root, M3, P5, M7 */
+    0b100010001001,  /* 9: MIN/MAJ7 root, m3, P5, M7 */
+    0b010010110001,  /* 10: DOM9    root, M3, P5, m7, M2 */
+    0b010010101001,  /* 11: MIN9    root, m3, P5, m7, M2 */
+    0b100010110001,  /* 12: MAJ9    root, M3, P5, M7, M2 */
+    0b001010010001,  /* 13: MAJ6    root, M3, P5, M6 */
+    0b001010001001,  /* 14: MIN6    root, m3, P5, M6 */
 };
 
 /* Diatonic chord qualities for each scale degree in major/minor scales */
 /* Index: scale degree 0-6, Value: bitmask of allowed chord types (see chord_type_t) */
-static const uint8_t major_scale_chords[7] = {
-    /* I    ii   iii  IV   V    vi   vii° */
-    1,   /* I   = Major (type 0=MAJ)           */
-    2,   /* ii  = Minor (type 1=MIN)           */
-    2,   /* iii = Minor (type 1=MIN)           */
-    1,   /* IV  = Major (type 0=MAJ)           */
-    1,   /* V   = Major (type 0=MAJ)           */
-    2,   /* vi  = Minor (type 1=MIN)           */
-    16,  /* vii°= Diminished (type 4=DIM)      */
+static const uint16_t major_scale_chords[7] = {
+    /* I chord: maj, maj7, maj6, maj9 */
+    (1u << 0) | (1u << 8) | (1u << 12) | (1u << 13),
+    /* ii chord: min, min7, min9 */
+    (1u << 1) | (1u << 3) | (1u << 11),
+    /* iii chord: min, min7, min9 */
+    (1u << 1) | (1u << 3) | (1u << 11),
+    /* IV chord: maj, maj7, maj6, maj9 */
+    (1u << 0) | (1u << 8) | (1u << 12) | (1u << 13),
+    /* V chord: maj, dom7, dom9 (dominant 7th-family) */
+    (1u << 0) | (1u << 2) | (1u << 10),
+    /* vi chord: min, min7, min9 */
+    (1u << 1) | (1u << 3) | (1u << 11),
+    /* vii° chord: dim */
+    (1u << 4),
 };
 
-static const uint8_t minor_scale_chords[7] = {
-    /* i    ii°  III  iv   v    VI   VII  */
-    2,   /* i   = Minor (type 1=MIN)           */
-    16,  /* ii° = Diminished (type 4=DIM)      */
-    1,   /* III = Major (type 0=MAJ)           */
-    2,   /* iv  = Minor (type 1=MIN)           */
-    2,   /* v   = Minor (type 1=MIN)           */
-    1,   /* VI  = Major (type 0=MAJ)           */
-    1,   /* VII = Major (type 0=MAJ)           */
+static const uint16_t minor_scale_chords[7] = {
+    /* i chord: min, min7, min/maj7, min9 */
+    (1u << 1) | (1u << 3) | (1u << 9) | (1u << 11),
+    /* ii° chord: dim */
+    (1u << 4),
+    /* III chord: maj, maj7, maj6, maj9 */
+    (1u << 0) | (1u << 8) | (1u << 12) | (1u << 13),
+    /* iv chord: min, min7, min9 */
+    (1u << 1) | (1u << 3) | (1u << 11),
+    /* v chord: min, min7, min9 */
+    (1u << 1) | (1u << 3) | (1u << 11),
+    /* VI chord: maj, maj7, maj6, maj9 */
+    (1u << 0) | (1u << 8) | (1u << 12) | (1u << 13),
+    /* VII chord: maj, dom7 */
+    (1u << 0) | (1u << 2),
 };
 
 /**
@@ -88,7 +119,7 @@ static bool is_diatonic_chord(uint8_t root, uint8_t chord_type,
     int scale_degree = pitch_class_to_scale_degree(root, key, scale_type);
     if (scale_degree < 0) return false;  /* Root not in scale */
     
-    uint8_t type_bit = (1 << chord_type);
+    uint16_t type_bit = (1u << chord_type);
     
     if (scale_type == 0) {  /* MAJOR */
         return (major_scale_chords[scale_degree] & type_bit) != 0;
@@ -116,12 +147,23 @@ int chord_guesser_init(void)
  */
 static uint8_t score_chord(uint16_t pitch_classes, uint16_t chord_mask, uint8_t root)
 {
+    /* REQUIRE root note to be present - otherwise this chord isn't being played */
+    if (!((pitch_classes >> root) & 1)) {
+        return 0;
+    }
+    
     /* Rotate chord mask to root position */
     uint16_t rotated = 0;
     for (int i = 0; i < 12; i++) {
         if ((chord_mask >> i) & 1) {
             rotated |= (1 << ((i + root) % 12));
         }
+    }
+    
+    /* Count chord tones (bits in the chord) */
+    int chord_size = 0;
+    for (int i = 0; i < 12; i++) {
+        if ((chord_mask >> i) & 1) chord_size++;
     }
     
     /* Count matching chord tones */
@@ -132,7 +174,7 @@ static uint8_t score_chord(uint16_t pitch_classes, uint16_t chord_mask, uint8_t 
         }
     }
     
-    /* Count non-harmonic notes (penalty) */
+    /* Count non-harmonic notes (played but not in chord) */
     int non_harmonic = 0;
     for (int i = 0; i < 12; i++) {
         if ((pitch_classes >> i) & 1 && !((rotated >> i) & 1)) {
@@ -140,8 +182,27 @@ static uint8_t score_chord(uint16_t pitch_classes, uint16_t chord_mask, uint8_t 
         }
     }
     
-    /* Calculate score: boost for matches, penalty for noise */
-    int score = (matches * 80) - (non_harmonic * 20);
+    int missing_tones = chord_size - matches;
+    
+    /* Scoring: 
+     * - Base: matches * 40 (moderate per-tone reward)
+     * - HUGE bonus for perfect voicing (all chord tones present)
+     * - Penalty for missing tones and extra notes
+     */
+    int score = (matches * 40);
+    
+    if (missing_tones == 0 && non_harmonic == 0) {
+        /* PERFECT: all chord tones present, no extras */
+        score += 120;
+    } else if (missing_tones == 0) {
+        /* Complete chord but with extra notes */
+        score += 80;
+    }
+    
+    /* Penalties */
+    score -= (missing_tones * 50);
+    score -= (non_harmonic * 60);
+    
     if (score < 0) score = 0;
     if (score > 255) score = 255;
     
@@ -168,19 +229,19 @@ int chord_guesser_analyze(const bool active_notes[128],
         }
     }
     
-    /* Require at least 3 pitch classes for a valid chord */
-    if (active_pitch_count < 3) return 0;
+    /* Require at least 2 pitch classes for a valid chord (allows intervals, power chords, etc.) */
+    if (active_pitch_count < 2) return 0;
     
     /* No notes playing */
     if (pitch_classes == 0) return 0;
     
     /* Score all possible chords */
     typedef struct { uint8_t root; uint8_t type; uint8_t score; } scored_chord_t;
-    scored_chord_t scores[96];  /* 12 roots × 8 types */
+    scored_chord_t scores[192];  /* 12 roots × 16 types */
     int score_count = 0;
     
     for (int root = 0; root < 12; root++) {
-        for (int type = 0; type < 8; type++) {
+        for (int type = 0; type < 16; type++) {
             uint8_t score = score_chord(pitch_classes, chord_masks[type], root);
             /* Require minimum score of 100 for inclusion (higher confidence) */
             if (score >= 100) {
