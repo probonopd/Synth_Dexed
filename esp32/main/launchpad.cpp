@@ -438,6 +438,7 @@ void launchpad_refresh_grid(void)
          * Full 8x8 grid shows chords arranged by circle of fifths.
          * Columns = circle position (left=subdominant, right=dominant)
          * Rows 1-2: Major, 3-4: Minor, 5-6: Dom7, 7-8: Min7
+         * Plus 9 chord pads: 7 diatonic + bVI(borrowed) + major III
          *
          * Colors encode momentum-based suggestions:
          * - Currently playing chord = WHITE (bright)
@@ -447,6 +448,8 @@ void launchpad_refresh_grid(void)
          * - Weak (2) = dim ORANGE
          * - Distant (0-1) = dim
          * Tonic chord always gets a blue tint.
+         * 
+         * bVI and major III are shown at 50% dimmed (borrowed chords).
          */
         const harmonic_state_t *h = step_seq_get_harmonic_state();
         uint8_t cur_abs_root = (h->key + h->chord_root) % 12;
@@ -477,11 +480,13 @@ void launchpad_refresh_grid(void)
             }
         }
 
-        /* ---- 7 diatonic chord pads (rows 1-3) ----
+        /* ---- 9 chord pads (7 diatonic + bVI + major III) ----
          * Static function colors; selected chord = white.
+         * Indices 7 (bVI) and 8 (III major) are shown at 50% dimmed.
          *   I=Blue  ii=Green  iii=Cyan  IV=Lime  V=Orange  vi=Purple  vii°=Red
+         *   bVI=Orange(dimmed)  III=Blue(dimmed)
          */
-        static const uint8_t degree_colors[7] = {
+        static const uint8_t degree_colors[9] = {
             LP_COLOR_BLUE,    /* I   */
             LP_COLOR_GREEN,   /* ii  */
             LP_COLOR_CYAN,    /* iii */
@@ -489,6 +494,11 @@ void launchpad_refresh_grid(void)
             LP_COLOR_ORANGE,  /* V   */
             LP_COLOR_PURPLE,  /* vi  */
             LP_COLOR_RED,     /* vii°*/
+            LP_COLOR_ORANGE,  /* bVI (dimmed) */
+            LP_COLOR_BLUE,    /* III (dimmed) */
+        };
+        static const bool degree_dimmed[9] = {
+            false, false, false, false, false, false, false, true, true
         };
         for (uint8_t row = 1; row <= 4; row++) {
             for (uint8_t col = 1; col <= 8; col++) {
@@ -498,8 +508,14 @@ void launchpad_refresh_grid(void)
                     int deg = step_seq_get_circle_degree(row, col);
                     if (root == cur_abs_root && ctype == cur_chord_type) {
                         color = LP_CURRENT_CHORD;   /* white: currently playing */
+                    } else if (deg >= 0 && deg < 9) {
+                        color = degree_colors[deg];
+                        /* Apply 50% dimming for borrowed chords (indices 7-8) */
+                        if (degree_dimmed[deg]) {
+                            color = (color == LP_COLOR_OFF) ? LP_COLOR_OFF : (color | 0x01);  /* dim by setting LSB */
+                        }
                     } else {
-                        color = (deg >= 0) ? degree_colors[deg] : LP_COLOR_WHITE_DIM;
+                        color = LP_COLOR_WHITE_DIM;
                     }
                 }
                 launchpad_batch_set(0, lp_pad_note(row, col), color);

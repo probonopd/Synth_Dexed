@@ -226,11 +226,14 @@ static struct {
 } s_circle_lower_hold = {};
 
 /* Range-fill gesture: when a second step pad is pressed while the first is still held,
- * all steps between them are set to the same state as the first toggle determined. */
+ * all steps between them are set to the same state as the first toggle determined.
+ * In melodic mode supports both horizontal (same row, vary columns) and vertical
+ * (same column, vary rows) fills without affecting notes in between. */
 static struct {
     bool active;
     int  first_step;  /* linear step index (drum/chord-seq) or col-1 (melodic) */
-    int  first_row;   /* row of first pad (-1 = row-agnostic); used in melodic for pitch */
+    int  first_row;   /* row of first pad (used in melodic for pitch) */
+    int  first_col;   /* column of first pad (used in melodic to detect vertical fill) */
     bool fill_on;     /* true = filling steps ON; false = turning them OFF */
 } s_range_fill = {};
 
@@ -356,6 +359,9 @@ static void voice_tight_notes(uint16_t mask, uint8_t abs_root,
         int sum = 0;
         for (int i = 0; i < prev_cnt; i++) sum += prev[i];
         center = sum / prev_cnt;
+        /* Constrain center to a stable range (C3-C6) to prevent octave drift */
+        if (center < 48)  center = 48;
+        if (center > 84)  center = 84;
     }
     int cnt = 0;
     for (int i = 0; i < n; i++) {
@@ -1221,36 +1227,41 @@ static uint8_t field_quantize(uint8_t midi_note)
     return midi_note;  /* fallback: nothing found, pass through */
 }
 
-/* Circle mode: 7 diatonic chord pads in a 3-col × 3-row grid.
+/* Circle mode: 9 chord pads (7 diatonic + bVI + major III).
  *
- *   col:       1     2      3
- *   row 3:     IV    I      V
- *   row 2:     ii    vi     iii
- *   row 1:           vii°
+ *   col:       1      2      3      4      5
+ *   row 3:                    vii°
+ *   row 2:            ii     vi     iii
+ *   row 1:    bVI(d)  IV     I      V     III(d)
  *
- * (Example for C: F  C  G / Dm Am Em / Bdim)
- * Row 3 = bottom on the Launchpad (physical bottom = low row number).
+ * (Example for C: Ab(d)  F  C  G  E(d) / (empty) Dm Am Em / Bdim)
+ * (d) = 50% dimmed (borrowed/alternate chords)
+ * Row 3 = top, row 1 = bottom on the Launchpad.
  *
- * Degree index: 0=I  1=ii  2=iii  3=IV  4=V  5=vi  6=vii°
- * Returns the index (0-6), or -1 if the position is not a chord pad.
+ * Degree index: 0=I  1=ii  2=iii  3=IV  4=V  5=vi  6=vii°  7=bVI(d)  8=III(d)
+ * Returns the index (0-8), or -1 if the position is not a chord pad.
  */
 static int circle_degree_at(uint8_t row, uint8_t col)
 {
-    if (row == 3 && col == 2) return 6;  /* vii° */
-    if (row == 2 && col == 1) return 1;  /* ii   */
-    if (row == 2 && col == 2) return 5;  /* vi   */
-    if (row == 2 && col == 3) return 2;  /* iii  */
-    if (row == 1 && col == 1) return 3;  /* IV   */
-    if (row == 1 && col == 2) return 0;  /* I    */
-    if (row == 1 && col == 3) return 4;  /* V    */
+    if (row == 3 && col == 3) return 6;  /* vii° */
+    if (row == 2 && col == 2) return 1;  /* ii   */
+    if (row == 2 && col == 3) return 5;  /* vi   */
+    if (row == 2 && col == 4) return 2;  /* iii  */
+    if (row == 1 && col == 1) return 7;  /* bVI (dimmed) */
+    if (row == 1 && col == 2) return 3;  /* IV   */
+    if (row == 1 && col == 3) return 0;  /* I    */
+    if (row == 1 && col == 4) return 4;  /* V    */
+    if (row == 1 && col == 5) return 8;  /* III (dimmed) */
     return -1;
 }
 
-/* Semitone offsets from key root for each diatonic degree (major scale) */
-static const uint8_t circle_degree_semitone[7] = { 0, 2, 4, 5, 7, 9, 11 };
-static const chord_type_t circle_degree_type[7] = {
-    CHORD_MAJ, CHORD_MIN, CHORD_MIN, CHORD_MAJ, CHORD_MAJ, CHORD_MIN, CHORD_DIM
+/* Semitone offsets from key root for each chord (9 total) */
+static const uint8_t circle_degree_semitone[9] = { 0, 2, 4, 5, 7, 9, 11, 8, 4 };
+static const chord_type_t circle_degree_type[9] = {
+    CHORD_MAJ, CHORD_MIN, CHORD_MIN, CHORD_MAJ, CHORD_MAJ, CHORD_MIN, CHORD_DIM, CHORD_MAJ, CHORD_MAJ
 };
+/* bVI (index 7) and major III (index 8) are 50% dimmed */
+static const bool circle_degree_dimmed[9] = { false, false, false, false, false, false, false, true, true };
 
 /* Returns true and fills out_root/out_type when (row,col) is a valid chord pad. */
 static bool get_circle_chord(uint8_t row, uint8_t col, uint8_t key,
@@ -1384,7 +1395,8 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             /* Step grid: toggle (or range-fill if another step is already held) */
             int step = grid_to_step_index(row, col);
             if (step >= 0 && step < s_seq.num_steps) {
-                if (s_range_fill.active && s_range_fill.first_row < 0) {
+                /* Range-fill only triggers for non-adjacent steps */
+                if (s_range_fill.active && s_range_fill.first_row < 0 && abs(step - s_range_fill.first_step) > 1) {
                     /* Second pad: fill all steps between first and this */
                     int lo = (step < s_range_fill.first_step) ? step : s_range_fill.first_step;
                     int hi = (step > s_range_fill.first_step) ? step : s_range_fill.first_step;
@@ -1392,13 +1404,16 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                         if (s_range_fill.fill_on) step_seq_drum_set_step((uint8_t)i, s_seq.current_velocity);
                         else                      step_seq_drum_clear_step((uint8_t)i);
                     }
+                    s_range_fill.active = false;  /* gesture consumed - don't toggle */
                 } else {
-                    /* First pad: toggle and record for potential range fill */
+                    /* Adjacent pads or first pad: just toggle and record for potential range fill */
+                    s_range_fill.active = false;  /* cancel previous gesture if any */
                     bool was_active = step_seq_drum_step_is_active(s_seq.selected_drum, (uint8_t)step);
                     step_seq_drum_toggle_step((uint8_t)step);
                     s_range_fill.active     = true;
                     s_range_fill.first_step = step;
                     s_range_fill.first_row  = -1;
+                    s_range_fill.first_col  = -1;
                     s_range_fill.fill_on    = !was_active;
                 }
             }
@@ -1433,21 +1448,49 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             /* Melodic step grid: columns=time, rows=pitch */
             int step = (col - 1);  /* 0-7 */
             uint8_t pitch = (uint8_t)(s_seq.base_octave * 12 + (row - 5));
-            if (s_range_fill.active && s_range_fill.first_row == (int)row) {
-                /* Second pad in same row: fill column range with same on/off */
-                int lo = (step < s_range_fill.first_step) ? step : s_range_fill.first_step;
-                int hi = (step > s_range_fill.first_step) ? step : s_range_fill.first_step;
-                for (int i = lo; i <= hi; i++) {
-                    if (s_range_fill.fill_on) melodic_step_set_note((uint8_t)i, pitch, s_seq.current_velocity);
-                    else                      melodic_step_clear_note((uint8_t)i, pitch);
+            bool gesture_consumed = false;
+            
+            if (s_range_fill.active) {
+                /* Check if this is a horizontal fill (same row, different column, NOT adjacent) */
+                if (s_range_fill.first_row == (int)row && abs(step - s_range_fill.first_step) > 1) {
+                    /* Horizontal range-fill: fill columns between first and second pad at same pitch */
+                    int lo = (step < s_range_fill.first_step) ? step : s_range_fill.first_step;
+                    int hi = (step > s_range_fill.first_step) ? step : s_range_fill.first_step;
+                    for (int i = lo; i <= hi; i++) {
+                        if (s_range_fill.fill_on) melodic_step_set_note((uint8_t)i, pitch, s_seq.current_velocity);
+                        else                      melodic_step_clear_note((uint8_t)i, pitch);
+                    }
+                    s_range_fill.active = false;
+                    gesture_consumed = true;  /* don't toggle the second pad */
                 }
-            } else {
-                /* First pad: toggle and record */
+                /* Check if this is a vertical fill (same column, different row, NOT adjacent) */
+                else if (s_range_fill.first_col == (int)col && abs(row - s_range_fill.first_row) > 1) {
+                    /* Vertical range-fill: fill rows between first and second pad at same step.
+                     * Does not affect any horizontal notes in between. */
+                    int lo_row = (row < s_range_fill.first_row) ? row : s_range_fill.first_row;
+                    int hi_row = (row > s_range_fill.first_row) ? row : s_range_fill.first_row;
+                    for (int r = lo_row; r <= hi_row; r++) {
+                        uint8_t p = (uint8_t)(s_seq.base_octave * 12 + (r - 5));
+                        if (s_range_fill.fill_on) melodic_step_set_note((uint8_t)step, p, s_seq.current_velocity);
+                        else                      melodic_step_clear_note((uint8_t)step, p);
+                    }
+                    s_range_fill.active = false;
+                    gesture_consumed = true;  /* don't toggle the second pad */
+                }
+                /* Different row and column, or adjacent pads: cancel gesture and start fresh */
+                else {
+                    s_range_fill.active = false;
+                }
+            }
+            
+            /* Only start a new gesture if we didn't just consume a range-fill */
+            if (!gesture_consumed && !s_range_fill.active) {
                 bool exists = melodic_step_has_note((uint8_t)step, pitch);
                 step_seq_melodic_toggle_note((uint8_t)step, pitch, s_seq.current_velocity);
                 s_range_fill.active     = true;
                 s_range_fill.first_step = step;
                 s_range_fill.first_row  = (int)row;
+                s_range_fill.first_col  = (int)col;
                 s_range_fill.fill_on    = !exists;
             }
         }
@@ -1467,7 +1510,7 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
         }
     }
     else if (s_seq.mode == SEQ_MODE_CIRCLE) {
-        /* Circle mode: 7 diatonic pads (rows 1-3, specific cols only) */
+        /* Circle mode: 9 chord pads (7 diatonic + bVI borrowed + major III) */
         uint8_t chord_root; chord_type_t chord_type;
         if (lp_is_grid(row, col) && row <= 3 &&
             get_circle_chord(row, col, s_seq.harmonic.key, &chord_root, &chord_type)) {
