@@ -477,39 +477,31 @@ void launchpad_refresh_grid(void)
             }
         }
 
+        /* ---- 7 diatonic chord pads (rows 1-3) ----
+         * Static function colors; selected chord = white.
+         *   I=Blue  ii=Green  iii=Cyan  IV=Lime  V=Orange  vi=Purple  vii°=Red
+         */
+        static const uint8_t degree_colors[7] = {
+            LP_COLOR_BLUE,    /* I   */
+            LP_COLOR_GREEN,   /* ii  */
+            LP_COLOR_CYAN,    /* iii */
+            LP_COLOR_LIME,    /* IV  */
+            LP_COLOR_ORANGE,  /* V   */
+            LP_COLOR_PURPLE,  /* vi  */
+            LP_COLOR_RED,     /* vii°*/
+        };
         for (uint8_t row = 1; row <= 4; row++) {
             for (uint8_t col = 1; col <= 8; col++) {
-                uint8_t root;
-                chord_type_t ctype;
-                step_seq_get_circle_chord(row, col, &root, &ctype);
-
-                uint8_t color;
-
-                /* Is this the currently selected chord? */
-                if (root == cur_abs_root && ctype == cur_chord_type) {
-                    color = LP_CURRENT_CHORD;
-                }
-                /* Tonic of the key (special color regardless of suggestion) */
-                else if (root == h->key) {
-                    color = LP_TONIC_CHORD;
-                }
-                else {
-                    /* Use suggestion engine for coloring */
-                    uint8_t score = step_seq_get_suggestion_score(root);
-
-                    if (score >= 5) {
-                        color = LP_SUGGESTED_CHORD;    /* Cyan - strongest */
-                    } else if (score >= 4) {
-                        color = LP_CHORD_TONE;         /* Green - good */
-                    } else if (score >= 3) {
-                        color = LP_SUBDOMINANT_CHORD;  /* Green dim / Yellow */
-                    } else if (score >= 2) {
-                        color = LP_DOMINANT_CHORD;      /* Orange */
+                uint8_t color = LP_COLOR_OFF;
+                uint8_t root; chord_type_t ctype;
+                if (step_seq_get_circle_chord(row, col, &root, &ctype)) {
+                    int deg = step_seq_get_circle_degree(row, col);
+                    if (root == cur_abs_root && ctype == cur_chord_type) {
+                        color = LP_CURRENT_CHORD;   /* white: currently playing */
                     } else {
-                        color = LP_COLOR_WHITE_DIM;     /* Distant */
+                        color = (deg >= 0) ? degree_colors[deg] : LP_COLOR_WHITE_DIM;
                     }
                 }
-
                 launchpad_batch_set(0, lp_pad_note(row, col), color);
             }
         }

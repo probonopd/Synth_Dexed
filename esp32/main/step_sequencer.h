@@ -170,8 +170,12 @@ void step_seq_chord_roman_numeral(uint8_t chord_root_rel, chord_type_t type,
                                   scale_type_t scale, char *out, int len);
 bool step_seq_is_scale_tone(uint8_t pitch_class, uint8_t key, scale_type_t scale_type);
 
-/* Get the chord root (semitone) for a circle grid position. */
-void step_seq_get_circle_chord(uint8_t row, uint8_t col, uint8_t* out_root, chord_type_t* out_type);
+/* Get the chord root/type for a circle grid position.
+ * Returns true if (row,col) is a valid chord pad, false otherwise. */
+bool step_seq_get_circle_chord(uint8_t row, uint8_t col, uint8_t* out_root, chord_type_t* out_type);
+
+/* Returns diatonic degree index 0=I..6=vii°, or -1 if not a chord pad. */
+int step_seq_get_circle_degree(uint8_t row, uint8_t col);
 
 /* ---- Chord step sequencer (Circle mode, rows 5-8) ---- */
 bool         step_seq_chord_seq_step_active(uint8_t step);  /* is step programmed? */
