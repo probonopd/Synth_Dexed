@@ -162,6 +162,9 @@ uint8_t step_seq_melodic_scale_velocity(uint8_t midi_note, uint8_t velocity);
 /* Field mode: get the MIDI note mapped to a grid position (row/col 1-8). */
 uint8_t step_seq_get_field_note(uint8_t row, uint8_t col);
 
+/* Get all currently active notes (field pads + external MIDI keyboard) for chord guessing */
+void step_seq_get_active_notes(bool out_notes[128]);
+
 /* Check if a pitch class is a chord/scale tone for display use. */
 bool step_seq_is_chord_tone(uint8_t pitch_class, uint8_t chord_root, chord_type_t chord_type);
 

@@ -285,14 +285,14 @@ static bool is_user_held(uint8_t note)
  * Build a 128-bool array of currently held notes for chord guesser.
  * Includes both Launchpad FIELD pads and external MIDI keyboard notes.
  */
-static void build_active_notes_array(bool out_active[128])
+void step_seq_get_active_notes(bool out_notes[128])
 {
-    memset(out_active, 0, 128);
+    memset(out_notes, 0, 128);
     
     /* Add Launchpad FIELD pad notes */
     for (int i = 0; i < 64; i++) {
         if (s_seq.field_notes[i].active && s_seq.field_notes[i].note <= 127) {
-            out_active[s_seq.field_notes[i].note] = true;
+            out_notes[s_seq.field_notes[i].note] = true;
         }
     }
     
@@ -301,7 +301,7 @@ static void build_active_notes_array(bool out_active[128])
     esp32_midi_get_external_notes(external_notes);
     for (int i = 0; i < 128; i++) {
         if (external_notes[i]) {
-            out_active[i] = true;
+            out_notes[i] = true;
         }
     }
 }

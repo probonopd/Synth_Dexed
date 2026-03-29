@@ -216,8 +216,9 @@ static void oled_poll_task(void *)
         if (!step_seq_is_playing() && (now - last_guess_update) >= 100000) {
             last_guess_update = now;
             
+            /* Get all active notes (field pads + external keyboard) */
             bool active_notes[128] = {false};
-            esp32_midi_get_external_notes(active_notes);
+            step_seq_get_active_notes(active_notes);
             
             /* Count active pitch classes */
             uint16_t pitch_classes = 0;
