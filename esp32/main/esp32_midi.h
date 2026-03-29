@@ -68,6 +68,12 @@ int esp32_midi_usb_send_sysex(const uint8_t *sysex, int len);
  */
 int esp32_midi_usb_send_msg(uint8_t status, uint8_t data1, uint8_t data2);
 
+/**
+ * Get array of currently-held external MIDI notes for chord guessing.
+ * @param out_notes  Pointer to receive 128-bool array of active notes.
+ */
+void esp32_midi_get_external_notes(bool out_notes[128]);
+
 #ifdef __cplusplus
 }
 #endif

@@ -193,6 +193,15 @@ int step_seq_get_current_step(void);
 bool step_seq_drum_step_is_active(uint8_t drum, uint8_t step);
 uint8_t step_seq_drum_step_velocity(uint8_t drum, uint8_t step);
 
+/* Chord guesser: get the last recognized chord from user-played notes.
+ * Returns 0 if a valid chord match exists, -1 if no valid match.
+ * Only populated when sequencer is stopped (!step_seq_is_playing()). */
+int step_seq_get_guessed_chord(uint8_t* out_root, uint8_t* out_type, uint8_t* out_score);
+
+/* Chord guesser: update the guessed chord state (called from chord recognition).
+ * Pass root=0xFF to clear. */
+void step_seq_update_guessed_chord(uint8_t root, uint8_t type, uint8_t score);
+
 #ifdef __cplusplus
 }
 #endif

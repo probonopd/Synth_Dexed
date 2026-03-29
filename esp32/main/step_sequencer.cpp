@@ -9,9 +9,11 @@
 #include "step_sequencer.h"
 #include "launchpad.h"
 #include "esp32_oled.h"
+#include "esp32_midi.h"
 #include "dexed_raw.h"
 #include "tsf_engine.h"
 #include "esp32_config.h"
+#include "chord_guesser.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -225,6 +227,15 @@ typedef struct {
 
 static seq_state_t s_seq;
 
+/* Chord guesser state — tracks last recognized chord for OLED display */
+static struct {
+    uint8_t root;           /* 0-11: root note pitch class */
+    uint8_t type;           /* chord type (from chord_type_t enum) */
+    uint8_t score;          /* match quality 0-255 */
+    bool    valid;          /* true if a chord match was found */
+    uint64_t last_update;   /* timestamp of last chord recognition */
+} s_guessed_chord = {0, 0, 0, false, 0};
+
 /* Live "hold while pressed" state for the lower half of Circle mode (rows 5-8).
  * We track the exact MIDI notes that were turned on so release sends precise note-offs. */
 static struct {
@@ -268,6 +279,31 @@ static bool is_user_held(uint8_t note)
             return true;
     }
     return false;
+}
+
+/**
+ * Build a 128-bool array of currently held notes for chord guesser.
+ * Includes both Launchpad FIELD pads and external MIDI keyboard notes.
+ */
+static void build_active_notes_array(bool out_active[128])
+{
+    memset(out_active, 0, 128);
+    
+    /* Add Launchpad FIELD pad notes */
+    for (int i = 0; i < 64; i++) {
+        if (s_seq.field_notes[i].active && s_seq.field_notes[i].note <= 127) {
+            out_active[s_seq.field_notes[i].note] = true;
+        }
+    }
+    
+    /* Add external MIDI keyboard notes */
+    bool external_notes[128];
+    esp32_midi_get_external_notes(external_notes);
+    for (int i = 0; i < 128; i++) {
+        if (external_notes[i]) {
+            out_active[i] = true;
+        }
+    }
 }
 
 /* ================================================
@@ -1403,6 +1439,34 @@ uint8_t step_seq_drum_step_velocity(uint8_t drum, uint8_t step)
 {
     if (drum >= SEQ_NUM_DRUM_TRACKS || step >= SEQ_MAX_STEPS) return 0;
     return s_seq.drum_tracks[drum].steps[step].velocity;
+}
+
+int step_seq_get_guessed_chord(uint8_t* out_root, uint8_t* out_type, uint8_t* out_score)
+{
+    if (!s_guessed_chord.valid) return -1;
+    if (out_root) *out_root = s_guessed_chord.root;
+    if (out_type) *out_type = s_guessed_chord.type;
+    if (out_score) *out_score = s_guessed_chord.score;
+    return 0;
+}
+
+/**
+ * Update the guessed chord for display (called from chord recognition code).
+ * @param root  0-11 root note pitch class, or 0xFF to clear
+ * @param type  chord type, or 0xFF to clear
+ * @param score match quality 0-255
+ */
+void step_seq_update_guessed_chord(uint8_t root, uint8_t type, uint8_t score)
+{
+    if (root == 0xFF) {
+        /* Clear chord */
+        s_guessed_chord.valid = false;
+    } else {
+        s_guessed_chord.root = root;
+        s_guessed_chord.type = type;
+        s_guessed_chord.score = score;
+        s_guessed_chord.valid = true;
+    }
 }
 
 /* ================================================

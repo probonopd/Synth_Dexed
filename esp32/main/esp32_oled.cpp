@@ -19,6 +19,8 @@
 #include "esp32_oled.h"
 #include "step_sequencer.h"
 #include "dexed_raw.h"
+#include "chord_guesser.h"
+#include "esp32_midi.h"
 
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -47,6 +49,10 @@ static bool                 s_initialized = false;
 /* Timestamp after which status view expires; 0 = chord view */
 static volatile int64_t     s_status_until_us = 0;
 
+/* Alternative chord suggestions for display */
+static chord_guess_t        s_alternatives[3] = {};
+static int                  s_alternatives_count = 0;
+
 /* ---- String tables ---- */
 static const char * const s_note_names[12] = {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
@@ -73,39 +79,80 @@ static const char * const s_fx_names[] = {
 static void draw_centered(u8g2_t *u, u8g2_uint_t y, const char *str)
 {
     u8g2_uint_t w = u8g2_GetStrWidth(u, str);
-    u8g2_uint_t x = (u8g2_uint_t)((128 - (int)w) / 2);
-    if ((int)x < 0) x = 0;
+    int px = (128 - (int)w) / 2;
+    u8g2_uint_t x = (px < 0) ? 0 : (u8g2_uint_t)px;
     u8g2_DrawStr(u, x, y, str);
 }
 
 /* ---- Chord view ---- */
 static void draw_chord(void)
 {
-    const harmonic_state_t *h = step_seq_get_display_harmonic_state();
-    if (!h) return;
-
-    uint8_t abs_root = (uint8_t)((h->key + h->chord_root) % 12);
-    const char *note  = s_note_names[abs_root];
-    const char *ctype = s_chord_type_names[(int)h->chord_type];
-
-    /* Roman numeral for the current scale degree */
-    char roman[8] = {0};
-    step_seq_chord_roman_numeral(h->chord_root, h->chord_type,
-                                 h->scale_type, roman, sizeof(roman));
-
-    /* Full chord name e.g. "Gmaj", "Am7" */
-    char fullname[14] = {0};
-    snprintf(fullname, sizeof(fullname), "%s%s", note, ctype);
-
     u8g2_ClearBuffer(&s_u8g2);
 
-    /* Roman numeral — centered, large */
-    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
-    draw_centered(&s_u8g2, 42, roman);
+    /* Check if there's a guessed chord from keyboard input (only when stopped) */
+    uint8_t guess_root = 0, guess_type = 0, guess_score = 0;
+    bool has_guess = (step_seq_get_guessed_chord(&guess_root, &guess_type, &guess_score) == 0);
 
-    /* Full chord name — centered, medium */
-    u8g2_SetFont(&s_u8g2, u8g2_font_logisoso20_tr);
-    draw_centered(&s_u8g2, 62, fullname);
+    if (has_guess && !step_seq_is_playing()) {
+        /* Check if this is a single note (type == 0xFF) or a chord */
+        if (guess_type == 0xFF) {
+            /* Single note display */
+            const char *note = s_note_names[guess_root];
+            
+            u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
+            draw_centered(&s_u8g2, 42, note);
+            
+            /* Add "(note)" label at bottom */
+            u8g2_SetFont(&s_u8g2, u8g2_font_6x13_tr);
+            draw_centered(&s_u8g2, 62, "note");
+        } else {
+            /* Display guessed chord from keyboard */
+            const char *note = s_note_names[guess_root];
+            const char *ctype = s_chord_type_names[guess_type];
+
+            char fullname[14] = {0};
+            snprintf(fullname, sizeof(fullname), "%s%s", note, ctype);
+
+            /* Guessed chord — centered, large */
+            u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
+            draw_centered(&s_u8g2, 38, fullname);
+
+            /* Show alternatives in small font below */
+            u8g2_SetFont(&s_u8g2, u8g2_font_5x7_tf);
+            for (int i = 1; i < s_alternatives_count && i < 3; i++) {
+                const char *alt_note = s_note_names[s_alternatives[i].root];
+                const char *alt_type = s_chord_type_names[s_alternatives[i].type];
+                char alt_name[10] = {0};
+                snprintf(alt_name, sizeof(alt_name), "%s%s", alt_note, alt_type);
+                draw_centered(&s_u8g2, 50 + (i-1)*10, alt_name);
+            }
+        }
+    } else {
+        /* Display programmed chord (normal mode) */
+        const harmonic_state_t *h = step_seq_get_display_harmonic_state();
+        if (!h) return;
+
+        uint8_t abs_root = (uint8_t)((h->key + h->chord_root) % 12);
+        const char *note  = s_note_names[abs_root];
+        const char *ctype = s_chord_type_names[(int)h->chord_type];
+
+        /* Roman numeral for the current scale degree */
+        char roman[8] = {0};
+        step_seq_chord_roman_numeral(h->chord_root, h->chord_type,
+                                     h->scale_type, roman, sizeof(roman));
+
+        /* Full chord name e.g. "Gmaj", "Am7" */
+        char fullname[14] = {0};
+        snprintf(fullname, sizeof(fullname), "%s%s", note, ctype);
+
+        /* Roman numeral — centered, large */
+        u8g2_SetFont(&s_u8g2, u8g2_font_logisoso38_tr);
+        draw_centered(&s_u8g2, 42, roman);
+
+        /* Full chord name — centered, medium */
+        u8g2_SetFont(&s_u8g2, u8g2_font_logisoso20_tr);
+        draw_centered(&s_u8g2, 62, fullname);
+    }
 
     u8g2_SendBuffer(&s_u8g2);
 }
@@ -129,12 +176,23 @@ static void draw_status(const char *label, const char *value)
     u8g2_SendBuffer(&s_u8g2);
 }
 
+static void oled_set_alternatives(const chord_guess_t* alts, int count)
+{
+    if (count > 3) count = 3;
+    s_alternatives_count = count;
+    for (int i = 0; i < count; i++) {
+        s_alternatives[i] = alts[i];
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Background voice-change poller                                       */
 /* ------------------------------------------------------------------ */
 
 static void oled_poll_task(void *)
 {
+    static uint64_t last_guess_update = 0;
+    
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(50));
         if (!s_initialized) continue;
@@ -151,6 +209,60 @@ static void oled_poll_task(void *)
         /* Outro fill done: stop the sequencer from the main task context */
         if (step_seq_consume_outro_fill_done()) {
             step_seq_stop();
+        }
+        
+        /* Chord guesser: run periodically when sequencer is stopped */
+        uint64_t now = esp_timer_get_time();
+        if (!step_seq_is_playing() && (now - last_guess_update) >= 100000) {
+            last_guess_update = now;
+            
+            bool active_notes[128] = {false};
+            esp32_midi_get_external_notes(active_notes);
+            
+            /* Count active pitch classes */
+            uint16_t pitch_classes = 0;
+            int active_pitch_count = 0;
+            int single_note_pc = -1;
+            
+            for (int note = 0; note < 128; note++) {
+                if (active_notes[note]) {
+                    int pc = note % 12;
+                    if (!((pitch_classes >> pc) & 1)) {
+                        active_pitch_count++;
+                        single_note_pc = pc;
+                    }
+                    pitch_classes |= (1 << pc);
+                }
+            }
+            
+            if (active_pitch_count == 1 && single_note_pc >= 0) {
+                /* Single note: display just the note name */
+                step_seq_update_guessed_chord(single_note_pc, 0xFF, 255);  /* type 0xFF = single note marker */
+                ESP_LOGI(TAG, "Single note: %d", single_note_pc);
+                esp32_oled_update_chord();
+            } else if (active_pitch_count >= 3) {
+                /* Multiple notes: analyze for chords with harmonic context */
+                const harmonic_state_t* harmonic = step_seq_get_harmonic_state();
+                chord_guess_t guesses[3];
+                int guess_count = chord_guesser_analyze(active_notes, harmonic, guesses, 3);
+                
+                if (guess_count > 0) {
+                    /* Good match found, update state with top guess and trigger display */
+                    step_seq_update_guessed_chord(guesses[0].root, guesses[0].type, guesses[0].score);
+                    
+                    /* Store alternatives for display */
+                    oled_set_alternatives(guesses, guess_count);
+                    
+                    ESP_LOGI(TAG, "Guessed chord: root=%u type=%u score=%u", guesses[0].root, guesses[0].type, guesses[0].score);
+                    esp32_oled_update_chord();
+                } else {
+                    /* No valid chord */
+                    step_seq_update_guessed_chord(0xFF, 0xFF, 0);
+                }
+            } else {
+                /* 0 or 2 notes: don't display */
+                step_seq_update_guessed_chord(0xFF, 0xFF, 0);
+            }
         }
     }
 }
@@ -195,7 +307,7 @@ int esp32_oled_init(void)
     u8g2_SendBuffer(&s_u8g2);
 
     /* Polling task: detects voice changes immediately */
-    xTaskCreate(oled_poll_task, "oled_poll", 2048, nullptr, 2, nullptr);
+    xTaskCreate(oled_poll_task, "oled_poll", 4096, nullptr, 2, nullptr);
 
     return 0;
 }

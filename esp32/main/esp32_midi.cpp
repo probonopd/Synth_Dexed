@@ -80,6 +80,10 @@ static uint8_t s_usb_sysex_buf[SYSEX_BUF_SIZE];
 static int s_usb_sysex_len = 0;
 #endif
 
+/* Track external MIDI keyboard notes for chord guessing (0-127 active flags) */
+static bool s_external_midi_notes[128] = {false};
+static portMUX_TYPE s_external_notes_mux = portMUX_INITIALIZER_UNLOCKED;
+
 /* ================================================
  * MIDI byte-stream parser (for UART input)
  * ================================================ */
@@ -163,12 +167,23 @@ static void midi_parser_process_byte(midi_parser_t *p, uint8_t byte)
             uint8_t d0 = p->data[0];
             uint8_t d1 = p->data[1];
             if (s == 0x90 && d1 > 0) {
-                /* Note On: quantize → record mapping → scale velocity */
+                /* Note On: track raw note for chord guesser, then quantize */
+                if (d0 < 128) {
+                    portENTER_CRITICAL(&s_external_notes_mux);
+                    s_external_midi_notes[d0] = true;
+                    portEXIT_CRITICAL(&s_external_notes_mux);
+                }
                 d0 = step_seq_field_quantize_note(d0);
                 step_seq_field_record_noteon(p->data[0], d0);
                 d1 = step_seq_melodic_scale_velocity(d0, d1);
             } else if (s == 0x80 || (s == 0x90 && d1 == 0)) {
-                /* Note Off: resolve stored mapping — never re-quantize */
+                /* Note Off: track raw note for chord guesser, then resolve mapping */
+                uint8_t raw_note = d0;
+                if (raw_note < 128) {
+                    portENTER_CRITICAL(&s_external_notes_mux);
+                    s_external_midi_notes[raw_note] = false;
+                    portEXIT_CRITICAL(&s_external_notes_mux);
+                }
                 d0 = step_seq_field_resolve_noteoff(d0);
             }
             dexed_raw_handle_midi(p->status, d0, d1);
@@ -343,13 +358,23 @@ static void usb_midi_process_packet(const uint8_t *pkt, midi_device_t *dev)
                 launchpad_handle_note(b1, (cin == 0x08) ? 0 : b2);
             } else {
                 if (cin == 0x09 && b2 > 0) {
-                    /* Note On: quantize → record mapping → scale velocity */
+                    /* Note On: track raw note for chord guesser, then quantize */
+                    if (b1 < 128) {
+                        portENTER_CRITICAL(&s_external_notes_mux);
+                        s_external_midi_notes[b1] = true;
+                        portEXIT_CRITICAL(&s_external_notes_mux);
+                    }
                     uint8_t qb1 = step_seq_field_quantize_note(b1);
                     step_seq_field_record_noteon(b1, qb1);
                     uint8_t qb2 = step_seq_melodic_scale_velocity(qb1, b2);
                     dexed_raw_handle_midi(b0, qb1, qb2);
                 } else {
-                    /* Note Off: resolve stored mapping — never re-quantize */
+                    /* Note Off: track raw note for chord guesser, then resolve mapping */
+                    if (b1 < 128) {
+                        portENTER_CRITICAL(&s_external_notes_mux);
+                        s_external_midi_notes[b1] = false;
+                        portEXIT_CRITICAL(&s_external_notes_mux);
+                    }
                     dexed_raw_handle_midi(b0, step_seq_field_resolve_noteoff(b1), b2);
                 }
             }
@@ -1460,3 +1485,11 @@ int esp32_midi_usb_send_msg(uint8_t status, uint8_t data1, uint8_t data2)
     return -1;
 #endif
 }
+
+void esp32_midi_get_external_notes(bool out_notes[128])
+{
+    portENTER_CRITICAL(&s_external_notes_mux);
+    memcpy(out_notes, s_external_midi_notes, 128);
+    portEXIT_CRITICAL(&s_external_notes_mux);
+}
+

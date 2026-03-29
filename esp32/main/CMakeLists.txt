@@ -18,6 +18,7 @@ idf_component_register(
         "step_sequencer.cpp"
         "dexed_raw.cpp"
         "tsf_engine.cpp"
+        "chord_guesser.c"
         "atomic_compat.c"
         "esp32_syslog.c"
         "esp32_oled.cpp"
