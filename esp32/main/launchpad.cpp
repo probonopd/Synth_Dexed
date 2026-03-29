@@ -10,6 +10,7 @@
 #include "esp32_midi.h"
 #include "esp32_oled.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -38,6 +39,52 @@ static volatile bool s_connected = false;
 static uint8_t s_batch_buf[LP_BATCH_BUF_SIZE];
 static int s_batch_len = 0;
 
+/* ---- Playhead flash timing for CIRCLE mode ----
+ * Show white playhead briefly when it moves to a new position
+ * Flash duration: 100ms
+ */
+#define PLAYHEAD_FLASH_MS 100
+static int s_last_playhead_step = -1;      /* Track previous playhead position */
+static int64_t s_last_flash_time_us = 0;   /* When the flash started */
+static uint8_t s_last_chord_root = 255;    /* Track previous chord root */
+static chord_type_t s_last_chord_type = (chord_type_t)255; /* Track previous chord type */
+static int64_t s_last_chord_flash_time_us = 0; /* When the chord flash started */
+
+static bool playhead_should_flash(int current_step)
+{
+    if (current_step == -1) return false;
+    
+    int64_t now_us = esp_timer_get_time();
+    
+    /* If playhead moved to new position, start a fresh flash */
+    if (current_step != s_last_playhead_step) {
+        s_last_playhead_step = current_step;
+        s_last_flash_time_us = now_us;
+        return true;
+    }
+    
+    /* Check if still within flash window */
+    int64_t elapsed_us = now_us - s_last_flash_time_us;
+    return elapsed_us < (PLAYHEAD_FLASH_MS * 1000LL);
+}
+
+static bool chord_should_flash(uint8_t root, chord_type_t type)
+{
+    int64_t now_us = esp_timer_get_time();
+    
+    /* If chord changed, start a fresh flash */
+    if (root != s_last_chord_root || type != s_last_chord_type) {
+        s_last_chord_root = root;
+        s_last_chord_type = type;
+        s_last_chord_flash_time_us = now_us;
+        return true;
+    }
+    
+    /* Check if still within flash window */
+    int64_t elapsed_us = now_us - s_last_chord_flash_time_us;
+    return elapsed_us < (PLAYHEAD_FLASH_MS * 1000LL);
+}
+
 /* ---- Drum color palette (one per track) ---- */
 static const uint8_t drum_colors[SEQ_NUM_DRUM_TRACKS] = {
      5,  /*  0: Red          (Kick)          */
@@ -63,6 +110,30 @@ static const uint8_t velocity_levels[16] = {
     8, 16, 24, 32, 40, 48, 56, 64,
     72, 80, 88, 96, 104, 112, 120, 127
 };
+
+/* ---- Circle of Fifths note colors (smooth chromatic spectrum wheel) ----
+ * Maps pitch class (0-11) to 12 distinct Launchpad colors forming a smooth circle
+ * Colors fade around the spectrum: Red → Orange → Yellow → Green → Blue → Purple → Magenta
+ * No color repeats; each pitch class gets exactly one unique color
+ */
+static uint8_t circle_note_color(uint8_t pitch_class)
+{
+    static const uint8_t color_wheel[12] = {
+        LP_COLOR_RED,        /* 0: C */
+        LP_COLOR_ORANGE,     /* 1: C#/Db */
+        LP_COLOR_YELLOW,     /* 2: D */
+        LP_COLOR_LIME,       /* 3: D#/Eb */
+        LP_COLOR_GREEN,      /* 4: E */
+        LP_COLOR_SPRING,     /* 5: F */
+        LP_COLOR_TURQUOISE,  /* 6: F#/Gb */
+        LP_COLOR_CYAN,       /* 7: G */
+        LP_COLOR_SKY,        /* 8: G#/Ab */
+        LP_COLOR_BLUE,       /* 9: A */
+        LP_COLOR_PURPLE,     /* 10: A#/Bb */
+        LP_COLOR_MAGENTA     /* 11: B */
+    };
+    return color_wheel[pitch_class % 12];
+}
 
 /* ================================================
  * Lifecycle
@@ -455,7 +526,9 @@ void launchpad_refresh_grid(void)
         uint8_t cur_abs_root = (h->key + h->chord_root) % 12;
         chord_type_t cur_chord_type = h->chord_type;
 
-        /* Rows 5-8: chord step sequencer — same grid layout as drum page.
+        /* Rows 5-8: chord step sequencer — colored by ROOT NOTE of the chord placed at that step
+         * Each step has an actual root note (0-11) and chord type
+         * Playhead flashes white briefly when moving to a new position
          * (8-row)*8+(col-1) gives step index 0-31; row 8=steps 0-7 … row 5=steps 24-31. */
         {
             int cur_q = step_seq_chord_seq_current();
@@ -463,59 +536,50 @@ void launchpad_refresh_grid(void)
                 for (uint8_t col = 1; col <= 8; col++) {
                     int si = (8 - row) * 8 + (col - 1);  /* 0-31 */
                     bool is_active = step_seq_chord_seq_step_active((uint8_t)si);
-                    uint8_t color;
+                    uint8_t color = LP_COLOR_OFF;
+                    
                     if (cur_q == si) {
-                        color = is_active ? LP_SEQ_PLAYHEAD_HIT : LP_SEQ_PLAYHEAD;
+                        /* Currently playing step: show white only during brief flash */
+                        if (playhead_should_flash(cur_q)) {
+                            color = is_active ? LP_SEQ_PLAYHEAD_HIT : LP_SEQ_PLAYHEAD;
+                        } else {
+                            /* Flash expired, show the chord color instead */
+                            if (is_active) {
+                                uint8_t step_root = step_seq_chord_seq_step_root((uint8_t)si);
+                                color = circle_note_color(step_root);
+                            }
+                        }
                     } else if (is_active) {
-                        chord_type_t ct = step_seq_chord_seq_step_type((uint8_t)si);
-                        if      (ct == CHORD_MAJ)  color = LP_COLOR_CYAN;
-                        else if (ct == CHORD_MIN)  color = LP_COLOR_BLUE;
-                        else if (ct == CHORD_DOM7) color = LP_COLOR_ORANGE;
-                        else                       color = LP_COLOR_PURPLE;
-                    } else {
-                        color = LP_COLOR_OFF;
+                        /* Non-playing active step: show chord color */
+                        uint8_t step_root = step_seq_chord_seq_step_root((uint8_t)si);
+                        color = circle_note_color(step_root);
                     }
                     launchpad_batch_set(0, lp_pad_note(row, col), color);
                 }
             }
         }
 
-        /* ---- 9 chord pads (7 diatonic + bVI + major III) ----
-         * Static function colors; selected chord = white.
-         * Indices 7 (bVI) and 8 (III major) are shown at 50% dimmed.
-         *   I=Blue  ii=Green  iii=Cyan  IV=Lime  V=Orange  vi=Purple  vii°=Red
-         *   bVI=Orange(dimmed)  III=Blue(dimmed)
+        /* ---- Rows 1-4: Circle of Fifths chord grid colored by ROOT NOTE ----
+         * Each pad shows a chord at a specific circle position
+         * Currently playing chord flashes white briefly when it changes
+         * Colors follow the smooth chromatic spectrum wheel (see circle_note_color)
          */
-        static const uint8_t degree_colors[9] = {
-            LP_COLOR_BLUE,    /* I   */
-            LP_COLOR_GREEN,   /* ii  */
-            LP_COLOR_CYAN,    /* iii */
-            LP_COLOR_LIME,    /* IV  */
-            LP_COLOR_ORANGE,  /* V   */
-            LP_COLOR_PURPLE,  /* vi  */
-            LP_COLOR_RED,     /* vii°*/
-            LP_COLOR_ORANGE,  /* bVI (dimmed) */
-            LP_COLOR_BLUE,    /* III (dimmed) */
-        };
-        static const bool degree_dimmed[9] = {
-            false, false, false, false, false, false, false, true, true
-        };
         for (uint8_t row = 1; row <= 4; row++) {
             for (uint8_t col = 1; col <= 8; col++) {
                 uint8_t color = LP_COLOR_OFF;
                 uint8_t root; chord_type_t ctype;
                 if (step_seq_get_circle_chord(row, col, &root, &ctype)) {
-                    int deg = step_seq_get_circle_degree(row, col);
                     if (root == cur_abs_root && ctype == cur_chord_type) {
-                        color = LP_CURRENT_CHORD;   /* white: currently playing */
-                    } else if (deg >= 0 && deg < 9) {
-                        color = degree_colors[deg];
-                        /* Apply 50% dimming for borrowed chords (indices 7-8) */
-                        if (degree_dimmed[deg]) {
-                            color = (color == LP_COLOR_OFF) ? LP_COLOR_OFF : (color | 0x01);  /* dim by setting LSB */
+                        /* Currently playing chord: show white only during brief flash */
+                        if (chord_should_flash(cur_abs_root, cur_chord_type)) {
+                            color = LP_CURRENT_CHORD;   /* white: currently playing */
+                        } else {
+                            /* Flash expired, show the chord color instead */
+                            color = circle_note_color(root);
                         }
                     } else {
-                        color = LP_COLOR_WHITE_DIM;
+                        /* Color by the chord's ROOT NOTE (pitch class) */
+                        color = circle_note_color(root);
                     }
                 }
                 launchpad_batch_set(0, lp_pad_note(row, col), color);

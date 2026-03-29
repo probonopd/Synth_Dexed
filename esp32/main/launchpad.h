@@ -97,8 +97,8 @@ static inline bool lp_is_q4(uint8_t row, uint8_t col) {
 #define LP_COLOR_AMBER          96
 
 /* ---- Semantic colors for the sequencer UI ---- */
-#define LP_SEQ_PLAYHEAD         LP_COLOR_GREEN
-#define LP_SEQ_PLAYHEAD_HIT     LP_COLOR_GREEN_HI
+#define LP_SEQ_PLAYHEAD         LP_COLOR_WHITE
+#define LP_SEQ_PLAYHEAD_HIT     LP_COLOR_WHITE
 #define LP_SEQ_STEP_ACTIVE      72   /* warm amber */
 #define LP_SEQ_SELECTED         LP_COLOR_WHITE
 #define LP_SEQ_EMPTY            LP_COLOR_OFF
