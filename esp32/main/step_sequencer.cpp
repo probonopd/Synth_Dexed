@@ -212,6 +212,13 @@ typedef struct {
     uint8_t tight_prev_notes[12];    /* MIDI notes of last voiced chord */
     int     tight_prev_count;        /* count of notes in tight_prev_notes */
 
+    /* Inversion window offset (Circle mode) — controls octave/voicing of played chords */
+    int8_t  inversion_offset;        /* -12 to +12 semitones via inversions; affects base_octave for bar chords */
+
+    /* Button hold tracking (UP/DOWN for long-press BPM vs short-press inversion) */
+    uint64_t up_btn_press_time;      /* timestamp when UP button was pressed */
+    uint64_t down_btn_press_time;    /* timestamp when DOWN button was pressed */
+    
     /* Thread safety */
     portMUX_TYPE mux;
 } seq_state_t;
@@ -283,10 +290,14 @@ static uint64_t step_period_us(uint16_t bpm)
 
 static inline void seq_drum_note_on(uint8_t note, uint8_t vel)
 {
+    /* Reduce drum volume by 50% in the mix */
+    uint8_t drum_vel = (uint8_t)((vel * 50) / 100);
+    if (drum_vel < 1) drum_vel = 1;
+    
     if (tsf_engine_is_loaded()) {
-        tsf_engine_handle_midi(0x99, note, vel);  /* channel 9 */
+        tsf_engine_handle_midi(0x99, note, drum_vel);  /* channel 9 */
     } else {
-        dexed_raw_handle_midi(0x90, note, vel);
+        dexed_raw_handle_midi(0x90, note, drum_vel);
     }
 }
 
@@ -476,13 +487,35 @@ static void seq_timer_callback(void *arg)
                 s->held_chord.active     = true;
             }
 
-            /* Play new chord notes (legato — sustains until next chord trigger) */
+            /* Play new chord notes (legato — sustains until next chord trigger)
+             * Apply inversion_offset to shift voicing. */
             uint16_t mask = chord_masks[play_type];
             if (s->tight_voicing) {
                 uint8_t tnotes[12]; int tcnt = 0;
-                voice_tight_notes(mask, play_root,
-                                  s->tight_prev_notes, s->tight_prev_count,
-                                  tnotes, &tcnt);
+                /* Apply inversion offset by adjusting the voicing center */
+                int center = 69;  /* A4 default */
+                if (s->tight_prev_count > 0) {
+                    int sum = 0;
+                    for (int i = 0; i < s->tight_prev_count; i++) sum += s->tight_prev_notes[i];
+                    center = sum / s->tight_prev_count;
+                }
+                center += s->inversion_offset;  /* Apply inversion window shift */
+                
+                /* Manually voice with adjusted center */
+                uint8_t classes[12]; int n = 0;
+                for (int i = 0; i < 12; i++)
+                    if ((mask >> i) & 1) classes[n++] = (uint8_t)((play_root + i) % 12);
+                
+                int cnt = 0;
+                for (int i = 0; i < n; i++) {
+                    int pc = (int)classes[i];
+                    int note = pc + ((center - pc + 6) / 12) * 12;
+                    while (note < 36)  note += 12;
+                    while (note > 120) note -= 12;
+                    tnotes[cnt++] = (uint8_t)note;
+                }
+                tcnt = cnt;
+                
                 for (int i = 0; i < tcnt && s->bar_chord_note_count < 12; i++) {
                     uint8_t note = tnotes[i];
                     if (note <= 127) {
@@ -493,10 +526,17 @@ static void seq_timer_callback(void *arg)
                     }
                 }
             } else {
-                uint8_t base_note = (uint8_t)((s->base_octave + 4) * 12 + play_root);
+                /* Free voicing: apply inversion offset to base note */
+                int base_note_int = (s->base_octave + 4) * 12 + play_root + s->inversion_offset;
+                if (base_note_int < 0) base_note_int = 0;
+                if (base_note_int > 127) base_note_int = 127;
+                uint8_t base_note = (uint8_t)base_note_int;
+                
                 for (int i = 0; i < 12 && s->bar_chord_note_count < 12; i++) {
                     if ((mask >> i) & 1) {
-                        uint8_t note = base_note + i;
+                        int note_int = base_note + i;
+                        if (note_int > 127) break;
+                        uint8_t note = (uint8_t)note_int;
                         if (note <= 127) {
                             dexed_raw_handle_midi(0x90, note, 64);   /* 50% velocity */
                             s->bar_chord_notes[s->bar_chord_note_count].note   = note;
@@ -506,10 +546,17 @@ static void seq_timer_callback(void *arg)
                     }
                 }
             }
-            /* Update tight voicing centroid */
-            s->tight_prev_count = s->bar_chord_note_count;
-            for (int i = 0; i < s->bar_chord_note_count; i++)
-                s->tight_prev_notes[i] = s->bar_chord_notes[i].note;
+            /* Update tight voicing centroid — but only if no inversion offset is applied.
+             * When offset is active, reset centroid so each chord is independently positioned,
+             * preventing cumulative shifting across multiple chords. */
+            if (s->inversion_offset == 0) {
+                s->tight_prev_count = s->bar_chord_note_count;
+                for (int i = 0; i < s->bar_chord_note_count; i++)
+                    s->tight_prev_notes[i] = s->bar_chord_notes[i].note;
+            } else {
+                /* Reset centroid when offset is active to prevent accumulation */
+                s->tight_prev_count = 0;
+            }
         }
     }
 
@@ -632,6 +679,11 @@ int step_seq_init(void)
     /* Tight voicing defaults */
     s_seq.tight_voicing    = true;
     s_seq.tight_prev_count = 0;
+
+    /* Initialize inversion window and button tracking */
+    s_seq.inversion_offset = 0;
+    s_seq.up_btn_press_time = 0;
+    s_seq.down_btn_press_time = 0;
 
     /* Initialize field notes tracking */
     for (int i = 0; i < 64; i++) {
@@ -1392,30 +1444,10 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
 {
     if (s_seq.mode == SEQ_MODE_DRUM || s_seq.mode == SEQ_MODE_BOTH) {
         if (lp_is_q1(row, col) || lp_is_q2(row, col)) {
-            /* Step grid: toggle (or range-fill if another step is already held) */
+            /* Step grid: simple toggle */
             int step = grid_to_step_index(row, col);
             if (step >= 0 && step < s_seq.num_steps) {
-                /* Range-fill only triggers for non-adjacent steps */
-                if (s_range_fill.active && s_range_fill.first_row < 0 && abs(step - s_range_fill.first_step) > 1) {
-                    /* Second pad: fill all steps between first and this */
-                    int lo = (step < s_range_fill.first_step) ? step : s_range_fill.first_step;
-                    int hi = (step > s_range_fill.first_step) ? step : s_range_fill.first_step;
-                    for (int i = lo; i <= hi && i < s_seq.num_steps; i++) {
-                        if (s_range_fill.fill_on) step_seq_drum_set_step((uint8_t)i, s_seq.current_velocity);
-                        else                      step_seq_drum_clear_step((uint8_t)i);
-                    }
-                    s_range_fill.active = false;  /* gesture consumed - don't toggle */
-                } else {
-                    /* Adjacent pads or first pad: just toggle and record for potential range fill */
-                    s_range_fill.active = false;  /* cancel previous gesture if any */
-                    bool was_active = step_seq_drum_step_is_active(s_seq.selected_drum, (uint8_t)step);
-                    step_seq_drum_toggle_step((uint8_t)step);
-                    s_range_fill.active     = true;
-                    s_range_fill.first_step = step;
-                    s_range_fill.first_row  = -1;
-                    s_range_fill.first_col  = -1;
-                    s_range_fill.fill_on    = !was_active;
-                }
+                step_seq_drum_toggle_step((uint8_t)step);
             }
         }
         else if (lp_is_q3(row, col)) {
@@ -1448,51 +1480,7 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
             /* Melodic step grid: columns=time, rows=pitch */
             int step = (col - 1);  /* 0-7 */
             uint8_t pitch = (uint8_t)(s_seq.base_octave * 12 + (row - 5));
-            bool gesture_consumed = false;
-            
-            if (s_range_fill.active) {
-                /* Check if this is a horizontal fill (same row, different column, NOT adjacent) */
-                if (s_range_fill.first_row == (int)row && abs(step - s_range_fill.first_step) > 1) {
-                    /* Horizontal range-fill: fill columns between first and second pad at same pitch */
-                    int lo = (step < s_range_fill.first_step) ? step : s_range_fill.first_step;
-                    int hi = (step > s_range_fill.first_step) ? step : s_range_fill.first_step;
-                    for (int i = lo; i <= hi; i++) {
-                        if (s_range_fill.fill_on) melodic_step_set_note((uint8_t)i, pitch, s_seq.current_velocity);
-                        else                      melodic_step_clear_note((uint8_t)i, pitch);
-                    }
-                    s_range_fill.active = false;
-                    gesture_consumed = true;  /* don't toggle the second pad */
-                }
-                /* Check if this is a vertical fill (same column, different row, NOT adjacent) */
-                else if (s_range_fill.first_col == (int)col && abs(row - s_range_fill.first_row) > 1) {
-                    /* Vertical range-fill: fill rows between first and second pad at same step.
-                     * Does not affect any horizontal notes in between. */
-                    int lo_row = (row < s_range_fill.first_row) ? row : s_range_fill.first_row;
-                    int hi_row = (row > s_range_fill.first_row) ? row : s_range_fill.first_row;
-                    for (int r = lo_row; r <= hi_row; r++) {
-                        uint8_t p = (uint8_t)(s_seq.base_octave * 12 + (r - 5));
-                        if (s_range_fill.fill_on) melodic_step_set_note((uint8_t)step, p, s_seq.current_velocity);
-                        else                      melodic_step_clear_note((uint8_t)step, p);
-                    }
-                    s_range_fill.active = false;
-                    gesture_consumed = true;  /* don't toggle the second pad */
-                }
-                /* Different row and column, or adjacent pads: cancel gesture and start fresh */
-                else {
-                    s_range_fill.active = false;
-                }
-            }
-            
-            /* Only start a new gesture if we didn't just consume a range-fill */
-            if (!gesture_consumed && !s_range_fill.active) {
-                bool exists = melodic_step_has_note((uint8_t)step, pitch);
-                step_seq_melodic_toggle_note((uint8_t)step, pitch, s_seq.current_velocity);
-                s_range_fill.active     = true;
-                s_range_fill.first_step = step;
-                s_range_fill.first_row  = (int)row;
-                s_range_fill.first_col  = (int)col;
-                s_range_fill.fill_on    = !exists;
-            }
+            step_seq_melodic_toggle_note((uint8_t)step, pitch, s_seq.current_velocity);
         }
         else if (lp_is_q3(row, col) || lp_is_q4(row, col)) {
             /* Keyboard: play note live */
@@ -1552,7 +1540,8 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
 
             /* Play and record exact notes — stopped precisely on pad release.
              * Suppress note-on during an intro drum fill; the chord is already
-             * stored in harmonic state and will fire on the next quarter-note. */
+             * stored in harmonic state and will fire on the next quarter-note.
+             * Apply inversion_offset to shift voicing up/down by semitones. */
             bool intro_running = s_seq.playing
                                  && s_seq.fill_steps_remaining > 0
                                  && !s_seq.fill_is_outro;
@@ -1560,9 +1549,30 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                 uint16_t mask = chord_masks[chord_type];
                 if (s_seq.tight_voicing) {
                     uint8_t tnotes[12]; int tcnt = 0;
-                    voice_tight_notes(mask, chord_root,
-                                      s_seq.tight_prev_notes, s_seq.tight_prev_count,
-                                      tnotes, &tcnt);
+                    /* Apply inversion offset by adjusting the voicing center */
+                    int center = 69;  /* A4 default */
+                    if (s_seq.tight_prev_count > 0) {
+                        int sum = 0;
+                        for (int i = 0; i < s_seq.tight_prev_count; i++) sum += s_seq.tight_prev_notes[i];
+                        center = sum / s_seq.tight_prev_count;
+                    }
+                    center += s_seq.inversion_offset;  /* Apply inversion window shift */
+                    
+                    /* Manually voice with adjusted center (avoiding voice_tight_notes call) */
+                    uint8_t classes[12]; int n = 0;
+                    for (int i = 0; i < 12; i++)
+                        if ((mask >> i) & 1) classes[n++] = (uint8_t)((chord_root + i) % 12);
+                    
+                    int cnt = 0;
+                    for (int i = 0; i < n; i++) {
+                        int pc = (int)classes[i];
+                        int note = pc + ((center - pc + 6) / 12) * 12;
+                        while (note < 36)  note += 12;
+                        while (note > 120) note -= 12;
+                        tnotes[cnt++] = (uint8_t)note;
+                    }
+                    tcnt = cnt;
+                    
                     for (int i = 0; i < tcnt; i++) {
                         uint8_t n = tnotes[i];
                         if (n <= 127 && s_circle_lower_hold.note_count < 12) {
@@ -1571,10 +1581,17 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                         }
                     }
                 } else {
-                    uint8_t base_note = (uint8_t)((s_seq.base_octave + 4) * 12 + chord_root);
+                    /* Free voicing: apply inversion offset to base note */
+                    int base_note_int = (s_seq.base_octave + 4) * 12 + chord_root + s_seq.inversion_offset;
+                    if (base_note_int < 0) base_note_int = 0;
+                    if (base_note_int > 127) base_note_int = 127;
+                    uint8_t base_note = (uint8_t)base_note_int;
+                    
                     for (int i = 0; i < 12; i++) {
                         if ((mask >> i) & 1) {
-                            uint8_t n = base_note + i;
+                            int n_int = base_note + i;
+                            if (n_int > 127) break;
+                            uint8_t n = (uint8_t)n_int;
                             if (n <= 127 && s_circle_lower_hold.note_count < 12) {
                                 dexed_raw_handle_midi(0x90, n, velocity);
                                 s_circle_lower_hold.notes[s_circle_lower_hold.note_count++] = n;
@@ -1582,10 +1599,17 @@ void step_seq_handle_grid_press(uint8_t row, uint8_t col, uint8_t velocity)
                         }
                     }
                 }
-                /* Update tight voicing centroid */
-                s_seq.tight_prev_count = s_circle_lower_hold.note_count;
-                for (int i = 0; i < s_circle_lower_hold.note_count; i++)
-                    s_seq.tight_prev_notes[i] = s_circle_lower_hold.notes[i];
+                /* Update tight voicing centroid — but only if no inversion offset is applied.
+                 * When offset is active, reset centroid so each chord is independently positioned,
+                 * preventing cumulative shifting across multiple chords. */
+                if (s_seq.inversion_offset == 0) {
+                    s_seq.tight_prev_count = s_circle_lower_hold.note_count;
+                    for (int i = 0; i < s_circle_lower_hold.note_count; i++)
+                        s_seq.tight_prev_notes[i] = s_circle_lower_hold.notes[i];
+                } else {
+                    /* Reset centroid when offset is active to prevent accumulation */
+                    s_seq.tight_prev_count = 0;
+                }
             }
 
             ESP_LOGI(TAG, "Circle: %s%s (hold-while-pressed) (prev %s)",
@@ -1855,11 +1879,51 @@ void step_seq_handle_button(uint8_t cc, uint8_t value)
             break;
 
         case LP_CC_UP:
-            if (value > 0) step_seq_adjust_bpm(+5);
+            if (value > 0) {
+                /* Button pressed: record time */
+                s_seq.up_btn_press_time = esp_timer_get_time();
+            } else {
+                /* Button released: check press duration */
+                if (s_seq.up_btn_press_time > 0) {
+                    uint64_t elapsed_us = esp_timer_get_time() - s_seq.up_btn_press_time;
+                    if (elapsed_us >= 500000) {
+                        /* Long press: adjust BPM */
+                        step_seq_adjust_bpm(+5);
+                    } else if (s_seq.mode == SEQ_MODE_CIRCLE) {
+                        /* Short press in CIRCLE mode: move inversion window up by 3 semitones */
+                        if (s_seq.inversion_offset < 12) {
+                            s_seq.inversion_offset += 3;
+                            if (s_seq.inversion_offset > 12) s_seq.inversion_offset = 12;
+                            ESP_LOGI(TAG, "Inversion offset: %d semitones", s_seq.inversion_offset);
+                        }
+                    }
+                    s_seq.up_btn_press_time = 0;
+                }
+            }
             break;
 
         case LP_CC_DOWN:
-            if (value > 0) step_seq_adjust_bpm(-5);
+            if (value > 0) {
+                /* Button pressed: record time */
+                s_seq.down_btn_press_time = esp_timer_get_time();
+            } else {
+                /* Button released: check press duration */
+                if (s_seq.down_btn_press_time > 0) {
+                    uint64_t elapsed_us = esp_timer_get_time() - s_seq.down_btn_press_time;
+                    if (elapsed_us >= 500000) {
+                        /* Long press: adjust BPM */
+                        step_seq_adjust_bpm(-5);
+                    } else if (s_seq.mode == SEQ_MODE_CIRCLE) {
+                        /* Short press in CIRCLE mode: move inversion window down by 3 semitones */
+                        if (s_seq.inversion_offset > -12) {
+                            s_seq.inversion_offset -= 3;
+                            if (s_seq.inversion_offset < -12) s_seq.inversion_offset = -12;
+                            ESP_LOGI(TAG, "Inversion offset: %d semitones", s_seq.inversion_offset);
+                        }
+                    }
+                    s_seq.down_btn_press_time = 0;
+                }
+            }
             break;
 
         case LP_CC_LEFT:
