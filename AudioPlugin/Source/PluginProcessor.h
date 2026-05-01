@@ -1,0 +1,112 @@
+#pragma once
+
+#include "MidiPlaybackEngine.h"
+#include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h> // Added for AudioProcessorValueTreeState
+#include <juce_core/juce_core.h> // Added for FileLogger
+#include <vector> // Added for std::vector
+#include <memory> // Added for std::unique_ptr
+#include "../../src/FMRack/Module.h"
+#include "../../src/FMRack/Performance.h"
+#include "../../src/FMRack/Rack.h" // Add this include
+#include "FMRackController.h" // Include the FMRackController header
+
+//==============================================================================
+class AudioPluginAudioProcessor final : public juce::AudioProcessor, public juce::AudioProcessorValueTreeState::Listener
+{
+public:
+    //==============================================================================
+    AudioPluginAudioProcessor();
+    ~AudioPluginAudioProcessor() override;
+
+    //==============================================================================
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
+
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+
+    void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void processBlock (juce::AudioBuffer<double>&, juce::MidiBuffer&) override;
+
+    template <typename FloatType>
+    void process(juce::AudioBuffer<FloatType>& buffer, juce::MidiBuffer& midiMessages);
+
+    using AudioProcessor::processBlock;
+
+    //==============================================================================
+    juce::AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override;
+
+    //==============================================================================
+    const juce::String getName() const override;
+
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
+    bool isMidiEffect() const override;
+    double getTailLengthSeconds() const override;
+
+    //==============================================================================
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram (int index) override;
+    const juce::String getProgramName (int index) override;
+    void changeProgramName (int index, const juce::String& newName) override;
+
+    //==============================================================================
+    void getStateInformation (juce::MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
+
+    void parameterChanged (const juce::String& parameterID, float newValue) override;
+
+    juce::AudioProcessorValueTreeState treeState; // Changed from valueTreeState
+
+private:
+    //==============================================================================
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout(); // Added
+
+    std::unique_ptr<FMRackController> controller; // Use controller for backend access
+    std::unique_ptr<juce::FileLogger> fileLogger; // Added for file logging
+    bool wasMidiEmptyLastBlock = true; // Added to track MIDI state for logging
+    class AudioPluginAudioProcessorEditor* editorPtr = nullptr;
+    float lastSampleRate = 44100.0f; // Added to track the last used sample rate
+    std::unique_ptr<FMRack::Performance> cachedPerformance;
+    
+    // Pre-allocated audio buffers to avoid memory allocation in audio thread
+    std::vector<float> audioBufferLeft;
+    std::vector<float> audioBufferRight;
+    int lastPreparedBlockSize = 0;
+    MidiPlaybackEngine midiPlaybackEngine;
+
+public:
+    void setEditorPointer(class AudioPluginAudioProcessorEditor* editor);
+    void logToGui(const juce::String& message) const;
+    bool loadPerformanceFile(const juce::String& path);
+    bool savePerformanceFile(const juce::String& path); // NEW: Save performance to file
+    void setNumModules(int num);
+    void setUnisonVoices(int num);
+    void setUnisonDetune(float detune);
+    void setUnisonPan(float pan);
+    FMRack::Rack* getRack() const;
+    FMRack::Performance* getPerformance() const;
+    FMRackController* getController() const { return controller.get(); }
+    void loadMidiForPlayback(const juce::MidiFile& midiFile);
+    void startMidiPlayback();
+    void stopMidiPlayback();
+    bool isMidiPlaying() const;
+
+    // Metering: get output levels for a module (returns average, sets l/r)
+    float getModuleOutputLevels(int moduleIndex, float& l, float& r) {
+        if (controller) return controller->getModuleOutputLevels(moduleIndex, l, r);
+        l = r = 0.0f;
+        return 0.0f;
+    }
+    // Metering: get both pre-gain and post-gain levels for a module
+    void getModuleOutputLevels(int moduleIndex, float& l, float& r, float& lPre, float& rPre) {
+        if (controller) controller->getModuleOutputLevelsExtended(moduleIndex, l, r, lPre, rPre);
+        else l = r = lPre = rPre = 0.0f;
+    }
+
+    void syncParametersFromPerformance(); // NEW: Declare the helper function
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioPluginAudioProcessor)
+};

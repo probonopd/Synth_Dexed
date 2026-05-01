@@ -1,0 +1,6 @@
+pybind11
+sounddevice
+mido
+python-rtmidi
+wheel
+setuptools

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pybind11"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dexed_py"
+version = "0.1.0"
+description = "Python bindings for Synth_Dexed"
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "sounddevice",
+    "mido",
+    "python-rtmidi"
+]
+
+[tool.cibuildwheel]
+# Add cibuildwheel-specific options here if needed
+
+# https://gcore.de/en/help/linux/centos7-new-repo-url-after-eol.php
+[tool.cibuildwheel.linux]
+before-build = '''
+switch_eol_centos_repos()
+{
+	if [ "${AUDITWHEEL_POLICY}" == "manylinux2014" ] && [ "${AUDITWHEEL_ARCH}" != "s390x" ]; then
+		# Centos 7 is EOL and is no longer available from the usual mirrors, so switch
+		# to https://vault.centos.org
+		sed -i 's/enabled=1/enabled=0/g' /etc/yum/pluginconf.d/fastestmirror.conf
+		sed -i 's/^mirrorlist/#mirrorlist/g' /etc/yum.repos.d/*.repo
+		sed -i 's;^.*baseurl=http://mirror;baseurl=https://vault;g' /etc/yum.repos.d/*.repo
+		if [ "${AUDITWHEEL_ARCH}" == "aarch64" ] || [ "${AUDITWHEEL_ARCH}" == "ppc64le" ]; then
+			sed -i 's;/centos/7/;/altarch/7/;g' /etc/yum.repos.d/*.repo
+		fi
+	fi
+}
+switch_eol_centos_repos
+if grep -r 'CentOS Linux release 7' /etc/*-release; then \
+yum clean all && yum makecache && yum install -y alsa-lib-devel; \
+fi; \
+if [ -e /etc/alpine-release ]; then apk add --no-cache alsa-lib-dev; fi; \
+if command -v apt-get >/dev/null; then apt-get update && apt-get install -y libasound2-dev; fi
+'''

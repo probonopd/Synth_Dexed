@@ -1,0 +1,150 @@
+{
+    "items": {
+        "EngineMkI.cpp": [
+            0.0,
+            0.0
+        ],
+        "EngineMkI.h": [
+            100.0,
+            0.0
+        ],
+        "EngineMsfa.cpp": [
+            200.0,
+            0.0
+        ],
+        "EngineMsfa.h": [
+            300.0,
+            0.0
+        ],
+        "EngineOpl.cpp": [
+            400.0,
+            0.0
+        ],
+        "EngineOpl.h": [
+            500.0,
+            0.0
+        ],
+        "aligned_buf.h": [
+            600.0,
+            0.0
+        ],
+        "controllers.h": [
+            0.0,
+            60.0
+        ],
+        "dexed.cpp": [
+            100.0,
+            60.0
+        ],
+        "dexed.h": [
+            200.0,
+            60.0
+        ],
+        "dexed_pybind.cpp": [
+            300.0,
+            60.0
+        ],
+        "dx7note.cpp": [
+            400.0,
+            60.0
+        ],
+        "dx7note.h": [
+            500.0,
+            60.0
+        ],
+        "env.cpp": [
+            600.0,
+            60.0
+        ],
+        "env.h": [
+            0.0,
+            120.0
+        ],
+        "exp2.cpp": [
+            100.0,
+            120.0
+        ],
+        "exp2.h": [
+            200.0,
+            120.0
+        ],
+        "fm_core.cpp": [
+            300.0,
+            120.0
+        ],
+        "fm_core.h": [
+            400.0,
+            120.0
+        ],
+        "fm_op_kernel.cpp": [
+            500.0,
+            120.0
+        ],
+        "fm_op_kernel.h": [
+            600.0,
+            120.0
+        ],
+        "freqlut.cpp": [
+            0.0,
+            180.0
+        ],
+        "freqlut.h": [
+            100.0,
+            180.0
+        ],
+        "int_math.h": [
+            200.0,
+            180.0
+        ],
+        "lfo.cpp": [
+            300.0,
+            180.0
+        ],
+        "lfo.h": [
+            400.0,
+            180.0
+        ],
+        "native": [
+            500.0,
+            180.0
+        ],
+        "pitchenv.cpp": [
+            600.0,
+            180.0
+        ],
+        "pitchenv.h": [
+            0.0,
+            240.0
+        ],
+        "porta.cpp": [
+            100.0,
+            240.0
+        ],
+        "porta.h": [
+            200.0,
+            240.0
+        ],
+        "sin.cpp": [
+            300.0,
+            240.0
+        ],
+        "sin.h": [
+            400.0,
+            240.0
+        ],
+        "synth.h": [
+            500.0,
+            240.0
+        ],
+        "synth_dexed.cpp": [
+            600.0,
+            240.0
+        ],
+        "synth_dexed.h": [
+            0.0,
+            300.0
+        ]
+    },
+    "window_geometry": "AdnQywADAAAAAABkAAAARQAAA4MAAAK7AAAAZAAAAGQAAAODAAACuwAAAAAAAAAAB4AAAABkAAAAZAAAA4MAAAK7",
+    "app.snap_to_grid": false
+}
