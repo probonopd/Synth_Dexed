@@ -106,10 +106,18 @@ target_sources(${PROJECT_NAME} PRIVATE ${SourceFiles})
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     JUCE_WEB_BROWSER=0
-    JUCE_USE_CURL=0
     JUCE_VST3_CAN_REPLACE_VST2=0
     SYNTH_DEXED_STATIC
 )
+
+# Enable libcurl on Linux for HTTP downloads (voice list, MIDI browser, etc.)
+if(UNIX AND NOT APPLE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE JUCE_USE_CURL=1)
+    find_package(CURL REQUIRED)
+    target_link_libraries(${PROJECT_NAME} PRIVATE CURL::libcurl)
+else()
+    target_compile_definitions(${PROJECT_NAME} PRIVATE JUCE_USE_CURL=0)
+endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
     juce::juce_analytics
