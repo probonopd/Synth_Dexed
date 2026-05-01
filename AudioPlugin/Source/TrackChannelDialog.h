@@ -5,30 +5,30 @@
 #include <string>
 
 struct TrackAssignment {
-    int originalTrack;
+    int originalTrack { 0 };
     std::string trackName;
-    int assignedChannel; // 1-16, or 0 = skip
+    int assignedChannel { 1 }; // 1-16, 0 = skip
 };
 
 class TrackChannelDialog : public juce::Component {
 public:
     explicit TrackChannelDialog(const juce::MidiFile& midiFile);
+    ~TrackChannelDialog() override = default;
 
     void resized() override;
-    void paint(juce::Graphics& g) override;
+    void paint(juce::Graphics&) override;
 
     const std::vector<TrackAssignment>& getAssignments() const { return assignments; }
+
     std::function<void(bool accepted)> onDone;
 
 private:
     struct TrackRow {
-        std::unique_ptr<juce::Label> nameLabel;
-        std::unique_ptr<juce::Label> infoLabel;
-        std::unique_ptr<juce::ComboBox> channelCombo;
+        juce::Label nameLabel;
+        juce::ComboBox channelCombo;
     };
 
-    juce::Label titleLabel;
-    juce::Label headerTrack, headerChannel;
+    juce::Label titleLabel { {}, "Assign MIDI Tracks to Channels" };
     juce::TextButton okButton { "OK" };
     juce::TextButton cancelButton { "Cancel" };
     juce::Viewport viewport;

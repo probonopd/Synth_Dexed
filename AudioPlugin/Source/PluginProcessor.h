@@ -1,6 +1,5 @@
 #pragma once
 
-#include "MidiPlaybackEngine.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h> // Added for AudioProcessorValueTreeState
 #include <juce_core/juce_core.h> // Added for FileLogger
@@ -10,6 +9,7 @@
 #include "../../src/FMRack/Performance.h"
 #include "../../src/FMRack/Rack.h" // Add this include
 #include "FMRackController.h" // Include the FMRackController header
+#include "MidiPlaybackEngine.h"
 
 //==============================================================================
 class AudioPluginAudioProcessor final : public juce::AudioProcessor, public juce::AudioProcessorValueTreeState::Listener
@@ -75,6 +75,7 @@ private:
     std::vector<float> audioBufferLeft;
     std::vector<float> audioBufferRight;
     int lastPreparedBlockSize = 0;
+
     MidiPlaybackEngine midiPlaybackEngine;
 
 public:
@@ -89,6 +90,7 @@ public:
     FMRack::Rack* getRack() const;
     FMRack::Performance* getPerformance() const;
     FMRackController* getController() const { return controller.get(); }
+
     void loadMidiForPlayback(const juce::MidiFile& midiFile);
     void startMidiPlayback();
     void stopMidiPlayback();

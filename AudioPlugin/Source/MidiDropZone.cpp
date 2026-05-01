@@ -1,190 +1,132 @@
 #include "MidiDropZone.h"
 
-// Helper to change MIDI channel on a channel message
-static juce::MidiMessage withChannel(const juce::MidiMessage& msg, int newChannel)
-{
-    const uint8_t* raw = msg.getRawData();
-    int size = msg.getRawDataSize();
-    if (size < 1) return msg;
-    std::vector<uint8_t> newData(raw, raw + size);
-    newData[0] = static_cast<uint8_t>((newData[0] & 0xF0u) | (static_cast<uint8_t>(newChannel - 1) & 0x0Fu));
-    return juce::MidiMessage(newData.data(), size, msg.getTimeStamp());
+MidiDropZone::MidiDropZone() {
+    hintLabel.setText("Drop MIDI file here", juce::dontSendNotification);
+    hintLabel.setJustificationType(juce::Justification::centred);
+    hintLabel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
+    hintLabel.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(hintLabel);
 }
 
-MidiDropZone::MidiDropZone()
-{
-    setSize(800, 40);
+void MidiDropZone::paint(juce::Graphics& g) {
+    auto bounds = getLocalBounds().toFloat();
+    juce::Colour bg = isDragOver ? juce::Colour(0xff3a5a3a) : juce::Colour(0xff2a2a2a);
+    g.fillRoundedRectangle(bounds, 4.0f);
+
+    juce::Colour border = isDragOver ? juce::Colours::limegreen : juce::Colour(0xff555555);
+    g.setColour(border);
+    g.drawRoundedRectangle(bounds.reduced(1.0f), 4.0f, 1.5f);
 }
 
-MidiDropZone::~MidiDropZone()
-{
-    if (trackDialog)
-        trackDialog->exitModalState(0);
+void MidiDropZone::resized() {
+    hintLabel.setBounds(getLocalBounds());
 }
 
-void MidiDropZone::paint(juce::Graphics& g)
-{
-    auto bounds = getLocalBounds().toFloat().reduced(2.0f);
-
-    if (isDragOver)
-        g.fillAll(juce::Colour(0xff2a4a6a));
-    else
-        g.fillAll(juce::Colour(0xff222222));
-
-    // Dashed border
-    float dash[] = { 4.0f, 4.0f };
-    juce::Path borderPath;
-    borderPath.addRectangle(bounds);
-    juce::PathStrokeType stroke(1.5f);
-    stroke.createDashedStroke(borderPath, borderPath, dash, 2);
-
-    g.setColour(isDragOver ? juce::Colours::lightblue : juce::Colour(0xff555555));
-    g.strokePath(borderPath, juce::PathStrokeType(1.0f));
-
-    g.setColour(isDragOver ? juce::Colours::white : juce::Colours::grey);
-    g.setFont(juce::Font(juce::FontOptions(13.0f)));
-    g.drawText(isDragOver ? "Release to load" : "Drop .mid file here",
-               getLocalBounds(), juce::Justification::centred);
-}
-
-void MidiDropZone::resized()
-{
-}
-
-bool MidiDropZone::isInterestedInFileDrag(const juce::StringArray& files)
-{
+bool MidiDropZone::isInterestedInFileDrag(const juce::StringArray& files) {
     for (const auto& f : files)
-    {
-        juce::String lower = f.toLowerCase();
-        if (lower.endsWith(".mid") || lower.endsWith(".midi"))
+        if (f.endsWithIgnoreCase(".mid") || f.endsWithIgnoreCase(".midi"))
             return true;
-    }
     return false;
 }
 
-void MidiDropZone::fileDragEnter(const juce::StringArray&, int, int)
-{
+void MidiDropZone::fileDragEnter(const juce::StringArray&, int, int) {
     isDragOver = true;
     repaint();
 }
 
-void MidiDropZone::fileDragExit(const juce::StringArray&)
-{
+void MidiDropZone::fileDragExit(const juce::StringArray&) {
     isDragOver = false;
     repaint();
 }
 
-void MidiDropZone::filesDropped(const juce::StringArray& files, int, int)
-{
+void MidiDropZone::filesDropped(const juce::StringArray& files, int, int) {
     isDragOver = false;
     repaint();
 
-    for (const auto& f : files)
-    {
-        juce::String lower = f.toLowerCase();
-        if (lower.endsWith(".mid") || lower.endsWith(".midi"))
-        {
-            processDroppedFile(juce::File(f));
-            return;
+    for (const auto& f : files) {
+        juce::File file(f);
+        if (file.existsAsFile() &&
+            (file.hasFileExtension(".mid") || file.hasFileExtension(".midi"))) {
+            processFile(file);
+            break;
         }
     }
 }
 
-void MidiDropZone::processDroppedFile(const juce::File& file)
-{
+void MidiDropZone::processFile(const juce::File& file) {
     juce::FileInputStream fis(file);
-    if (!fis.openedOk())
-        return;
+    if (!fis.openedOk()) return;
 
-    juce::MidiFile midiFile;
-    if (!midiFile.readFrom(fis))
-        return;
+    juce::MidiFile midi;
+    if (!midi.readFrom(fis)) return;
 
-    showTrackChannelDialog(midiFile, file);
+    // Count note-bearing tracks
+    int noteTracks = 0;
+    for (int t = 0; t < midi.getNumTracks(); ++t) {
+        for (int i = 0; i < midi.getTrack(t)->getNumEvents(); ++i) {
+            if (midi.getTrack(t)->getEventPointer(i)->message.isNoteOn()) { ++noteTracks; break; }
+        }
+    }
+
+    if (noteTracks <= 1) {
+        // No dialog needed — fire directly
+        if (onMidiReady) onMidiReady(midi, file.getFileName());
+        hintLabel.setText("Loaded: " + file.getFileName(), juce::dontSendNotification);
+        return;
+    }
+
+    showTrackDialog(midi, file);
 }
 
-void MidiDropZone::showTrackChannelDialog(const juce::MidiFile& midiFile,
-                                           const juce::File& originalFile)
-{
-    auto* dlgComp = new TrackChannelDialog(midiFile);
-    trackChannelComp.reset(dlgComp);
+void MidiDropZone::showTrackDialog(const juce::MidiFile& midi, const juce::File& originalFile) {
+    trackDialogComp = std::make_unique<TrackChannelDialog>(midi);
+    auto* compPtr = trackDialogComp.get();
 
-    juce::MidiFile capturedMidi = midiFile;
-    juce::File capturedFile = originalFile;
-
-    trackChannelComp->onDone = [this, capturedMidi, capturedFile](bool accepted) mutable
-    {
-        if (trackDialog)
-            trackDialog->exitModalState(0);
-
-        if (!accepted)
-        {
-            trackChannelComp.reset();
-            trackDialog.reset();
-            return;
+    class TrackDialogWindow : public juce::DialogWindow {
+    public:
+        std::function<void()> onClose;
+        TrackDialogWindow(const juce::String& title, juce::Component* c)
+            : juce::DialogWindow(title, juce::Colour(0xff2a2a2a), true) {
+            setContentNonOwned(c, true);
+            setResizable(false, false);
+            centreWithSize(420, 400);
+            setVisible(true);
         }
-
-        auto assignments = trackChannelComp->getAssignments();
-        trackChannelComp.reset();
-        trackDialog.reset();
-
-        // Build new MIDI file with channel assignments (tick-based)
-        juce::MidiFile outFile;
-        outFile.setTicksPerQuarterNote(capturedMidi.getTimeFormat());
-
-        for (const auto& assignment : assignments)
-        {
-            if (assignment.assignedChannel == 0)
-                continue;
-
-            const juce::MidiMessageSequence* srcSeq = capturedMidi.getTrack(assignment.originalTrack);
-            if (srcSeq == nullptr) continue;
-
-            juce::MidiMessageSequence newSeq;
-            int newChannel = assignment.assignedChannel;
-
-            for (int i = 0; i < srcSeq->getNumEvents(); ++i)
-            {
-                const auto* holder = srcSeq->getEventPointer(i);
-                if (!holder) continue;
-
-                juce::MidiMessage msg = holder->message;
-
-                if (msg.isNoteOn() || msg.isNoteOff() || msg.isController() ||
-                    msg.isPitchWheel() || msg.isChannelPressure() || msg.isAftertouch() ||
-                    msg.isProgramChange())
-                {
-                    msg = withChannel(msg, newChannel);
-                }
-
-                newSeq.addEvent(msg);
-            }
-
-            newSeq.updateMatchedPairs();
-            outFile.addTrack(newSeq);
-        }
-
-        // We pass the processed MIDI to the callback as a playback-ready copy
-        // Convert to seconds for playback
-        juce::MemoryOutputStream mos;
-        outFile.writeTo(mos);
-
-        juce::MemoryInputStream mis(mos.getData(), mos.getDataSize(), false);
-        juce::MidiFile playbackMidi;
-        if (playbackMidi.readFrom(mis))
-        {
-            juce::String name = capturedFile.getFileName();
-            if (onMidiReady)
-                onMidiReady(playbackMidi, name);
-        }
+        void closeButtonPressed() override { if (onClose) onClose(); }
     };
 
-    juce::DialogWindow::LaunchOptions opts;
-    opts.content.setNonOwned(trackChannelComp.get());
-    opts.dialogTitle = "Assign MIDI Tracks to Channels";
-    opts.dialogBackgroundColour = juce::Colours::darkgrey;
-    opts.escapeKeyTriggersCloseButton = true;
-    opts.useNativeTitleBar = false;
-    opts.resizable = false;
-    trackDialog.reset(opts.launchAsync());
+    juce::MidiFile midiCopy = midi;
+    juce::String fileName = originalFile.getFileName();
+
+    compPtr->onDone = [this, midiCopy, fileName](bool accepted) {
+        if (accepted && trackDialogComp) {
+            const auto& assignments = trackDialogComp->getAssignments();
+            // Build remapped MIDI
+            juce::MidiFile remapped;
+            remapped.setTicksPerQuarterNote(midiCopy.getTimeFormat());
+            for (const auto& asn : assignments) {
+                if (asn.assignedChannel == 0) continue;
+                if (asn.originalTrack >= midiCopy.getNumTracks()) continue;
+                const auto* src = midiCopy.getTrack(asn.originalTrack);
+                juce::MidiMessageSequence seq;
+                for (int i = 0; i < src->getNumEvents(); ++i) {
+                    auto msg = src->getEventPointer(i)->message;
+                    if (!msg.isMetaEvent())
+                        msg.setChannel(asn.assignedChannel);
+                    seq.addEvent(msg);
+                }
+                remapped.addTrack(seq);
+            }
+            if (onMidiReady) onMidiReady(remapped, fileName);
+            hintLabel.setText("Loaded: " + fileName, juce::dontSendNotification);
+        }
+        if (trackDialogWindow)
+            trackDialogWindow->setVisible(false);
+        trackDialogWindow.reset();
+        trackDialogComp.reset();
+    };
+
+    auto* win = new TrackDialogWindow("Assign Tracks", compPtr);
+    win->onClose = [this]() { trackDialogWindow.reset(); trackDialogComp.reset(); };
+    trackDialogWindow.reset(win);
 }

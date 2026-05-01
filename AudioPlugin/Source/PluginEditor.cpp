@@ -93,7 +93,7 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
     // constrainer.setMaximumSize(1800, 900);
     // addAndMakeVisible(resizer);
 
-        setSize (800, 540);
+        setSize (800, 500);
 
         // Set up log text box (hidden by default for cleaner UI)
         logTextBox.setMultiLine(true);
@@ -131,6 +131,16 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
 
         addAndMakeVisible(initButton);
         initButton.onClick = [this] { initButtonClicked(); };
+
+        addAndMakeVisible(midiBrowserButton);
+        midiBrowserButton.onClick = [this] { showMidiBrowser(); };
+
+        addAndMakeVisible(midiDropZone);
+        midiDropZone.onMidiReady = [this](juce::MidiFile f, juce::String name) {
+            processorRef.loadMidiForPlayback(f);
+            processorRef.startMidiPlayback();
+            appendLogMessage("Playing: " + name);
+        };
 
         addAndMakeVisible(addModuleButton);
         addModuleButton.onClick = [this]
@@ -233,34 +243,6 @@ AudioPluginAudioProcessorEditor::AudioPluginAudioProcessorEditor (AudioPluginAud
         juce::Logger::writeToLog("[PluginEditor] End of constructor");
         logTextBox.insertTextAtCaret("[PluginEditor] Constructor completed\n");
 
-        // Create MIDI browser and drop zone
-        midiBrowser = std::make_unique<MidiBrowserComponent>();
-        midiBrowser->onMidiReady = [this](juce::MidiFile midiFile, juce::String name)
-        {
-            processorRef.loadMidiForPlayback(midiFile);
-            processorRef.startMidiPlayback();
-            juce::Logger::writeToLog("[PluginEditor] MIDI playback started: " + name);
-        };
-        addChildComponent(*midiBrowser);
-
-        midiDropZone = std::make_unique<MidiDropZone>();
-        midiDropZone->onMidiReady = [this](juce::MidiFile midiFile, juce::String name)
-        {
-            processorRef.loadMidiForPlayback(midiFile);
-            processorRef.startMidiPlayback();
-            juce::Logger::writeToLog("[PluginEditor] MIDI drop playback started: " + name);
-        };
-        addAndMakeVisible(*midiDropZone);
-
-        addAndMakeVisible(midiBrowserToggleButton);
-        midiBrowserToggleButton.onClick = [this]()
-        {
-            midiBrowserVisible = !midiBrowserVisible;
-            if (midiBrowser)
-                midiBrowser->setVisible(midiBrowserVisible);
-            resized();
-        };
-
         // Force UI sync from processor's current performance after construction
         if (processorRef.getController() && processorRef.getController()->getPerformance()) {
             rackAccordion->updatePanels();
@@ -357,6 +339,11 @@ void AudioPluginAudioProcessorEditor::resized()
         helpPanel.setBounds(helpArea);
         layoutBounds.removeFromBottom(sectionGap);
 
+        // MIDI drop zone: small strip above help panel
+        auto dropZoneArea = layoutBounds.removeFromBottom(32);
+        midiDropZone.setBounds(dropZoneArea);
+        layoutBounds.removeFromBottom(4);
+
         // Only show log box if visible (can be toggled via Options menu)
         if (logTextBox.isVisible())
         {
@@ -391,6 +378,9 @@ void AudioPluginAudioProcessorEditor::resized()
             topRow.removeFromLeft(controlGap);
             auto initBounds = topRow.removeFromLeft(mediumButtonWidth);
             initButton.setBounds(alignButton(initBounds));
+            topRow.removeFromLeft(controlGap);
+            auto midiBrowseBounds = topRow.removeFromLeft(largeButtonWidth);
+            midiBrowserButton.setBounds(alignButton(midiBrowseBounds));
         }
         else if (topRow.getWidth() > largeButtonWidth * 2 + controlGap * 3)
         {
@@ -408,14 +398,6 @@ void AudioPluginAudioProcessorEditor::resized()
             topRow.removeFromRight(controlGap);
             auto removeBounds = topRow.removeFromRight(smallButtonWidth);
             removeModuleButton.setBounds(alignButton(removeBounds));
-        }
-
-        // MIDI browser toggle button (right side of top row)
-        const int midiBrowserButtonWidth = juce::jlimit(80, 120, topRow.getWidth() / 4);
-        if (topRow.getWidth() > midiBrowserButtonWidth + controlGap)
-        {
-            topRow.removeFromRight(controlGap);
-            midiBrowserToggleButton.setBounds(alignButton(topRow.removeFromRight(midiBrowserButtonWidth)));
         }
 
 
@@ -517,22 +499,6 @@ void AudioPluginAudioProcessorEditor::resized()
 
         if (voiceEditorWindow)
             voiceEditorWindow->setBounds(100, 100, 800, 600);
-
-        // Layout drop zone strip at bottom of help area
-        if (midiDropZone)
-            midiDropZone->setBounds(helpArea.removeFromBottom(40));
-
-        // MIDI browser overlay (shown when toggle is on)
-        if (midiBrowser)
-        {
-            if (midiBrowserVisible)
-            {
-                auto browserBounds = getLocalBounds().reduced(outerMargin);
-                browserBounds.removeFromTop(headerHeight + topButtonHeight + sectionGap);
-                browserBounds.removeFromBottom(helpPanelHeight + 40 + sectionGap);
-                midiBrowser->setBounds(browserBounds);
-            }
-        }
 
         juce::Logger::writeToLog("[PluginEditor] resized() completed successfully");
     } catch (const std::exception& e) {
@@ -964,3 +930,35 @@ void AudioPluginAudioProcessorEditor::mouseExit(const juce::MouseEvent& e)
     }
 }
 
+
+
+void AudioPluginAudioProcessorEditor::showMidiBrowser()
+{
+    if (midiBrowserWindow) { midiBrowserWindow->toFront(true); return; }
+
+    midiBrowser = std::make_unique<MidiBrowserComponent>();
+    midiBrowser->onMidiReady = [this](juce::MidiFile f, juce::String name) {
+        processorRef.loadMidiForPlayback(f);
+        processorRef.startMidiPlayback();
+        appendLogMessage("Playing: " + name);
+    };
+
+    auto* comp = midiBrowser.get();
+
+    class MidiBrowserWindow : public juce::DialogWindow {
+    public:
+        std::function<void()> onClose;
+        MidiBrowserWindow(const juce::String& t, juce::Component* c)
+            : juce::DialogWindow(t, juce::Colour(0xff2a2a2a), true) {
+            setContentNonOwned(c, true);
+            setResizable(true, false);
+            centreWithSize(520, 520);
+            setVisible(true);
+        }
+        void closeButtonPressed() override { if (onClose) onClose(); }
+    };
+
+    auto* win = new MidiBrowserWindow("MIDI Browser", comp);
+    win->onClose = [this]() { midiBrowserWindow.reset(); };
+    midiBrowserWindow.reset(win);
+}

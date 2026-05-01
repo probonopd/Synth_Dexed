@@ -71,7 +71,6 @@ set(SourceFiles
     Source/OscilloscopeComponent.cpp
 
     Source/VoiceBrowserComponent.cpp
-
     Source/MidiPlaybackEngine.cpp
     Source/TrackChannelDialog.cpp
     Source/MidiBrowserComponent.cpp
@@ -109,8 +108,7 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     JUCE_VST3_CAN_REPLACE_VST2=0
     SYNTH_DEXED_STATIC
 )
-
-# Enable libcurl on Linux for HTTP downloads (voice list, MIDI browser, etc.)
+# Enable libcurl on Linux for HTTP downloads
 if(UNIX AND NOT APPLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE JUCE_USE_CURL=1)
     find_package(CURL REQUIRED)

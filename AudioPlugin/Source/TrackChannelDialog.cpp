@@ -1,153 +1,111 @@
 #include "TrackChannelDialog.h"
 
-TrackChannelDialog::TrackChannelDialog(const juce::MidiFile& midiFile)
-{
-    titleLabel.setText("Assign MIDI Tracks to Channels", juce::dontSendNotification);
-    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
+static juce::String getTrackName(const juce::MidiMessageSequence* track) {
+    for (int i = 0; i < track->getNumEvents(); ++i) {
+        const auto& msg = track->getEventPointer(i)->message;
+        if (msg.isTrackNameEvent())
+            return msg.getTextFromTextMetaEvent();
+    }
+    return {};
+}
+
+static int countNoteEvents(const juce::MidiMessageSequence* track) {
+    int count = 0;
+    for (int i = 0; i < track->getNumEvents(); ++i)
+        if (track->getEventPointer(i)->message.isNoteOn())
+            ++count;
+    return count;
+}
+
+TrackChannelDialog::TrackChannelDialog(const juce::MidiFile& midiFile) {
+    addAndMakeVisible(titleLabel);
     titleLabel.setFont(juce::Font(juce::FontOptions(16.0f, juce::Font::bold)));
     titleLabel.setJustificationType(juce::Justification::centred);
-    addAndMakeVisible(titleLabel);
-
-    headerTrack.setText("Track", juce::dontSendNotification);
-    headerTrack.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    addAndMakeVisible(headerTrack);
-
-    headerChannel.setText("Channel", juce::dontSendNotification);
-    headerChannel.setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-    addAndMakeVisible(headerChannel);
+    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
     addAndMakeVisible(viewport);
     viewport.setViewedComponent(&rowContainer, false);
     viewport.setScrollBarsShown(true, false);
 
-    okButton.onClick = [this]()
-    {
-        // Collect assignments from combos
-        for (size_t i = 0; i < rows.size(); ++i)
-        {
-            int comboIdx = rows[i]->channelCombo->getSelectedItemIndex();
-            assignments[i].assignedChannel = comboIdx; // 0=Skip, 1=Ch1..16=Ch16
+    addAndMakeVisible(okButton);
+    addAndMakeVisible(cancelButton);
+
+    okButton.onClick = [this] {
+        for (int i = 0; i < (int)rows.size(); ++i) {
+            int id = rows[i]->channelCombo.getSelectedId();
+            // id==17 means Skip (channel 0), id 1-16 means channel 1-16
+            assignments[i].assignedChannel = (id == 17) ? 0 : id;
         }
         if (onDone) onDone(true);
     };
-    addAndMakeVisible(okButton);
-
-    cancelButton.onClick = [this]()
-    {
+    cancelButton.onClick = [this] {
         if (onDone) onDone(false);
     };
-    addAndMakeVisible(cancelButton);
 
     buildRows(midiFile);
-
-    setSize(500, 400);
 }
 
-void TrackChannelDialog::buildRows(const juce::MidiFile& midiFile)
-{
+void TrackChannelDialog::buildRows(const juce::MidiFile& midiFile) {
+    rowContainer.removeAllChildren();
     rows.clear();
     assignments.clear();
 
-    const int numTracks = midiFile.getNumTracks();
-
-    for (int t = 0; t < numTracks; ++t)
-    {
-        const juce::MidiMessageSequence* seq = midiFile.getTrack(t);
-        if (seq == nullptr)
-            continue;
-
-        // Find track name meta event
-        juce::String trackName = "Track " + juce::String(t + 1);
-        int noteCount = 0;
-
-        for (int i = 0; i < seq->getNumEvents(); ++i)
-        {
-            const auto* holder = seq->getEventPointer(i);
-            if (holder == nullptr) continue;
-            const juce::MidiMessage& msg = holder->message;
-
-            if (msg.isTrackNameEvent())
-                trackName = msg.getTextFromTextMetaEvent();
-
-            if (msg.isNoteOn())
-                ++noteCount;
-        }
+    for (int t = 0; t < midiFile.getNumTracks(); ++t) {
+        const auto* track = midiFile.getTrack(t);
+        int noteCount = countNoteEvents(track);
+        if (noteCount == 0) continue;
 
         auto row = std::make_unique<TrackRow>();
+        juce::String name = getTrackName(track);
+        if (name.isEmpty()) name = "Track " + juce::String(t + 1);
+        name += " (" + juce::String(noteCount) + " notes)";
 
-        row->nameLabel = std::make_unique<juce::Label>();
-        row->nameLabel->setText(trackName, juce::dontSendNotification);
-        row->nameLabel->setColour(juce::Label::textColourId, juce::Colours::white);
-        rowContainer.addAndMakeVisible(*row->nameLabel);
+        row->nameLabel.setText(name, juce::dontSendNotification);
+        row->nameLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
-        row->infoLabel = std::make_unique<juce::Label>();
-        row->infoLabel->setText(juce::String(noteCount) + " notes", juce::dontSendNotification);
-        row->infoLabel->setColour(juce::Label::textColourId, juce::Colours::lightgrey);
-        rowContainer.addAndMakeVisible(*row->infoLabel);
-
-        row->channelCombo = std::make_unique<juce::ComboBox>();
-        row->channelCombo->addItem("Skip", 1);
+        row->channelCombo.clear();
+        row->channelCombo.addItem("Skip", 17);
         for (int ch = 1; ch <= 16; ++ch)
-            row->channelCombo->addItem("Ch " + juce::String(ch), ch + 1);
+            row->channelCombo.addItem("Ch " + juce::String(ch), ch);
 
-        int defaultChannel = (t % 16) + 1;
-        row->channelCombo->setSelectedId(defaultChannel + 1, juce::dontSendNotification);
-        rowContainer.addAndMakeVisible(*row->channelCombo);
+        int defaultCh = ((int)assignments.size() % 16) + 1;
+        row->channelCombo.setSelectedId(defaultCh, juce::dontSendNotification);
 
-        TrackAssignment ta;
-        ta.originalTrack = t;
-        ta.trackName = trackName.toStdString();
-        ta.assignedChannel = defaultChannel;
-        assignments.push_back(ta);
+        rowContainer.addAndMakeVisible(row->nameLabel);
+        rowContainer.addAndMakeVisible(row->channelCombo);
+
+        TrackAssignment asn;
+        asn.originalTrack = t;
+        asn.trackName = name.toStdString();
+        asn.assignedChannel = defaultCh;
+        assignments.push_back(asn);
 
         rows.push_back(std::move(row));
     }
-}
 
-void TrackChannelDialog::resized()
-{
-    auto area = getLocalBounds().reduced(8);
+    const int rowH = 32;
+    rowContainer.setSize(400, (int)rows.size() * rowH + 8);
 
-    titleLabel.setBounds(area.removeFromTop(28));
-    area.removeFromTop(4);
-
-    auto headerRow = area.removeFromTop(20);
-    headerTrack.setBounds(headerRow.removeFromLeft(headerRow.getWidth() * 2 / 3));
-    headerChannel.setBounds(headerRow);
-    area.removeFromTop(2);
-
-    auto buttonArea = area.removeFromBottom(36);
-    area.removeFromBottom(4);
-
-    int buttonWidth = 80;
-    cancelButton.setBounds(buttonArea.removeFromRight(buttonWidth));
-    buttonArea.removeFromRight(8);
-    okButton.setBounds(buttonArea.removeFromRight(buttonWidth));
-
-    viewport.setBounds(area);
-
-    const int rowHeight = 30;
-    const int rowPad = 4;
-    int containerHeight = static_cast<int>(rows.size()) * (rowHeight + rowPad);
-    rowContainer.setSize(area.getWidth() - 16, juce::jmax(containerHeight, area.getHeight()));
-
-    int y = 0;
-    int w = rowContainer.getWidth();
-    for (auto& row : rows)
-    {
-        int nameW = w * 2 / 5;
-        int infoW = w * 2 / 5;
-        int comboW = w - nameW - infoW - 4;
-
-        row->nameLabel->setBounds(0, y, nameW, rowHeight);
-        row->infoLabel->setBounds(nameW + 2, y, infoW, rowHeight);
-        row->channelCombo->setBounds(nameW + infoW + 4, y, comboW, rowHeight);
-
-        y += rowHeight + rowPad;
+    int y = 4;
+    for (auto& row : rows) {
+        row->nameLabel.setBounds(4, y, 260, rowH - 4);
+        row->channelCombo.setBounds(268, y, 120, rowH - 4);
+        y += rowH;
     }
 }
 
-void TrackChannelDialog::paint(juce::Graphics& g)
-{
+void TrackChannelDialog::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(0xff2a2a2a));
+}
+
+void TrackChannelDialog::resized() {
+    auto area = getLocalBounds().reduced(8);
+    titleLabel.setBounds(area.removeFromTop(28));
+    area.removeFromTop(4);
+    auto buttons = area.removeFromBottom(36);
+    area.removeFromBottom(4);
+    viewport.setBounds(area);
+    cancelButton.setBounds(buttons.removeFromRight(80));
+    buttons.removeFromRight(8);
+    okButton.setBounds(buttons.removeFromRight(80));
 }

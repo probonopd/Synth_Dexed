@@ -88,13 +88,15 @@ private:
     std::unique_ptr<VoiceBrowserComponent> voiceBrowser;
     std::unique_ptr<juce::DialogWindow> voiceBrowserWindow;
 
+    juce::TextButton midiBrowserButton { "MIDI Browser" };
+    std::unique_ptr<MidiBrowserComponent> midiBrowser;
+    std::unique_ptr<juce::DialogWindow> midiBrowserWindow;
+    MidiDropZone midiDropZone;
+
+    void showMidiBrowser();
+
     // Singleton dialogs: reuse the same instance and bring to front if already open
     std::unique_ptr<FileBrowserDialog> performanceFileDialog;
-
-    juce::TextButton midiBrowserToggleButton { "MIDI Browser" };
-    std::unique_ptr<MidiBrowserComponent> midiBrowser;
-    std::unique_ptr<MidiDropZone> midiDropZone;
-    bool midiBrowserVisible { false };
 
     juce::GroupComponent effectsGroup;
     juce::ToggleButton compressorEnableButton{ "Compressor" };

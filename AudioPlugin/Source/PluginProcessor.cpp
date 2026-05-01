@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "FMRackController.h"
+#include "MidiPlaybackEngine.h"
 #include <cstdio> // for std::tmpnam
 #include <cstring> // for std::memset
 #include <fstream>
@@ -413,12 +414,12 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
     // Process audio
     controller->processAudio(audioBufferLeft.data(), audioBufferRight.data(), numSamples);
 
+    // Inject MIDI playback events before flushing output queue
+    midiPlaybackEngine.fillMidiBuffer(midiMessages, getSampleRate(), numSamples);
+
     // Flush any queued MIDI output messages (e.g., parameter changes to external DX7)
     // Always flush MIDI output regardless of build flag (the plugin is configured with NEEDS_MIDI_OUTPUT TRUE)
     controller->flushMidiOutputQueue(midiMessages);
-
-    // Mix in MIDI playback events
-    midiPlaybackEngine.fillMidiBuffer(midiMessages, getSampleRate(), numSamples);
 
     // Copy to output buffer
     for (int ch = 0; ch < totalNumOutputChannels; ++ch) {
@@ -428,26 +429,6 @@ void AudioPluginAudioProcessor::process (juce::AudioBuffer<FloatType>& buffer, j
             out[i] = static_cast<FloatType>(src[i]);
         }
     }
-}
-
-void AudioPluginAudioProcessor::loadMidiForPlayback(const juce::MidiFile& midiFile)
-{
-    midiPlaybackEngine.loadMidiFile(midiFile);
-}
-
-void AudioPluginAudioProcessor::startMidiPlayback()
-{
-    midiPlaybackEngine.play();
-}
-
-void AudioPluginAudioProcessor::stopMidiPlayback()
-{
-    midiPlaybackEngine.stop();
-}
-
-bool AudioPluginAudioProcessor::isMidiPlaying() const
-{
-    return midiPlaybackEngine.isPlaying();
 }
 
 //==============================================================================
@@ -640,4 +621,23 @@ void AudioPluginAudioProcessor::syncParametersFromPerformance()
     setFloat("reverbLowPass", effects.reverbLowPass);
     setFloat("reverbDiffusion", effects.reverbDiffusion);
     setFloat("reverbLevel", effects.reverbLevel);
+}
+
+//==============================================================================
+// MIDI Playback
+
+void AudioPluginAudioProcessor::loadMidiForPlayback(const juce::MidiFile& midiFile) {
+    midiPlaybackEngine.loadMidiFile(midiFile);
+}
+
+void AudioPluginAudioProcessor::startMidiPlayback() {
+    midiPlaybackEngine.play();
+}
+
+void AudioPluginAudioProcessor::stopMidiPlayback() {
+    midiPlaybackEngine.stop();
+}
+
+bool AudioPluginAudioProcessor::isMidiPlaying() const {
+    return midiPlaybackEngine.isPlaying();
 }

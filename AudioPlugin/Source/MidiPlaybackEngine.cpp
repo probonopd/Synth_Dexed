@@ -1,118 +1,70 @@
 #include "MidiPlaybackEngine.h"
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <algorithm>
 
-MidiPlaybackEngine::MidiPlaybackEngine()
-    : juce::Thread("MidiPlaybackEngine")
-{
-}
-
-MidiPlaybackEngine::~MidiPlaybackEngine()
-{
-    stop();
-}
-
-void MidiPlaybackEngine::loadMidiFile(const juce::MidiFile& midiFileIn)
-{
-    // Work on a mutable copy so we can convert timestamps to seconds
-    juce::MidiFile midiFile = midiFileIn;
-    midiFile.convertTimestampTicksToSeconds();
-
-    std::unique_lock<std::mutex> lock(eventsMutex);
+void MidiPlaybackEngine::loadMidiFile(const juce::MidiFile& midiFile) {
+    std::lock_guard<std::mutex> lock(mutex);
     events.clear();
-    totalDuration = 0.0;
+    playing = false;
+    nextEventIndex = 0;
 
-    for (int t = 0; t < midiFile.getNumTracks(); ++t)
-    {
-        const juce::MidiMessageSequence* seq = midiFile.getTrack(t);
-        if (seq == nullptr)
-            continue;
+    auto file = midiFile;
+    file.convertTimestampTicksToSeconds();
 
-        for (int i = 0; i < seq->getNumEvents(); ++i)
-        {
-            const juce::MidiMessageSequence::MidiEventHolder* holder = seq->getEventPointer(i);
-            if (holder == nullptr)
-                continue;
-
-            const juce::MidiMessage& msg = holder->message;
-            double ts = msg.getTimeStamp();
-            events.emplace_back(ts, msg);
-
-            if (ts > totalDuration)
-                totalDuration = ts;
+    for (int t = 0; t < file.getNumTracks(); ++t) {
+        const auto* track = file.getTrack(t);
+        for (int i = 0; i < track->getNumEvents(); ++i) {
+            const auto& ev = track->getEventPointer(i)->message;
+            if (!ev.isMetaEvent()) {
+                events.push_back({ ev.getTimeStamp(), ev });
+            }
         }
     }
 
-    // Sort by timestamp
     std::sort(events.begin(), events.end(),
-              [](const TimedMidiEvent& a, const TimedMidiEvent& b) {
-                  return a.timestampSeconds < b.timestampSeconds;
-              });
-
-    nextEventIndex.store(0);
+        [](const TimedMidiEvent& a, const TimedMidiEvent& b) {
+            return a.timestampSeconds < b.timestampSeconds;
+        });
 }
 
-void MidiPlaybackEngine::play()
-{
-    nextEventIndex.store(0);
-    playbackStartTime.store(juce::Time::getMillisecondCounterHiRes());
-    playing.store(true);
-    if (!isThreadRunning())
-        startThread();
+void MidiPlaybackEngine::play() {
+    std::lock_guard<std::mutex> lock(mutex);
+    nextEventIndex = 0;
+    playing = true;
+    playbackStartTimeMs = juce::Time::getMillisecondCounterHiRes();
 }
 
-void MidiPlaybackEngine::stop()
-{
-    playing.store(false);
-    stopThread(2000);
+void MidiPlaybackEngine::stop() {
+    playing = false;
 }
 
-void MidiPlaybackEngine::fillMidiBuffer(juce::MidiBuffer& buffer, double sampleRate, int numSamples)
-{
-    if (!playing.load())
-        return;
+void MidiPlaybackEngine::fillMidiBuffer(juce::MidiBuffer& buffer, double sampleRate, int numSamples) {
+    if (!playing.load()) return;
 
-    double startTimeMs = playbackStartTime.load();
-    double elapsed = (juce::Time::getMillisecondCounterHiRes() - startTimeMs) / 1000.0;
-    double bufferDuration = (sampleRate > 0.0) ? (static_cast<double>(numSamples) / sampleRate) : 0.0;
+    std::lock_guard<std::mutex> lock(mutex);
 
-    std::unique_lock<std::mutex> lock(eventsMutex);
+    double nowMs = juce::Time::getMillisecondCounterHiRes();
+    double elapsedSec = (nowMs - playbackStartTimeMs) / 1000.0;
+    double bufferDurationSec = numSamples / sampleRate;
+    double bufferEndSec = elapsedSec + bufferDurationSec;
 
-    int idx = nextEventIndex.load();
-    const int numEvents = static_cast<int>(events.size());
+    while (nextEventIndex < (int)events.size()) {
+        const auto& ev = events[nextEventIndex];
+        if (ev.timestampSeconds > bufferEndSec) break;
 
-    while (idx < numEvents)
-    {
-        const TimedMidiEvent& ev = events[static_cast<size_t>(idx)];
-        double evTime = ev.timestampSeconds;
+        double relSec = ev.timestampSeconds - elapsedSec;
+        int sampleOffset = (int)std::max(0.0, relSec * sampleRate);
+        sampleOffset = std::min(sampleOffset, numSamples - 1);
 
-        if (evTime < elapsed + bufferDuration)
-        {
-            // Only add events that are within or before this buffer window
-            double offset = evTime - elapsed;
-            int sampleOffset = static_cast<int>(offset * sampleRate);
-            sampleOffset = juce::jlimit(0, numSamples - 1, sampleOffset);
-            buffer.addEvent(ev.message, sampleOffset);
-            ++idx;
-        }
-        else
-        {
-            break;
-        }
+        buffer.addEvent(ev.message, sampleOffset);
+        ++nextEventIndex;
     }
 
-    nextEventIndex.store(idx);
-
-    if (idx >= numEvents)
-    {
-        playing.store(false);
-        if (onPlaybackFinished)
-        {
+    if (nextEventIndex >= (int)events.size()) {
+        playing = false;
+        if (onPlaybackFinished) {
             auto cb = onPlaybackFinished;
             juce::MessageManager::callAsync([cb]() { cb(); });
         }
     }
-}
-
-void MidiPlaybackEngine::run()
-{
-    // Playback is driven by fillMidiBuffer in processBlock; nothing to do here.
 }

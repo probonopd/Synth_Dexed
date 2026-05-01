@@ -4,10 +4,11 @@
 #include <functional>
 #include "TrackChannelDialog.h"
 
-class MidiDropZone : public juce::Component, public juce::FileDragAndDropTarget {
+class MidiDropZone : public juce::Component,
+                     public juce::FileDragAndDropTarget {
 public:
     MidiDropZone();
-    ~MidiDropZone() override;
+    ~MidiDropZone() override = default;
 
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -21,12 +22,13 @@ public:
 
 private:
     bool isDragOver { false };
+    juce::Label hintLabel;
 
-    void processDroppedFile(const juce::File& file);
-    void showTrackChannelDialog(const juce::MidiFile& midiFile, const juce::File& originalFile);
+    std::unique_ptr<juce::DialogWindow> trackDialogWindow;
+    std::unique_ptr<TrackChannelDialog> trackDialogComp;
 
-    std::unique_ptr<juce::DialogWindow> trackDialog;
-    std::unique_ptr<TrackChannelDialog> trackChannelComp;
+    void processFile(const juce::File& file);
+    void showTrackDialog(const juce::MidiFile& midi, const juce::File& originalFile);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiDropZone)
 };
