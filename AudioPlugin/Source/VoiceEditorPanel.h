@@ -1,0 +1,174 @@
+#pragma once
+#include "FMRackLabeledVerticalSlider.h" // New labeled slider class
+#include "EnvelopeDisplay.h"
+#include "KeyboardScalingDisplay.h"
+#include "OscilloscopeComponent.h"
+#include <juce_data_structures/juce_data_structures.h>
+#include <map>
+#include "FMRackController.h"
+
+// #include "OperatorSliderLookAndFeel.h"
+
+// VoiceEditorPanel: A panel for editing a single DX7 voice, styled after the classic DX7 UI.
+// Envelope and keyboard scaling widgets are placeholders for now.
+class VoiceEditorPanel : public juce::Component, public juce::KeyListener {
+public:
+    VoiceEditorPanel();
+    ~VoiceEditorPanel() override;
+    void paint(juce::Graphics&) override;
+    void paintOverChildren(juce::Graphics&) override;
+    void resized() override;
+    void showHelpForKey(const juce::String& key);
+    void restoreDefaultHelp();
+
+    // Copy/paste voice data via clipboard
+    void copyVoiceDataToClipboard();
+    void pasteVoiceDataFromClipboard();
+
+    // MouseListener overrides for global slider hover help
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+
+    // KeyListener override for ESC key handling
+    bool keyPressed(const juce::KeyPress& key, juce::Component* originatingComponent) override;
+
+    // Set the controller pointer for backend access
+    void setController(FMRackController* controller_);
+    // Set a Dexed parameter (address, value)
+    void setDexedParam(uint8_t address, uint8_t value);
+    // Get a Dexed parameter (address)
+    uint8_t getDexedParam(uint8_t address) const;
+
+    // Get Dexed parameter min/max range by sliderKey
+    std::pair<uint8_t, uint8_t> getDexedRange(const char* sliderKey) const;
+   
+    // Operator slider group
+    struct OperatorSliders : public juce::Component {
+        // Define slider list macro for enum and string names
+#define OPERATOR_SLIDER_LIST \
+    X(OPE) \
+    X(TL) \
+    X(PM) \
+    X(PC) \
+    X(PF) \
+    X(PD) \
+    X(AMS) \
+    X(TS) \
+    X(RS)
+
+        enum SliderId {
+#define X(name) name,
+            OPERATOR_SLIDER_LIST
+#undef X
+            NumSliders
+        };
+        static constexpr const char* sliderNames[NumSliders] = {
+#define X(name) #name,
+            OPERATOR_SLIDER_LIST
+#undef X
+        };
+    std::array<FMRackLabeledVerticalSlider, NumSliders> sliders;
+
+    // Binary controls (historically sliders 0/1): use checkboxes instead.
+    juce::ToggleButton opeButton;
+    juce::ToggleButton pmButton;
+
+        juce::Label label;
+        EnvelopeDisplay envWidget;
+        KeyboardScalingDisplay ksWidget;
+
+        int operatorIndex = 0; // 0=OP1, 5=OP6
+        bool isCarrierOperator = false; // Whether this operator is a carrier for the current algorithm
+
+        OperatorSliders(); // Declaration only, implementation in cpp file
+        ~OperatorSliders() override;
+        void paint(juce::Graphics&) override;
+        void resized() override;
+        void mouseEnter(const juce::MouseEvent&) override;
+        void mouseExit(const juce::MouseEvent&) override;
+        void sliderMouseEnter(int sliderIdx);
+        void sliderMouseExit(int sliderIdx);
+    };
+    std::vector<std::unique_ptr<OperatorSliders>> operators;
+
+    // Top controls
+    juce::ComboBox algorithmSelector;
+    juce::TextEditor voiceNameEditor;
+    juce::ComboBox channelSelector;
+    juce::Label voiceNameLabel;
+    juce::Label algorithmLabel;
+    juce::Label channelLabel;
+    // Algorithm SVG overlay
+    std::unique_ptr<juce::Drawable> algorithmSvg;
+    int currentAlgorithm = 0;
+    juce::Rectangle<float> svgDrawArea; // Area to draw SVG, for scaling
+    std::vector<float> operatorRowCenters; // Y positions of operator row centers for SVG alignment
+
+    // help panel
+    juce::Label helpPanel;
+
+    // Help data loaded from JSON
+    juce::var helpJson;
+    std::map<std::string, std::string> helpTextByKey;
+    juce::String defaultHelpText;
+
+    // Operator slider parameter offset mapping (built from VCED.json)
+    static std::map<juce::String, uint8_t> operatorSliderParamOffsets;
+
+    void loadAlgorithmSvg(int algorithmIdx);
+    void setupOperatorSlider(FMRackVerticalSlider& slider, const juce::String& name, int min, int max, int defaultValue);
+    void loadHelpJson();
+
+    // Returns true if the given operator is a carrier for the current algorithm
+    bool isCarrier(int opIdx) const;
+    // Returns the carrier mask for the current algorithm (bitmask, op 0 = LSB)
+    uint8_t getCarrierMaskForAlgorithm(int algoIdx) const;
+    // Returns the carrier indices for the current algorithm (vector of operator indices, 0=OP1, 5=OP6)
+    std::vector<int> getCarrierIndicesForAlgorithm(int algoIdx) const;
+
+    // Synchronize slider value with Dexed engine, using sliderKey for range
+    void syncOperatorSliderWithDexed(FMRackVerticalSlider& slider, uint8_t paramAddress, const char* sliderKey);
+    // Synchronize all operator sliders with Dexed engine (call after loading a new performance)
+    void syncAllOperatorSlidersWithDexed();
+
+    friend struct OperatorSliders;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(VoiceEditorPanel)
+private:
+    FMRackController* controller = nullptr;
+    int moduleIndex = 0; // which module/part to edit
+    juce::TextButton requestDumpButton;
+    juce::TextButton dataButton;
+    void onSingleVoiceDumpReceived(const std::vector<uint8_t>& data);
+    bool isInitialized = false;
+    void initializeIfReady();
+
+public:
+    void setModuleIndex(int idx);
+    int getModuleIndex() const { return moduleIndex; }
+
+    // --- Global (non-per-operator) controls ---
+    // VCED voice parameters only (TX816Perf parameters are in Module tabs)
+    static constexpr int numGlobalSliders = 10;
+    static constexpr int numGlobalRows = 2;
+    static constexpr const char* globalSliderKeys[numGlobalSliders] = {
+        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP"
+    };
+    static constexpr const char* globalSliderLabels[numGlobalSliders] = {
+        "FBL", "OPI", "LFS", "LFD", "LPMD", "LAMD", "LFKS", "LFW", "LPMS", "TRNP"
+    };
+    std::array<FMRackLabeledVerticalSlider, numGlobalSliders> globalSliders;
+    // PEG Envelope widget
+    EnvelopeDisplay pegEnvelopeWidget;
+    juce::Label pegEnvelopeLabel;
+    
+    // Oscilloscope widget for waveform display
+    OscilloscopeComponent oscilloscope;
+
+    // Cached layout metrics for consistent component sizing
+    juce::Rectangle<int> operatorAreaBounds;
+    juce::Rectangle<int> globalAreaBounds;
+    juce::Rectangle<int> pegAreaBounds;
+    int computedSliderWidth = 32;
+    int computedSliderHeight = 56;
+};

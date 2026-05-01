@@ -1,0 +1,137 @@
+name: Build Executables
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-2022
+            build_type: 'windows'  # Standardized to build_type
+          - os: ubuntu-22.04
+            build_type: 'linux'
+          - os: ubuntu-22.04-arm
+            build_type: 'linux-arm64'
+          - os: macos-15
+            build_type: 'macos'
+          - os: ubuntu-22.04
+            build_type: 'alpine-static'
+          - os: ubuntu-22.04-arm
+            build_type: 'alpine-static-arm64'
+          - os: ubuntu-22.04-arm
+            build_type: 'alpine-static-arm'
+    steps:
+      - name: Install dependencies (Linux)
+        if: startsWith(matrix.os, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y git cmake g++ libasound2-dev
+
+      - name: Install dependencies (Windows)
+        if: startsWith(matrix.os, 'windows')
+        uses: lukka/get-cmake@latest
+
+      - name: Build in Alpine Docker Container (arm32v6)
+        if: matrix.build_type == 'alpine-static-arm' && runner.arch == 'ARM64'
+        run: |
+          docker run --rm --platform linux/arm/v6 \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace arm32v6/alpine:3.20 sh -c "
+              apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \
+              wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \
+              tar -xjf alsa-lib-1.2.9.tar.bz2 && \
+              cd alsa-lib-1.2.9 && \
+              ./configure --enable-static --disable-shared && \
+              make -j\$(nproc) && \
+              make install && \
+              cd - && \
+              apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \
+              git clone --depth 1 --branch \"minidexed-native\" \"https://github.com/${{ github.repository }}\" && \
+              cd Synth_Dexed && \
+              cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \
+              cmake --build build --config Release
+            "
+
+      - name: Build in Alpine Docker Container
+        if: matrix.build_type == 'alpine-static' || matrix.build_type == 'alpine-static-arm64'
+        run: |
+          docker run -v ${{ github.workspace }}:/workspace -w /workspace alpine:3.20 sh -c "
+            apk add --no-cache build-base wget git autoconf automake libtool linux-headers && \\
+            wget https://www.alsa-project.org/files/pub/lib/alsa-lib-1.2.9.tar.bz2 && \\
+            tar -xjf alsa-lib-1.2.9.tar.bz2 && \\
+            cd alsa-lib-1.2.9 && \\
+            ./configure --enable-static --disable-shared && \\
+            make -j$(nproc) && \\
+            make install && \\
+            cd - && \\
+            apk add --no-cache git cmake make g++ musl-dev linux-headers alsa-lib-dev && \\
+            git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && \\
+            cd Synth_Dexed && \\
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_EXE_LINKER_FLAGS='-static -lasound' && \\
+            cmake --build build --config Release
+          "
+
+      - name: Build with CMake (Non-Alpine)
+        if: matrix.build_type != 'alpine-static' && matrix.build_type != 'alpine-static-arm64' && matrix.build_type != 'alpine-static-arm'
+        run: |
+          git clone --depth 1 --branch "minidexed-native" "https://github.com/${{ github.repository }}" && cd Synth_Dexed && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --config Release
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Synth_Dexed-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            Synth_Dexed/build/bin/Release/FMRack.exe
+            Synth_Dexed/build/bin/FMRack
+            Synth_Dexed/build/FMRack
+          if-no-files-found: warn # Optional: warn if no files are found, default is error
+
+  release:
+    name: Upload to GitHub Releases
+    runs-on: ubuntu-latest
+    needs: build  # Wait for all build jobs to complete
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'  # Only on push or manual trigger
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4.1.3
+        with:
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -la artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          # Debug: Show the actual structure
+          find artifacts -type f -name "FMRack*" -o -name "*.exe"
+          
+          # Rename and organize files for release - using correct paths
+          find artifacts -name "FMRack.exe" -exec cp {} release/FMRack-windows.exe \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-linux/*" -exec cp {} release/FMRack-linux \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-linux-arm64/*" -exec cp {} release/FMRack-linux-arm64 \;
+          find artifacts -name "FMRack" -path "*macos-13-macos/*" -exec cp {} release/FMRack-macos \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-alpine-static/*" -exec cp {} release/FMRack-linux-static \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-alpine-static-arm64/*" -exec cp {} release/FMRack-linux-static-arm64 \;
+          find artifacts -name "FMRack" -path "*ubuntu-22.04-arm-alpine-static-arm/*" -exec cp {} release/FMRack-linux-static-arm \;
+          
+          # Make Linux/macOS binaries executable (only if they exist)
+          find release -name "FMRack-linux*" -o -name "FMRack-macos" | xargs -r chmod +x
+          
+          # List final release files
+          ls -la release/ || echo "No files found in release directory"
+
+      - name: Upload binaries to release using uploadtool
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPLOADTOOL_BODY: "Automated build from commit ${{ github.sha }}\\nBuilt on ${{ github.event.head_commit.timestamp }}\\nBranch: ${{ github.ref_name }}"
+        run: |
+          set -e
+          cd release
+          ls -lh * # Show what we're about to upload
+          wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
+          bash upload.sh FMRack-*

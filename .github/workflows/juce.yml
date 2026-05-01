@@ -1,0 +1,64 @@
+name: juce
+
+on:
+  push:
+  pull_request:
+  repository_dispatch:
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-15, ubuntu-22.04-arm]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up CMake
+        if: runner.os != 'Linux'
+        uses: jwlawson/actions-setup-cmake@v1
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential libasound2-dev libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxext-dev libfreetype6-dev libfontconfig1-dev libgl1-mesa-dev libcurl4-openssl-dev libwebkit2gtk-4.0-dev libgtk-3-dev ccache
+
+      - name: Configure CMake
+        working-directory: AudioPlugin
+        run: cmake -B build
+
+      - name: Build
+        working-directory: AudioPlugin
+        run: cmake --build build --config Release
+
+      - name: Install zip and wget (Windows)
+        if: runner.os == 'Windows'
+        run: choco install zip wget
+        shell: powershell
+
+      - name: Find build artifacts
+        id: find_artifacts
+        working-directory: AudioPlugin
+        shell: bash
+        run: |
+          mkdir -p out/items
+          cp -r build/FMRack_artefacts/VST3/FMRack.vst3 FMRack_build/artefacts/Standalone/FMRack.app out/items/ || true
+          find build -type f \( -name "FMRack.vst3" -o -name "FMRack" -o -name "FMRack.exe" \) -exec cp -r {} out/items \;
+          find build -type f \( -name "SPX90Symphonic.vst3" \) -exec cp -r {} out/items \;
+          ( cd out/items && zip -r ../FMRack-${{ matrix.os }}.zip * )
+
+      - name: Upload binaries to release using uploadtool
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPLOADTOOL_BODY: "Automated build from commit ${{ github.sha }}\\nBuilt on ${{ github.event.head_commit.timestamp }}\\nBranch: ${{ github.ref_name }}"
+        run: |
+          set -e
+          cd AudioPlugin/out
+          ls -lh * # Show what we're about to upload
+          wget -c https://github.com/probonopd/uploadtool/raw/master/upload.sh
+          bash upload.sh FMRack-*.zip

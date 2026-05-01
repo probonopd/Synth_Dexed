@@ -1,0 +1,101 @@
+#pragma once
+
+#include <juce_core/juce_core.h>
+#include <juce_audio_basics/juce_audio_basics.h>
+#include <memory>
+#include <mutex>
+#include <atomic>
+#include <array>
+#include <queue>
+#include "../src/FMRack/Rack.h"
+#include "../src/FMRack/Performance.h"
+
+// Forward declaration
+class OscilloscopeComponent;
+
+// FMRackController mediates all access between the JUCE UI and the FMRack backend.
+// It exposes high-level methods for UI interaction and ensures thread safety.
+class FMRackController {
+public:
+    FMRackController(float sampleRate);
+    ~FMRackController();
+
+    // Performance management
+    bool loadPerformanceFile(const juce::String& path);
+    bool savePerformanceFile(const juce::String& path);
+    void setDefaultPerformance();
+    void setPerformance(const FMRack::Performance& perf);
+    FMRack::Performance* getPerformance();
+
+    // Module access
+    int getNumModules() const;
+    void setNumModules(int num);
+    const std::vector<std::unique_ptr<FMRack::Module>>& getModules() const;
+    FMRack::Module* getModule(int index);
+
+    // Metering: get output levels for a module (returns average, sets l/r)
+    float getModuleOutputLevels(int moduleIndex, float& l, float& r);
+    // Metering: get both pre-gain and post-gain levels for a module
+    void getModuleOutputLevelsExtended(int moduleIndex, float& l, float& r, float& lPre, float& rPre);
+
+    // MIDI and audio
+    void processMidiMessage(uint8_t status, uint8_t data1, uint8_t data2);
+    void processAudio(float* leftOut, float* rightOut, int numSamples);
+
+    // Effects
+    void setReverbEnabled(bool enabled);
+    void setReverbLevel(float level);
+    void setReverbSize(float size);
+
+    // Set a Dexed parameter (address, value) for module 0 (legacy)
+    void setDexedParam(uint8_t address, uint8_t value);
+    
+    // Thread-safe Dexed parameter access by module index
+    uint8_t getDexedParamForModule(int moduleIndex, uint8_t address) const;
+    void setDexedParamForModule(int moduleIndex, uint8_t address, uint8_t value);
+    // Set a Dexed parameter and also queue a MIDI output message (for sending to external DX7)
+    void setDexedParamForModuleWithMidi(int moduleIndex, uint8_t address, uint8_t value, int midiChannel);
+    
+    // Thread-safe voice name access
+    juce::String getVoiceNameForModule(int moduleIndex) const;
+    void setVoiceNameForModule(int moduleIndex, const juce::String& name);
+    
+    // Thread-safe Dexed engine access (returns nullptr if invalid)
+    // NOTE: Caller must hold getMutex() lock while using the returned pointer!
+    class Dexed* getDexedEngineForModule(int moduleIndex);
+
+    // Request a DX7 single voice dump from the given MIDI channel (1-16)
+    void requestSingleVoiceDump(int midiChannel);
+    
+    // Apply a DX7 voice dump to a specific module (called from audio thread)
+    void applyVoiceDumpToModule(int moduleIndex, const uint8_t* voiceData, int len);
+
+    // Voice data management
+    void setPartVoiceData(int partIndex, const std::vector<uint8_t>& voiceData);
+
+    // Thread safety
+    std::mutex& getMutex();
+    FMRack::Rack* getRack() const { return rack.get(); }
+
+    // UI update callback
+    std::function<void()> onModulesChanged;
+
+    // Oscilloscope support: register an oscilloscope to receive audio samples
+    void setOscilloscope(OscilloscopeComponent* osc);
+    OscilloscopeComponent* getOscilloscope() const { return oscilloscope; }
+
+    // MIDI output queue: retrieve queued MIDI messages and add to output buffer
+    void flushMidiOutputQueue(juce::MidiBuffer& midiMessages);
+
+private:
+    std::unique_ptr<FMRack::Rack> rack;
+    std::unique_ptr<FMRack::Performance> performance;
+    mutable std::mutex mutex;
+    
+    // Oscilloscope pointer (not owned, just a reference)
+    OscilloscopeComponent* oscilloscope = nullptr;
+    
+    // MIDI output queue for parameter changes
+    mutable std::mutex midiOutputMutex;
+    std::queue<juce::MidiMessage> midiOutputQueue;
+};
